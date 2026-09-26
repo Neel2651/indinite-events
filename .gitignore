@@ -1,0 +1,12 @@
+node_modules
+.next
+dist
+.turbo
+coverage
+.env
+.env.local
+.env.*.local
+*.pem
+.DS_Store
+playwright-report
+test-results

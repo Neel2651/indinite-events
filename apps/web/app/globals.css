@@ -1,0 +1,140 @@
+/* Indinite brand theme for events.indinite.co.uk
+   Values extracted from the indinite.uk page export (vector fills + text colours).
+   Tailwind v4 + shadcn/ui variable names. Paste into app/globals.css. */
+
+@import "tailwindcss";
+
+/* Fonts are self-hosted via Fontsource (imported in app/layout.tsx): no requests to Google, works offline. */
+
+:root {
+  --font-poppins: "Poppins";
+  --font-inter: "Inter Variable";
+
+  /* ---- Raw brand palette ---- */
+  --brand-orange: #eb5e28;        /* primary CTA, links, step numbers, FAQ "+" */
+  --brand-orange-light: #f69852;  /* gradient end, logo colour */
+  --brand-orange-strong: #c44a18; /* AA-safe orange for small text/links on white (4.8:1) */
+  --brand-yellow: #ffe46a;        /* pill badges */
+  --brand-indigo: #697ff6;        /* secondary highlight (headline underline) */
+  --brand-ink: #17130f;           /* headings, dark text (warm near-black) */
+  --brand-body: #5f5a54;          /* body copy on light */
+  --brand-cream: #fff6ef;         /* alternate section background */
+  --brand-lavender: #f4f5ff;      /* feature/promo section background */
+  --brand-navy: #0a0e1f;          /* hero, pricing band, footer */
+  --brand-navy-deep: #05071a;
+  --brand-navy-raised: #1a2040;   /* pills/cards on dark */
+  --on-dark-strong: #d4d9ee;
+  --on-dark: #c6cbe0;
+  --on-dark-muted: #aab1cc;
+
+  --gradient-cta: linear-gradient(90deg, var(--brand-orange) 0%, var(--brand-orange-light) 100%);
+  --shadow-card: 0 12px 32px -12px rgb(235 94 40 / 0.12), 0 1px 2px rgb(23 19 15 / 0.04);
+  --shadow-cta: 0 10px 24px -8px rgb(235 94 40 / 0.45);
+
+  /* ---- shadcn semantic tokens (light: public pages + admin) ---- */
+  --radius: 1.25rem;              /* cards ~20px; buttons/badges use rounded-full */
+  --background: #ffffff;
+  --foreground: var(--brand-ink);
+  --card: #ffffff;
+  --card-foreground: var(--brand-ink);
+  --popover: #ffffff;
+  --popover-foreground: var(--brand-ink);
+  --primary: var(--brand-orange);
+  --primary-foreground: #ffffff;
+  --secondary: var(--brand-cream);
+  --secondary-foreground: var(--brand-ink);
+  --muted: #faf7f4;
+  --muted-foreground: var(--brand-body);
+  --accent: var(--brand-yellow);
+  --accent-foreground: var(--brand-ink);
+  --destructive: #dc2626;
+  --border: #e7e6e6;
+  --input: #e7e6e6;
+  --ring: var(--brand-orange);
+
+  /* ---- Status colours (scanner + order states) — kept distinct from brand orange ---- */
+  --success: #16a34a;
+  --warning: #d97706;             /* "already scanned" */
+  --danger: #dc2626;              /* "invalid pass" */
+  --info: var(--brand-indigo);
+}
+
+/* Dark surfaces: hero, footer, gate scanner */
+.dark {
+  --background: var(--brand-navy);
+  --foreground: #ffffff;
+  --card: var(--brand-navy-raised);
+  --card-foreground: #ffffff;
+  --popover: var(--brand-navy-raised);
+  --popover-foreground: #ffffff;
+  --primary: var(--brand-orange);
+  --primary-foreground: #ffffff;
+  --secondary: var(--brand-navy-raised);
+  --secondary-foreground: var(--on-dark-strong);
+  --muted: var(--brand-navy-deep);
+  --muted-foreground: var(--on-dark-muted);
+  --accent: var(--brand-yellow);
+  --accent-foreground: var(--brand-ink);
+  --border: rgb(255 255 255 / 0.12);
+  --input: rgb(255 255 255 / 0.16);
+  --ring: var(--brand-orange-light);
+}
+
+@theme inline {
+  --font-display: var(--font-poppins), system-ui, sans-serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-orange-strong: var(--brand-orange-strong);
+  --color-brand-yellow: var(--brand-yellow);
+  --color-brand-indigo: var(--brand-indigo);
+  --color-brand-cream: var(--brand-cream);
+  --color-brand-lavender: var(--brand-lavender);
+  --color-brand-navy: var(--brand-navy);
+
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-cta: var(--shadow-cta);
+}
+
+@layer base {
+  body { @apply bg-background text-foreground font-sans antialiased; }
+  h1, h2, h3, h4 { @apply font-display text-foreground; letter-spacing: -0.02em; }
+  h1 { font-weight: 800; }
+  h2, h3 { font-weight: 700; }
+}
+
+@layer components {
+  .btn-cta { background: var(--gradient-cta); box-shadow: var(--shadow-cta); @apply rounded-full px-7 py-3.5 font-display font-bold text-white; }
+  .btn-outline-pill { @apply rounded-full border border-current px-7 py-3.5 font-display font-bold; }
+  .badge-pill { @apply rounded-full bg-brand-yellow px-4 py-1.5 text-xs font-semibold tracking-widest text-foreground; }
+  .card-brand { @apply rounded-lg border border-border bg-card p-8; box-shadow: var(--shadow-card); }
+}
