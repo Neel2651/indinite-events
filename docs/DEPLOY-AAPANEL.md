@@ -96,6 +96,9 @@ Zero-downtime reload for the web app; the worker restarts after finishing in-fli
 - [ ] `pm2 status` shows both processes online; reboot the server once and check they come back
 
 ## Troubleshooting
+- **Sign-in says `Invalid origin` (INVALID_ORIGIN)**: you're on `http://`. Turn on aaPanel → site → SSL →
+  **Force HTTPS** (or keep the `if ($scheme = http)` redirect from `deploy/nginx-aapanel.conf`), and make sure
+  `APP_URL` / `BETTER_AUTH_URL` in `.env.local` are exactly `https://events.neelshah.co` (no trailing slash, no www).
 - **Edited `.env.local` but the app still uses old values** (old database, old `EMAIL_FROM`): PM2 keeps the
   environment it was first started with, and that copy wins over `.env.local`. Start both apps fresh from a new
   terminal:
