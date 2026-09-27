@@ -11,13 +11,17 @@ if [[ ! -f .env.local ]]; then
   echo "✗ $ROOT/.env.local is missing. Copy deploy/env.staging.example to .env.local and fill it in." >&2
   exit 1
 fi
-set -a
-# shellcheck disable=SC1091
-source .env.local
-set +a
-: "${MONGODB_URI:?MONGODB_URI is not set in .env.local}"
-: "${APP_URL:?APP_URL is not set in .env.local}"
-PORT="${PORT:-3000}"
+# Read single values without exporting .env.local: PM2 saves the environment it's started from, and a stale
+# copy there would override later edits to .env.local (Node's --env-file doesn't replace existing variables).
+envval() { grep -E "^$1=" .env.local | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"; }
+[[ -n "$(envval MONGODB_URI)" ]] || { echo "✗ MONGODB_URI is not set in .env.local" >&2; exit 1; }
+APP_URL="$(envval APP_URL)"; [[ -n "$APP_URL" ]] || { echo "✗ APP_URL is not set in .env.local" >&2; exit 1; }
+PORT="$(envval PORT)"; PORT="${PORT:-3000}"
+DEPLOY_ENV="$(envval DEPLOY_ENV)"
+MEDIA_DIR="$(envval MEDIA_DIR)"
+for v in EMAIL_FROM RESEND_API_KEY MONGODB_URI APP_URL BETTER_AUTH_URL; do
+  if [[ -n "${!v:-}" ]]; then echo "✗ $v is exported in this shell; open a fresh terminal (or unset it) so .env.local is the only source." >&2; exit 1; fi
+done
 
 if [[ "${SKIP_PULL:-}" != "1" ]]; then
   echo "→ Pulling latest code"

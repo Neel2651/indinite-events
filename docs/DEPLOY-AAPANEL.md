@@ -94,6 +94,16 @@ Zero-downtime reload for the web app; the worker restarts after finishing in-fli
 - [ ] `pm2 status` shows both processes online; reboot the server once and check they come back
 
 ## Troubleshooting
+- **Edited `.env.local` but the app still uses old values** (old database, old `EMAIL_FROM`): PM2 keeps the
+  environment it was first started with, and that copy wins over `.env.local`. Start both apps fresh from a new
+  terminal:
+  ```bash
+  cd /www/wwwroot/indinite-events && git pull
+  pm2 delete indinite-web indinite-worker
+  bash scripts/deploy.sh
+  ```
+  Check nothing stale is saved (prints names only): `pm2 env indinite-worker | grep -oE "^(MONGODB_URI|EMAIL_FROM)"`
+  should print nothing. (Older versions of `deploy.sh` caused this by exporting `.env.local` before starting PM2.)
 - **`Interpreter bun is NOT AVAILABLE in PATH`**: PM2 picks Bun for `.ts` files unless told otherwise. The
   ecosystem file now sets `interpreter: "node"` for both apps. If you started PM2 with the old file, clear it:
   ```bash
