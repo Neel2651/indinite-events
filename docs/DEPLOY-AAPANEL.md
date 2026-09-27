@@ -19,9 +19,21 @@ Files: `ecosystem.config.cjs` (PM2), `scripts/deploy.sh` (deploy/update), `deplo
 - **Git access** to the repo: add the server's SSH key as a read-only **deploy key** on GitHub.
 
 ## 2. DNS and MongoDB Atlas (once)
-- Point `demo.events.indinite.co.uk` (A record) at the server's IP.
+- Point `events.neelshah.co` (A record) at the server's IP.
 - Atlas → **Network Access**: add the server's IP. Use a **separate database** for staging
   (e.g. `…mongodb.net/indinite-events-staging?...`).
+
+## 2b. Email sending domain (once)
+Resend only sends from a domain you've verified. For the demo, verify **`events.neelshah.co`**:
+1. Resend → **Domains → Add domain** → `events.neelshah.co` (region: Ireland / eu-west-1).
+2. Add the records Resend shows at the DNS provider for `neelshah.co` — typically a **TXT** `resend._domainkey.events`
+   (DKIM), an **MX** and a **TXT** on `send.events` (bounces/SPF). They don't affect any existing email on `neelshah.co`.
+3. Click **Verify** (usually minutes). Then set `EMAIL_FROM="Indinite Events <tickets@events.neelshah.co>"`.
+4. Restart the worker and retry emails that failed meanwhile:
+   ```bash
+   pm2 restart indinite-worker --update-env
+   pnpm --filter @indinite/db requeue-failed-jobs
+   ```
 
 ## 3. Get the code and settings (once)
 ```bash
@@ -49,14 +61,14 @@ It installs, builds, syncs database indexes, starts both PM2 processes, saves th
 then `pm2 save`. (aaPanel's PM2 Manager does this for you if you use it.)
 
 ## 5. Website, SSL and reverse proxy in aaPanel
-1. **Website → Add site**: domain `demo.events.indinite.co.uk`, PHP: **Pure static**, no database.
+1. **Website → Add site**: domain `events.neelshah.co`, PHP: **Pure static**, no database.
 2. Site → **SSL → Let's Encrypt**: issue the certificate and turn on **Force HTTPS**.
    (HTTPS is required: the scanner's camera and install-to-home-screen only work over HTTPS.)
 3. Site → **Config**: replace the default `location /` part with the contents of `deploy/nginx-aapanel.conf`
    (keep aaPanel's `listen`, `server_name` and SSL lines). Save; aaPanel reloads Nginx.
    - Don't use aaPanel's built-in "Reverse proxy" tab *and* this config at the same time.
    - Keep port 3000 **closed** in aaPanel → Security (the app only listens on 127.0.0.1 anyway).
-4. Open `https://demo.events.indinite.co.uk` — you should see the yellow "Demo site" bar.
+4. Open `https://events.neelshah.co` — you should see the yellow "Demo site" bar.
 
 ## 6. Updating
 ```bash
@@ -74,7 +86,7 @@ Zero-downtime reload for the web app; the worker restarts after finishing in-fli
 | Retry failed emails | `pnpm --filter @indinite/db requeue-failed-jobs` |
 
 ## Checklist before sharing with the client
-- [ ] `https://demo.events.indinite.co.uk/api/health` → `{"status":"ok"}`
+- [ ] `https://events.neelshah.co/api/health` → `{"status":"ok"}`
 - [ ] Yellow "Demo site" bar shows; `…/robots.txt` says `Disallow: /`
 - [ ] Book a pass → confirmation → email arrives (Resend domain verified)
 - [ ] Sign in at `/sign-in` with the seed accounts (password = `SEED_PASSWORD` in `.env.local`)
