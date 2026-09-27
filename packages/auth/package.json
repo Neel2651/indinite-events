@@ -12,7 +12,8 @@
     "test": "vitest run --passWithNoTests --exclude '**/*.db.test.ts'",
     "test:db": "vitest run db.test",
     "seed-users": "tsx --env-file-if-exists=../../.env.local scripts/seed-users.ts",
-    "sync-indexes": "tsx --env-file-if-exists=../../.env.local scripts/sync-indexes.ts"
+    "sync-indexes": "tsx --env-file-if-exists=../../.env.local scripts/sync-indexes.ts",
+    "set-password": "tsx --env-file-if-exists=../../.env.local scripts/set-password.ts"
   },
   "dependencies": {
     "@indinite/core": "workspace:^",

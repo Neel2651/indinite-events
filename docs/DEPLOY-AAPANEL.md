@@ -84,6 +84,8 @@ Zero-downtime reload for the web app; the worker restarts after finishing in-fli
 | Restart | `pm2 restart indinite-web indinite-worker` |
 | Health | `curl -s http://127.0.0.1:3000/api/health` |
 | Retry failed emails | `pnpm --filter @indinite/db requeue-failed-jobs` |
+| Set a staff password | `pnpm --filter @indinite/auth set-password someone@example.com` (asks for it; signs them out everywhere) |
+| Reset demo accounts | `pnpm --filter @indinite/auth set-password --seed-accounts` (all demo accounts → `SEED_PASSWORD`) |
 
 ## Checklist before sharing with the client
 - [ ] `https://events.neelshah.co/api/health` → `{"status":"ok"}`
