@@ -1,44 +1,145 @@
-import { Queue, type ConnectionOptions } from "bullmq";
-import IORedis from "ioredis";
+import type { ClientSession, Types } from "mongoose";
+import { Job } from "./models/job";
 
 /** Queue names and payloads shared by apps/web (enqueue) and apps/worker (process). */
 export const QUEUES = {
   sendTickets: "send-tickets",
-  sweepHolds: "sweep-holds",
+  sendAuthEmail: "send-auth-email",
+  sendPaymentLink: "send-payment-link",
 } as const;
+
+export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 
 export interface SendTicketsJob {
   orderId: string;
   reason: "paid" | "offline_issued" | "resend";
 }
 
-const g = globalThis as unknown as { __redis?: IORedis; __queues?: Map<string, Queue> };
+/** Account emails for staff (admins and organiser users). */
+export type SendAuthEmailJob =
+  | { kind: "invitation"; to: string; url: string; organizationName: string; role: string; inviterName: string }
+  | { kind: "reset-password"; to: string; url: string; name: string };
 
-export function redisConnection(url = process.env.REDIS_URL): ConnectionOptions {
-  if (!url) throw new Error("REDIS_URL is not set");
-  // BullMQ requires maxRetriesPerRequest: null for blocking worker connections.
-  g.__redis ??= new IORedis(url, { maxRetriesPerRequest: null, enableReadyCheck: false });
-  return g.__redis as unknown as ConnectionOptions;
+/** SPEC §4.2: email the customer their payment link. */
+export interface SendPaymentLinkJob {
+  orderId: string;
+  url: string;
 }
 
-function queue(name: string): Queue {
-  g.__queues ??= new Map();
-  let q = g.__queues.get(name);
-  if (!q) {
-    q = new Queue(name, {
-      connection: redisConnection(),
-      defaultJobOptions: { attempts: 5, backoff: { type: "exponential", delay: 5000 }, removeOnComplete: 1000 },
-    });
-    g.__queues.set(name, q);
-  }
-  return q;
+export interface ClaimedJob<T> {
+  _id: Types.ObjectId;
+  jobId: string;
+  data: T;
+  attempts: number;
+  maxAttempts: number;
+}
+
+const BACKOFF_BASE_MS = 5_000;
+const LOCK_MS = 5 * 60_000;
+
+/** Exponential backoff: 5s, 10s, 20s, 40s… after attempt 1, 2, 3, 4… */
+export function retryDelayMs(attempt: number): number {
+  return BACKOFF_BASE_MS * 2 ** (attempt - 1);
+}
+
+/**
+ * Add a job unless one with the same jobId already exists (a no-op then).
+ * Pass `session` to enqueue atomically with the state change that caused it.
+ */
+export async function enqueue<T extends object>(
+  queue: QueueName,
+  jobId: string,
+  data: T,
+  opts: { session?: ClientSession; maxAttempts?: number } = {},
+): Promise<{ created: boolean }> {
+  const res = await Job.updateOne(
+    { jobId },
+    { $setOnInsert: { jobId, queue, data, maxAttempts: opts.maxAttempts ?? 5 } },
+    { upsert: true, session: opts.session },
+  );
+  return { created: res.upsertedCount === 1 };
 }
 
 /** jobId = orderId+reason makes enqueueing idempotent (webhook retries won't double-send). */
-export function enqueueSendTickets(job: SendTicketsJob) {
-  return queue(QUEUES.sendTickets).add("send", job, { jobId: `${job.orderId}:${job.reason}:${job.reason === "resend" ? Date.now() : "once"}` });
+export function enqueueSendTickets(job: SendTicketsJob, opts: { session?: ClientSession } = {}) {
+  const jobId = `${job.orderId}:${job.reason}:${job.reason === "resend" ? Date.now() : "once"}`;
+  return enqueue(QUEUES.sendTickets, jobId, job, opts);
 }
 
-export function sweepHoldsQueue() {
-  return queue(QUEUES.sweepHolds);
+/** Each invitation / reset request gets its own job (and its own idempotency key). */
+export function enqueueSendAuthEmail(job: SendAuthEmailJob) {
+  return enqueue(QUEUES.sendAuthEmail, `${job.kind}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`, job, { maxAttempts: 4 });
+}
+
+export function enqueueSendPaymentLink(job: SendPaymentLinkJob, opts: { session?: ClientSession } = {}) {
+  return enqueue(QUEUES.sendPaymentLink, `${job.orderId}:payment-link`, job, { maxAttempts: 4, session: opts.session });
+}
+
+/**
+ * Atomically claim the next due job: a pending one whose runAt has passed, or a running one
+ * whose lock expired (its worker died). Only one caller can win each job.
+ */
+export async function claimJob<T>(queue: QueueName, now = new Date()): Promise<ClaimedJob<T> | null> {
+  const job = await Job.findOneAndUpdate(
+    {
+      queue,
+      $or: [
+        { status: "pending", runAt: { $lte: now } },
+        { status: "running", lockedUntil: { $lt: now } },
+      ],
+    },
+    { $set: { status: "running", lockedUntil: new Date(now.getTime() + LOCK_MS) }, $inc: { attempts: 1 } },
+    { sort: { runAt: 1 }, new: true },
+  ).lean();
+  if (!job) return null;
+
+  // A reclaimed job whose worker died on its final attempt has no attempts left.
+  if (job.attempts > job.maxAttempts) {
+    await Job.updateOne({ _id: job._id }, { $set: { status: "failed", lockedUntil: null } });
+    return claimJob(queue, now);
+  }
+  return { _id: job._id, jobId: job.jobId, data: job.data as T, attempts: job.attempts, maxAttempts: job.maxAttempts };
+}
+
+export async function completeJob(id: Types.ObjectId) {
+  await Job.updateOne(
+    { _id: id, status: "running" },
+    { $set: { status: "completed", completedAt: new Date(), lockedUntil: null } },
+  );
+}
+
+/** Schedule a retry with backoff, or mark the job failed once attempts are used up. */
+export async function failJob(job: ClaimedJob<unknown>, err: unknown, now = new Date()) {
+  const lastError = err instanceof Error ? err.message : String(err);
+  const exhausted = job.attempts >= job.maxAttempts;
+  await Job.updateOne(
+    { _id: job._id, status: "running" },
+    {
+      $set: exhausted
+        ? { status: "failed", lastError, lockedUntil: null }
+        : { status: "pending", lastError, lockedUntil: null, runAt: new Date(now.getTime() + retryDelayMs(job.attempts)) },
+    },
+  );
+  return { exhausted };
+}
+
+/**
+ * Claim one job, run it, and record the outcome.
+ * Returns false when nothing was due, so the caller can wait before polling again.
+ */
+export async function processNextJob<T>(
+  queue: QueueName,
+  handler: (job: ClaimedJob<T>) => Promise<void>,
+  onError?: (job: ClaimedJob<T>, err: unknown, exhausted: boolean) => void,
+): Promise<boolean> {
+  const job = await claimJob<T>(queue);
+  if (!job) return false;
+  try {
+    await handler(job);
+    await completeJob(job._id);
+  } catch (err) {
+    const { exhausted } = await failJob(job, err);
+    onError?.(job, err, exhausted);
+  }
+  return true;
 }

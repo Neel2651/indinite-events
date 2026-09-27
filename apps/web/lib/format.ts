@@ -6,7 +6,11 @@ const day = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "short", d
 const dayYear = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, day: "numeric", month: "long", year: "numeric" });
 const time = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
 
+const dayTime = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
 export const formatDay = (d: Date) => day.format(d);
+/** "Sun 4 Oct, 10:00" */
+export const formatDayTime = (d: Date) => dayTime.format(d);
 export const formatTime = (d: Date) => time.format(d);
 
 export function formatDateRange(start: Date, end: Date): string {

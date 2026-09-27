@@ -1,6 +1,13 @@
 # Claude Code — milestone prompts
 
 ## Status
+- M1 auth ✅ done (Better Auth, invitation-only, roles, /admin + /org shells, seed users via `pnpm seed`).
+- M6 🟡 partly: "Issue as already paid" (cash / bank transfer / complimentary) and Team page done. Remaining: orders
+  table, order detail + history, "Send payment link", resend tickets, org audit log view.
+- M7 🟡 mostly: /scan PWA, offline decision + sync, manual code, manual admit with reason, Check-ins dashboard.
+  Remaining: test on two real phones offline.
+- M5 ✅ done (QR PNG + PDF passes, React Email via Resend, signed 30-min ticket page, lookup with rate limits).
+  Demo checkout (M4 demo mode) also done; Stripe checkout + webhooks still to do.
 - M0 ✅ done (monorepo, web, worker, core, db, theme, health route, public listing + event page shells).
 - M1 🟡 partly done: all models + indexes, `withTransaction`, `audited()` + request context, `quota.*`,
   permission matrix with tests, seed script. **Remaining:** Better Auth + organization plugin, super_admin
@@ -36,7 +43,7 @@ Vitest tests. Add a seed script: one super admin, one organizer with an owner us
 
 ## M2 — Events admin + public pages (29–30 Sep)
 Super-admin CRUD for events (with nights/sessions), ticket types (price, quota, sales window, maxPerOrder),
-organizers (commission). S3 presigned image upload; video as YouTube/Vimeo URL. Soft delete, hard delete
+organizers (commission). Image upload saved to the server's disk under `MEDIA_DIR`; video as YouTube/Vimeo URL. Soft delete, hard delete
 only when no orders. Every mutation via audited services. Public pages: `/` listing published events and
 `/e/[slug]` with gallery, venue, nights, ticket types and live availability. Follow the Indinite theme:
 navy hero, yellow pill badge, orange gradient CTA, white cards on cream sections.
@@ -51,6 +58,8 @@ Implement SPEC §4.1: packages/core/quota atomic reserve/release/commit with tes
 test that fires 200 parallel reservations at a quota of 50). Checkout Session as destination charge with
 application fee = commissionBps of total. Handle completed/expired webhooks in transactions; hold sweeper
 job in the worker; late-payment-no-quota path auto-refunds.
+Also the dev-only demo payment mode (SPEC §4.1 "Demo payments"): `PAYMENTS_MODE=demo` skips Stripe and
+fulfils through the same service as the webhook.
 
 ## M5 — Tickets, QR, email, lookup (2 Oct)
 Ed25519 QR signing/verification in packages/core/qr with tests. Pass PDF (@react-pdf/renderer) and QR PNG.
@@ -75,6 +84,6 @@ SPEC §4.6 refunds, CSV exports (orders, attendees, check-ins), commission ledge
 super-admin global audit log with filters.
 
 ## M9 — Hardening (9–10 Oct)
-k6 load test for checkout surge; Playwright E2E for checkout, payment link, offline issue, scan; Sentry;
+k6 load test for checkout surge; Playwright E2E for checkout, payment link, offline issue, scan;
 rate limits; security review of org scoping (try accessing another org's orders); backup restore test;
 printable attendee list per gate as fallback; write docs/RUNBOOK.md for event nights.

@@ -115,6 +115,7 @@
   --color-brand-cream: var(--brand-cream);
   --color-brand-lavender: var(--brand-lavender);
   --color-brand-navy: var(--brand-navy);
+  --color-on-dark-muted: var(--on-dark-muted);
 
   --radius-sm: calc(var(--radius) - 8px);
   --radius-md: calc(var(--radius) - 4px);
@@ -135,6 +136,6 @@
 @layer components {
   .btn-cta { background: var(--gradient-cta); box-shadow: var(--shadow-cta); @apply rounded-full px-7 py-3.5 font-display font-bold text-white; }
   .btn-outline-pill { @apply rounded-full border border-current px-7 py-3.5 font-display font-bold; }
-  .badge-pill { @apply rounded-full bg-brand-yellow px-4 py-1.5 text-xs font-semibold tracking-widest text-foreground; }
+  .badge-pill { @apply rounded-full bg-brand-yellow px-4 py-1.5 text-xs font-semibold tracking-widest text-accent-foreground; }
   .card-brand { @apply rounded-lg border border-border bg-card p-8; box-shadow: var(--shadow-card); }
 }

@@ -39,7 +39,18 @@ const orderSchema = new Schema(
       reason: String,
       appliedBy: String,
     },
+    /** Pricing snapshot (SPEC §4.7): tickets − discount + platform fee + charges + tax = total. */
+    ticketsPence: { type: Number, min: 0, default: 0 },
+    platformFeePence: { type: Number, min: 0, default: 0 },
+    charges: { type: [{ _id: false, name: String, amountPence: Number }], default: [] },
+    chargesPence: { type: Number, min: 0, default: 0 },
+    taxBps: { type: Number, min: 0, default: 0 },
+    taxPence: { type: Number, min: 0, default: 0 },
+    commissionBps: { type: Number, min: 0, default: 0 },
+    couponCode: String,
+    couponId: { type: Schema.Types.ObjectId, ref: "Discount" },
     totalPence: penceField,
+    /** Indinite's commission on this order (= platform fee; for comps, % of the normal price). */
     applicationFeePence: penceField,
     refundedPence: { type: Number, default: 0, min: 0 },
     stripe: {
@@ -48,6 +59,7 @@ const orderSchema = new Schema(
       url: String,
     },
     offline: {
+      /** bank_transfer = paid into the organiser's own account. */
       method: { type: String, enum: ["cash", "bank_transfer", "complimentary"] },
       note: String,
       issuedBy: String,

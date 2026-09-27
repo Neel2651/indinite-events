@@ -89,6 +89,13 @@ Discount limit for `box_office`: none (cannot apply). `manager`: max percent con
    enqueue `send-tickets`. If hold already released: re-reserve; if no quota → refund + email apology + audit.
 4. `checkout.session.expired` or sweeper: release hold, order → expired.
 
+**Demo payments (development only).** With `PAYMENTS_MODE=demo` (refused when `NODE_ENV=production`, see
+`resolvePaymentsMode` in packages/core), step 2 skips Stripe: after the hold is created the server calls the
+same fulfilment service as step 3 in its own transaction (mark paid, held→sold, create tickets, enqueue
+`send-tickets`), audited as `order.paid` with reason `demo_payment` and `metadata.paymentsMode = "demo"`, then
+redirects to `/checkout/success`. No Stripe fields are set; `applicationFeePence` is still calculated. The
+organiser `chargesEnabled` check is skipped in demo mode. Payment links behave the same way.
+
 ### 4.2 Organizer payment link
 Same as 4.1 but initiated in the organizer panel: customer details, items, optional discount
 (permission + limit checked), link validity (1–24 h, default 24 h). Server emails the Checkout URL to the
@@ -102,8 +109,9 @@ complimentary unless configured), audit `order.issued_offline`. Enqueue `send-ti
 ### 4.4 Ticket delivery and viewing
 Email (Resend, React Email): order summary, one PDF pass per ticket attached, inline QR image, "View tickets"
 link (signed, 30 min). Ticket page shows QR only while `now < event.endsAt`; afterwards shows "This event
-has ended". Lookup form: email + order ID → always responds "If that order exists we've emailed a link"
-(no enumeration); rate limit 5/hour per IP and per email.
+has ended". Lookup form ("Find my tickets"): email + order ID → if both match a paid order, go straight to
+the ticket page (booking details + QR codes) via a fresh signed 30-min link; otherwise "We couldn't find a
+booking…". Rate limit 5/hour per IP and per email (order refs are random, so guessing is impractical).
 
 ### 4.5 Gate scanning
 Scanner logs in (scanner role), picks event + session + gate. Downloads pass manifest
@@ -112,10 +120,39 @@ Scan: verify signature locally → check manifest → check local scan log → s
 (green admitted / amber already used with time+gate / red invalid) in under 1 s. Queue scans; sync every
 10 s when online; server resolves conflicts (first admitted wins, later ones recorded as already_used).
 Manual admit requires reason; audited.
+**Online-first + offline limit:** when online, the server verifies and records each scan before the phone shows a
+result (strictly once per pass per night). Offline (or no server answer within 2 s), a phone may decide at most
+**5 scans**; the 6th is refused ("Reconnect to keep scanning") until it's back online and those scans have synced.
 
 ### 4.6 Refund
 Owner/super-admin: full or per-ticket refund → Stripe refund with refund_application_fee + reverse_transfer →
 tickets cancelled → quota returned (configurable) → audit → email customer.
+
+### 4.7 Pricing, charges, coupons and commission (agreed 27 Sep 2026)
+Per order: **tickets − coupon → + platform fee → + organiser charges → + tax on all of that = total.**
+Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 + 0.30 + 2.60 = **£15.62**.
+- **Platform fee = Indinite's commission.** Default **6%** per organiser (admin can change), with an optional
+  per-event override (admin). The organiser keeps the full ticket price.
+- **Organiser charges** (e.g. "Venue fee"): set by the organiser owner per event, per ticket, fixed £ or % of the
+  ticket price. The money goes to the organiser.
+- **Tax**: rate set per event by the admin (0 if not applicable); charged on tickets + platform fee + charges.
+- **Coupons**: created by organiser owners/managers (% off or £ off, one event or all, max uses, dates). Taken off
+  the ticket price before fees (so the platform fee and % charges are on the discounted price). Redemption is atomic;
+  an unpaid booking that expires gives the use back.
+- **Online / payment link (Stripe):** Indinite receives the platform fee (application fee); the organiser receives
+  the rest (tickets, charges, tax). *Assumption to confirm: all tax goes to the organiser.*
+- **Organiser bookings** (`/org/.../bookings/new`), four options: **Cash**, **Organiser's account** (bank transfer),
+  **Complimentary**, **Generate payment link**. Cash/account: customer pays the full total to the organiser; the
+  organiser owes Indinite the platform fee. Complimentary: £0 to the customer; organiser owes commission on the
+  passes' normal price. Payment link: pending booking held 1–24 h, customer emailed a link to `/pay/<ref>`
+  (demo mode approves instantly; Stripe Checkout once connected). Box office bookings ignore public sales windows
+  and per-order limits but never exceed quota.
+- **Admin finance** (`/admin/finance`), per event: total sales; organiser direct (cash / account) and commission
+  owed, paid and outstanding (admin "Mark as paid" with any amount + note, audited); credited to the organiser via
+  Indinite; Indinite income (platform fees + commission owed).
+- **Ticket history**: every ticket has its own audit entry when generated; the order page shows per-pass
+  timelines (generated, emailed, each scan with time, night, gate and scanner name, overrides) and order history
+  (how it was sold, by whom, payment method and note).
 
 ## 5. Routes (indicative)
 
@@ -127,9 +164,9 @@ API: `/api/checkout`, `/api/webhooks/stripe`, `/api/org/orders` (payment link / 
 `/api/org/stripe/onboarding-link`, `/api/scan/manifest`, `/api/scan/sync`, `/api/orders/lookup`
 
 ## 6. Environment variables
-MONGODB_URI, REDIS_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+MONGODB_URI, BETTER_AUTH_SECRET, BETTER_AUTH_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, RESEND_API_KEY, EMAIL_FROM, QR_SIGNING_PRIVATE_KEY,
-NEXT_PUBLIC_QR_PUBLIC_KEY, S3_BUCKET, S3_REGION, CLOUDFRONT_URL, SENTRY_DSN, APP_URL
+NEXT_PUBLIC_QR_PUBLIC_KEY, MEDIA_DIR, PAYMENTS_MODE, LINK_SIGNING_SECRET, APP_URL
 
 ## 7. Non-functional
 - Booking surge: 200 concurrent checkouts without oversell (k6 test).

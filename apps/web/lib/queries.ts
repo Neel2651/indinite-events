@@ -1,6 +1,6 @@
 import "server-only";
-import { available } from "@indinite/core";
-import { connectDb, Event, TicketType } from "@indinite/db";
+import { available, PUBLIC_ID_RE, receiptLines, type OrderCharge } from "@indinite/core";
+import { connectDb, Event, Order, Organizer, pricingFor, Ticket, TicketType } from "@indinite/db";
 
 export interface PublicTicketType {
   id: string;
@@ -11,6 +11,9 @@ export interface PublicTicketType {
   maxPerOrder: number;
   nights: number;
   onSale: boolean;
+  /** When sales start, if they haven't yet. */
+  salesStartAt: Date | null;
+  validSessionIds: string[];
 }
 
 export interface PublicEvent {
@@ -25,6 +28,12 @@ export interface PublicEvent {
   media: { type: string; url: string; alt: string }[];
   fromPence: number | null;
   ticketTypes: PublicTicketType[];
+  /** At least one pass is on sale right now. */
+  bookingsOpen: boolean;
+  /** Earliest upcoming sales start, when bookings aren't open yet. */
+  bookingsOpenAt: Date | null;
+  /** SPEC §4.7 pricing settings, for showing the breakdown before checkout. */
+  pricing: { commissionBps: number; taxBps: number; charges: OrderCharge[] };
 }
 
 const PUBLIC_FILTER = { status: "published", deletedAt: null } as const;
@@ -32,6 +41,8 @@ const PUBLIC_FILTER = { status: "published", deletedAt: null } as const;
 async function withTicketTypes(events: Awaited<ReturnType<typeof loadEvents>>): Promise<PublicEvent[]> {
   const ids = events.map((e) => e._id);
   const types = await TicketType.find({ eventId: { $in: ids }, active: true }).sort({ sortOrder: 1 }).lean();
+  const orgs = await Organizer.find({ _id: { $in: events.map((e) => e.organizerId) } }, { commissionBps: 1 }).lean();
+  const orgById = new Map(orgs.map((o) => [String(o._id), o]));
   const now = new Date();
 
   return events.map((e) => {
@@ -46,7 +57,11 @@ async function withTicketTypes(events: Awaited<ReturnType<typeof loadEvents>>): 
         maxPerOrder: t.maxPerOrder ?? 10,
         nights: t.validSessionIds.length,
         onSale: (!t.salesStartAt || t.salesStartAt <= now) && (!t.salesEndAt || t.salesEndAt > now),
+        salesStartAt: t.salesStartAt && t.salesStartAt > now ? t.salesStartAt : null,
+        validSessionIds: t.validSessionIds.map(String),
       }));
+    const bookingsOpen = tts.some((t) => t.onSale);
+    const upcoming = tts.map((t) => t.salesStartAt).filter((d): d is Date => d !== null);
     return {
       id: String(e._id),
       slug: e.slug,
@@ -56,9 +71,12 @@ async function withTicketTypes(events: Awaited<ReturnType<typeof loadEvents>>): 
       startsAt: e.startsAt,
       endsAt: e.endsAt,
       sessions: e.sessions.map((s) => ({ id: String(s._id), label: s.label, startsAt: s.startsAt, endsAt: s.endsAt })),
-      media: (e.media ?? []).map((m) => ({ type: m.type, url: m.url, alt: m.alt ?? "" })),
+      media: [...(e.media ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((m) => ({ type: m.type, url: m.url, alt: m.alt ?? "" })),
       fromPence: tts.length ? Math.min(...tts.map((t) => t.pricePence)) : null,
       ticketTypes: tts,
+      bookingsOpen,
+      pricing: pricingFor(e, orgById.get(String(e.organizerId)) ?? {}),
+      bookingsOpenAt: !bookingsOpen && upcoming.length ? new Date(Math.min(...upcoming.map((d) => d.getTime()))) : null,
     };
   });
 }
@@ -76,4 +94,122 @@ export async function getEventBySlug(slug: string): Promise<PublicEvent | null> 
   await connectDb();
   const [event] = await withTicketTypes(await loadEvents({ slug }));
   return event ?? null;
+}
+
+export interface OrderConfirmation {
+  publicId: string;
+  status: string;
+  paidAt: Date | null;
+  totalPence: number;
+  items: { name: string; qty: number; unitPricePence: number }[];
+  lines: { label: string; amountPence: number; negative?: boolean }[];
+  event: { title: string; slug: string; startsAt: Date; endsAt: Date; venue: string };
+}
+
+/**
+ * Confirmation page read model. Anyone holding the order ref can open the page, so it deliberately
+ * carries no customer details and no QR tokens — passes are delivered by email (M5).
+ */
+export async function getOrderConfirmation(publicId: string): Promise<OrderConfirmation | null> {
+  if (!PUBLIC_ID_RE.test(publicId)) return null;
+  await connectDb();
+  const order = await Order.findOne({ publicId }).lean();
+  if (!order) return null;
+  const event = await Event.findById(order.eventId).lean();
+  if (!event) return null;
+  return {
+    publicId: order.publicId,
+    status: order.status ?? "pending",
+    paidAt: order.paidAt ?? null,
+    totalPence: order.totalPence,
+    items: order.items.map((i) => ({ name: i.name, qty: i.qty, unitPricePence: i.unitPricePence })),
+    lines: linesFor(order),
+    event: { title: event.title, slug: event.slug, startsAt: event.startsAt, endsAt: event.endsAt, venue: `${event.venue.name}, ${event.venue.postcode}` },
+  };
+}
+
+export interface OrderTicketsView {
+  publicId: string;
+  customerName: string;
+  status: string;
+  paidAt: Date | null;
+  items: { name: string; qty: number; unitPricePence: number }[];
+  lines: { label: string; amountPence: number; negative?: boolean }[];
+  discountPence: number;
+  totalPence: number;
+  event: { title: string; slug: string; startsAt: Date; endsAt: Date; venue: string; ended: boolean };
+  tickets: { id: string; typeName: string; nights: string; qrToken: string | null }[];
+}
+
+const nightFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short", day: "numeric", month: "short" });
+
+/**
+ * Ticket view (SPEC §4.4). Only call after verifying the signed link. QR tokens are withheld once the
+ * event has ended.
+ */
+export async function getOrderTickets(publicId: string, now = new Date()): Promise<OrderTicketsView | null> {
+  if (!PUBLIC_ID_RE.test(publicId)) return null;
+  await connectDb();
+  const order = await Order.findOne({ publicId }).lean();
+  if (!order) return null;
+  const event = await Event.findById(order.eventId).lean();
+  if (!event) return null;
+  const ended = event.endsAt <= now;
+  const tickets = await Ticket.find({ orderId: order._id, status: "valid" }).sort({ _id: 1 }).lean();
+  return {
+    publicId: order.publicId,
+    customerName: order.customer?.name ?? "",
+    status: order.status ?? "pending",
+    paidAt: order.paidAt ?? null,
+    items: order.items.map((i) => ({ name: i.name, qty: i.qty, unitPricePence: i.unitPricePence })),
+    lines: linesFor(order),
+    discountPence: order.discount?.amountPence ?? 0,
+    totalPence: order.totalPence,
+    event: {
+      title: event.title,
+      slug: event.slug,
+      startsAt: event.startsAt,
+      endsAt: event.endsAt,
+      venue: `${event.venue.name}, ${event.venue.address}, ${event.venue.postcode}`,
+      ended,
+    },
+    tickets: tickets.map((t) => {
+      const valid = new Set(t.validSessionIds.map(String));
+      const nights = event.sessions.filter((s) => valid.has(String(s._id)));
+      return {
+        id: String(t._id),
+        typeName: t.ticketTypeName,
+        nights:
+          nights.length === event.sessions.length && nights.length > 1
+            ? `All ${nights.length} nights`
+            : nights.map((n) => nightFmt.format(n.startsAt)).join(", "),
+        qrToken: ended ? null : t.qrToken,
+      };
+    }),
+  };
+}
+
+type OrderLike = {
+  items: { name: string; qty: number; unitPricePence: number }[];
+  discount?: { amountPence?: number | null; reason?: string | null } | null;
+  offline?: { method?: string | null } | null;
+  platformFeePence?: number | null;
+  commissionBps?: number | null;
+  charges?: { name?: string | null; amountPence?: number | null }[] | null;
+  taxPence?: number | null;
+  taxBps?: number | null;
+};
+
+function linesFor(order: OrderLike) {
+  return receiptLines({
+    items: order.items,
+    discountPence: order.discount?.amountPence,
+    discountLabel: order.discount?.reason,
+    complimentary: order.offline?.method === "complimentary",
+    platformFeePence: order.platformFeePence,
+    commissionBps: order.commissionBps,
+    charges: order.charges,
+    taxPence: order.taxPence,
+    taxBps: order.taxBps,
+  });
 }

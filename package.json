@@ -9,6 +9,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "seed": "pnpm --filter @indinite/db seed && pnpm --filter @indinite/auth seed-users",
     "format": "prettier --write ."
   },
   "devDependencies": {

@@ -6,8 +6,11 @@ export const PERMISSIONS = [
   "event.delete",
   "event.update",
   "event.read",
+  "event.manageCharges",
+  "coupon.manage",
   "ticketType.manage",
   "organizer.manage",
+  "finance.manage",
   "org.members.manage",
   "stripe.onboard",
   "order.read",
@@ -32,6 +35,7 @@ const PLATFORM_ONLY: ReadonlySet<Permission> = new Set([
   "event.update",
   "ticketType.manage",
   "organizer.manage",
+  "finance.manage",
   "audit.readGlobal",
 ]);
 
@@ -41,6 +45,8 @@ const SUPER_ADMIN_EXCLUDED: ReadonlySet<Permission> = new Set(["stripe.onboard"]
 export const ROLE_PERMISSIONS: Record<OrgRole, ReadonlySet<Permission>> = {
   owner: new Set<Permission>([
     "event.read",
+    "event.manageCharges",
+    "coupon.manage",
     "org.members.manage",
     "stripe.onboard",
     "order.read",
@@ -57,6 +63,7 @@ export const ROLE_PERMISSIONS: Record<OrgRole, ReadonlySet<Permission>> = {
   ]),
   manager: new Set<Permission>([
     "event.read",
+    "coupon.manage",
     "order.read",
     "order.createPaymentLink",
     "order.applyDiscount",

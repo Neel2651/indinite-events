@@ -65,3 +65,18 @@ describe("maxDiscountBps()", () => {
     expect(maxDiscountBps(superAdmin, org)).toBe(10000);
   });
 });
+
+describe("charges, coupons and finance", () => {
+  const org = { organizerId: "org1" };
+  const as = (role: "owner" | "manager" | "box_office" | "scanner" | "finance") => ({ id: "u", isSuperAdmin: false, memberships: [{ organizerId: "org1", role }] });
+  it("owners manage charges; managers and owners manage coupons", () => {
+    expect(can(as("owner"), "event.manageCharges", org)).toBe(true);
+    expect(can(as("manager"), "event.manageCharges", org)).toBe(false);
+    expect(can(as("manager"), "coupon.manage", org)).toBe(true);
+    expect(can(as("box_office"), "coupon.manage", org)).toBe(false);
+  });
+  it("only super admins manage finance (commission rates, tax, settlements)", () => {
+    expect(can(as("owner"), "finance.manage", org)).toBe(false);
+    expect(can({ id: "a", isSuperAdmin: true, memberships: [] }, "finance.manage")).toBe(true);
+  });
+});

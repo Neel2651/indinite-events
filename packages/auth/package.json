@@ -1,0 +1,32 @@
+{
+  "name": "@indinite/auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./roles": "./src/roles.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests --exclude '**/*.db.test.ts'",
+    "test:db": "vitest run db.test",
+    "seed-users": "tsx --env-file-if-exists=../../.env.local scripts/seed-users.ts",
+    "sync-indexes": "tsx --env-file-if-exists=../../.env.local scripts/sync-indexes.ts"
+  },
+  "dependencies": {
+    "@indinite/core": "workspace:^",
+    "@indinite/db": "workspace:^",
+    "better-auth": "^1.7.6",
+    "mongodb": "^6.20.0",
+    "mongoose": "^8.7.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "mongodb-memory-server": "^10.1.2",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.3"
+  }
+}

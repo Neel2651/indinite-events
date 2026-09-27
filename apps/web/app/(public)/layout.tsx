@@ -1,0 +1,37 @@
+import Link from "next/link";
+import { isStaging } from "@indinite/core";
+
+export default function PublicLayout({ children }: { children: React.ReactNode }) {
+  const staging = isStaging(process.env);
+  return (
+    <>
+      {staging && (
+        <p className="bg-brand-yellow px-4 py-2 text-center text-sm font-semibold text-brand-navy">
+          Demo site: no real payments are taken and passes aren&apos;t valid for entry.
+        </p>
+      )}
+      <header className="border-b border-border bg-background">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
+          <Link href="/" className="font-display text-xl font-bold tracking-tight text-brand-orange">
+            INDINITE <span className="font-sans font-normal text-muted-foreground">events</span>
+          </Link>
+          <Link href="/orders/lookup" className="text-sm font-semibold text-brand-orange-strong hover:underline">
+            Find my tickets
+          </Link>
+        </div>
+      </header>
+      <main className="flex-1">{children}</main>
+      <footer className="dark bg-background text-muted-foreground">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4 px-5 py-10 text-sm">
+          <div>
+            <p>Tickets sold by Indinite on behalf of event organisers. Payments processed securely by Stripe.</p>
+            <p className="mt-2">© {new Date().getFullYear()} Indinite</p>
+          </div>
+          <Link href="/sign-in" className="hover:text-foreground hover:underline">
+            Staff sign in
+          </Link>
+        </div>
+      </footer>
+    </>
+  );
+}

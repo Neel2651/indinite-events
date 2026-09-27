@@ -20,10 +20,13 @@ export const discountSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("fixed"), value: pence, reason: z.string().trim().max(200).optional() }),
 ]);
 
+const couponCode = z.string().trim().max(40).transform((c) => c.toUpperCase()).optional();
+
 export const publicCheckoutSchema = z.object({
   eventId: objectId,
   customer: customerSchema,
   items: z.array(lineItemInputSchema).min(1).max(10),
+  couponCode,
 });
 
 export const paymentLinkBookingSchema = z.object({
@@ -31,6 +34,7 @@ export const paymentLinkBookingSchema = z.object({
   customer: customerSchema,
   items: z.array(lineItemInputSchema).min(1).max(10),
   discount: discountSchema.optional(),
+  couponCode,
   validForHours: z.number().int().min(1).max(24).default(24),
 });
 
@@ -38,7 +42,9 @@ export const offlineIssueSchema = z.object({
   eventId: objectId,
   customer: customerSchema,
   items: z.array(lineItemInputSchema).min(1).max(50),
+  /** bank_transfer = paid into the organiser's own account. */
   method: z.enum(["cash", "bank_transfer", "complimentary"]),
+  couponCode,
   note: z.string().trim().min(3, "Add a note explaining the payment").max(500),
 });
 

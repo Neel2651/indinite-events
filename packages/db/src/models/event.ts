@@ -40,6 +40,24 @@ const eventSchema = new Schema(
     /** End of the last session — tickets stop displaying the QR after this. */
     endsAt: { type: Date, required: true },
     status: { type: String, enum: ["draft", "published", "archived"], default: "draft", index: true },
+    /** Overrides the organiser's commission / platform fee for this event (bps). Admin only. */
+    commissionBps: { type: Number, min: 0, max: 10000, default: null },
+    /** Tax on tickets + platform fee + charges (bps, 2000 = 20%). Admin only. */
+    taxBps: { type: Number, min: 0, max: 10000, default: 0 },
+    /** Organiser charges added per ticket (money goes to the organiser). */
+    charges: {
+      type: [
+        new Schema(
+          {
+            name: { type: String, required: true, trim: true, maxlength: 60 },
+            kind: { type: String, enum: ["fixed", "percent"], required: true },
+            value: { type: Number, required: true, min: 0 }, // pence or bps
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true },

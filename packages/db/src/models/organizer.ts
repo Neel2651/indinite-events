@@ -11,7 +11,8 @@ const organizerSchema = new Schema(
     stripeAccountId: { type: String, index: { unique: true, sparse: true } },
     chargesEnabled: { type: Boolean, default: false },
     payoutsEnabled: { type: Boolean, default: false },
-    commissionBps: { type: Number, required: true, min: 0, max: 10000, default: 800 },
+    /** Platform fee = Indinite commission, charged on top of ticket prices (600 = 6%). Events can override. */
+    commissionBps: { type: Number, required: true, min: 0, max: 10000, default: 600 },
     maxDiscountBpsForManager: { type: Number, min: 0, max: 10000, default: 5000 },
     orderPrefix: { type: String, default: "NAV", match: /^[A-Z]{2,5}$/ },
     status: { type: String, enum: ["active", "suspended"], default: "active" },

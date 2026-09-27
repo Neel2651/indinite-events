@@ -6,11 +6,12 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
 ## Stack
 - pnpm workspaces + Turborepo, TypeScript strict everywhere
 - `apps/web` — Next.js (App Router): public site, super-admin, organizer panel, `/scan` PWA
-- `apps/worker` — Node + BullMQ (emails, pass rendering, hold sweeper, reconciliation)
+- `apps/worker` — Node, MongoDB-backed job queue (emails, pass rendering, hold sweeper, reconciliation)
 - `packages/db` — Mongoose models, indexes, transaction helper
 - `packages/core` — pure domain logic: pricing, discounts, quota, QR signing, permissions, audit helper
-- `packages/emails` — React Email templates
-- MongoDB Atlas (London, replica set), Redis, Stripe Connect (Express, GBP), Resend, S3 + CloudFront
+- `packages/emails` — React Email ticket template + PDF passes (@react-pdf/renderer)
+- MongoDB Atlas (London, replica set), Stripe Connect (Express, GBP), Resend.
+  Media is stored on the app server's disk (`MEDIA_DIR`) — no S3/CloudFront, no Sentry
 - UI: Tailwind v4 + shadcn/ui, theme in `apps/web/app/globals.css` (Indinite brand — do not invent colours)
 - Fonts: Poppins (headings) + Inter (body), self-hosted via Fontsource — do not switch to next/font/google
 - Validation: Zod schemas in `packages/core`, shared by forms and API
@@ -20,9 +21,20 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
 - `packages/core`: money + pricing (`calculateOrder`), permissions (`can`, `assertCan`, `maxDiscountBps`),
   QR (`signTicket`, `verifyTicketToken`), ids (`generatePublicId`), quota op builders, audit diff, Zod schemas.
   `@indinite/core/context` (server-only): `runWithContext`, `requireContext`, `systemActor`, `stripeActor`.
-- `packages/db`: `connectDb`, `withTransaction`, `audited`, `quota.*` (atomic), all models, BullMQ queues
-  (`enqueueSendTickets`), `releaseHold` / `sweepExpiredHolds`.
+  `@indinite/core/links` (server-only): `signOrderLink` / `verifyOrderLink` (30-min customer links).
+- `packages/db`: `connectDb`, `withTransaction`, `audited`, `quota.*` (atomic), all models, job queue
+  (`enqueue`, `enqueueSendTickets` — pass `session` to enqueue in the same transaction), `releaseHold` / `sweepExpiredHolds`,
+  `hitRateLimit` (Mongo fixed window), `requeue-failed-jobs` script,
+  checkout: `createCheckoutOrder` + `fulfilOrder` (shared by demo payments and the Stripe webhook), media: `mediaDir`, `resolveMediaPath`.
 - `apps/web/lib/request-context.ts`: `withRequestContext(actor, fn)` — wrap every mutating action with it.
+- `packages/auth`: Better Auth (email + password, invitation-only sign-up, organisation plugin), `loadStaffUser`,
+  member management, `createOrganizer`. `apps/web/lib/staff.ts`: `requireStaff`, `requireSuperAdmin`, `requireOrg(slug)`, `asStaff`.
+- Scanning: `@indinite/core` `decideScan` (offline decision), `packages/db` `getScanManifest` / `syncScans` / `gateStats`,
+  `/scan` PWA (Dexie cache, service worker `public/scan-sw.js`).
+- Pricing (SPEC §4.7): `priceOrder` + `receiptLines` in core; `pricingFor(event, organizer)`, coupons (`findCoupon`,
+  `redeemCoupon`), `createPendingOrder` (online + payment links), `issueOfflineOrder`, settings services
+  (`setEventPricing`, `setEventCharges`, coupons, `recordCommissionPayment`), `eventFinance`, `getOrderHistory`.
+- Demo videos: `pnpm --filter @indinite/e2e demo:videos [booking|organiser|scanning]` → `e2e/demo-videos/out/`.
 - `apps/web/lib/queries.ts`: public read models for events.
 
 ## Commands
@@ -40,8 +52,9 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
 3. **Org scoping**: every organizer-facing query filters by `organizerId` from the session, never from the
    request body. Permission checks use `can(user, permission, resource)` from `packages/core/permissions`.
 4. **Quota** changes only via the atomic conditional update in `packages/core/quota` — never read-then-write.
-5. **Tickets are issued only** from (a) a verified Stripe webhook or (b) the audited offline-issue service.
-   Never from a client-side redirect.
+5. **Tickets are issued only** from (a) a verified Stripe webhook, (b) the audited offline-issue service, or
+   (c) in development, the audited demo-payment path (`PAYMENTS_MODE=demo`, refused in production — SPEC §4.1).
+   All three go through the same fulfilment service. Never from a client-side redirect.
 6. **Webhooks are idempotent**: insert `stripeEventId` into `webhookEvents` (unique index) first; skip on duplicate.
 7. **QR payload** = `v1.<ticketId>.<ed25519 signature>` (base64url). No personal data in the QR.
 8. **Public IDs** (order refs like `NAV-7K3F9Q`) are random (nanoid, Crockford alphabet); never expose Mongo `_id`

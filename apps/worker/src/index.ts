@@ -1,49 +1,82 @@
-import { Worker } from "bullmq";
+import { setTimeout as sleep } from "node:timers/promises";
 import { runWithContext, systemActor } from "@indinite/core/context";
 import {
   QUEUES,
   connectDb,
-  redisConnection,
+  disconnectDb,
+  processNextJob,
   sweepExpiredHolds,
-  sweepHoldsQueue,
+  type QueueName,
+  type SendAuthEmailJob,
+  type SendPaymentLinkJob,
   type SendTicketsJob,
 } from "@indinite/db";
+import { sendAuthEmail } from "./jobs/auth-emails";
+import { sendPaymentLink } from "./jobs/payment-link";
+import { sendTickets } from "./jobs/tickets";
 
 await connectDb();
-const connection = redisConnection();
 
 // Every job runs as the system actor so audited() always knows who acted.
-const asSystem = <T>(jobId: string | undefined, fn: () => Promise<T>) =>
-  runWithContext({ actor: systemActor, requestId: `job:${jobId ?? "unknown"}` }, fn);
+const asSystem = <T>(requestId: string, fn: () => Promise<T>) =>
+  runWithContext({ actor: systemActor, requestId }, fn);
 
-const sweeper = new Worker(
-  QUEUES.sweepHolds,
-  (job) => asSystem(job.id, async () => {
-    const released = await sweepExpiredHolds();
-    if (released) console.log(`[sweep-holds] released ${released} expired holds`);
-    return { released };
-  }),
-  { connection, concurrency: 1 },
-);
+const POLL_MS = 1_000;
+const SWEEP_EVERY_MS = 60_000;
+const abort = new AbortController();
+let stopping = false;
+/** Idle wait that ends early on shutdown. */
+const idle = (ms: number) => sleep(ms, undefined, { signal: abort.signal }).catch(() => {});
 
-const sendTickets = new Worker<SendTicketsJob>(
-  QUEUES.sendTickets,
-  (job) => asSystem(job.id, async () => {
-    // M5: render PDF passes + QR, send via Resend, audit "order.tickets_sent".
-    console.log(`[send-tickets] TODO(M5) order=${job.data.orderId} reason=${job.data.reason}`);
-  }),
-  { connection, concurrency: 5 },
-);
-
-await sweepHoldsQueue().upsertJobScheduler("sweep-every-minute", { every: 60_000 }, { name: "sweep" });
-
-for (const w of [sweeper, sendTickets]) {
-  w.on("failed", (job, err) => console.error(`[${w.name}] job ${job?.id} failed:`, err.message));
+/** One polling loop per concurrency slot; each loop runs jobs back to back and sleeps when idle. */
+function runQueue<T>(queue: QueueName, concurrency: number, handler: (data: T, jobId: string) => Promise<void>) {
+  const loop = async () => {
+    while (!stopping) {
+      try {
+        const worked = await processNextJob<T>(
+          queue,
+          (job) => asSystem(`job:${job.jobId}`, () => handler(job.data, job.jobId)),
+          (job, err, exhausted) =>
+            console.error(`[${queue}] job ${job.jobId} failed (attempt ${job.attempts}/${job.maxAttempts}${exhausted ? ", giving up" : ""}):`, err instanceof Error ? err.message : err),
+        );
+        if (!worked) await idle(POLL_MS);
+      } catch (err) {
+        console.error(`[${queue}] poll error:`, err instanceof Error ? err.message : err);
+        await idle(POLL_MS);
+      }
+    }
+  };
+  return Array.from({ length: concurrency }, loop);
 }
-console.log("Worker running: send-tickets, sweep-holds");
+
+// Safe to run on several worker instances at once: releaseHold() only lets one caller win each hold.
+async function sweepLoop() {
+  while (!stopping) {
+    try {
+      const released = await asSystem("job:sweep-holds", () => sweepExpiredHolds());
+      if (released) console.log(`[sweep-holds] released ${released} expired holds`);
+    } catch (err) {
+      console.error("[sweep-holds] failed:", err instanceof Error ? err.message : err);
+    }
+    await idle(SWEEP_EVERY_MS);
+  }
+}
+
+const loops = [
+  ...runQueue<SendTicketsJob>(QUEUES.sendTickets, 3, sendTickets),
+  ...runQueue<SendAuthEmailJob>(QUEUES.sendAuthEmail, 2, sendAuthEmail),
+  ...runQueue<SendPaymentLinkJob>(QUEUES.sendPaymentLink, 2, sendPaymentLink),
+  sweepLoop(),
+];
+console.log("Worker running: send-tickets, send-auth-email, send-payment-link, sweep-holds");
 
 const shutdown = async () => {
-  await Promise.all([sweeper.close(), sendTickets.close()]);
+  if (stopping) return;
+  stopping = true;
+  abort.abort();
+  // Let in-flight jobs finish, but don't hang forever on a stuck one (its lock expires and it's retried).
+  await Promise.race([Promise.all(loops), sleep(30_000)]);
+  await disconnectDb();
   process.exit(0);
 };
 process.on("SIGTERM", shutdown);

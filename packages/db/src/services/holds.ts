@@ -4,6 +4,7 @@ import { Hold } from "../models/hold";
 import { Order } from "../models/order";
 import { quota } from "../quota";
 import { withTransaction } from "../transaction";
+import { releaseCoupon } from "./pricing";
 
 /**
  * Release one expired hold: return seats to sale and expire the pending order.
@@ -22,6 +23,7 @@ export async function releaseHold(holdId: Types.ObjectId | string, reason: "expi
     for (const item of hold.items) await quota.releaseHold(item.ticketTypeId, item.qty, session);
 
     const before = await Order.findById(hold.orderId, null, { session }).lean();
+    if (before?.couponId) await releaseCoupon(before.couponId, session);
     const order = await Order.findOneAndUpdate(
       { _id: hold.orderId, status: "pending" },
       { $set: { status: "expired" } },
