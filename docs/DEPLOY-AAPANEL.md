@@ -81,6 +81,19 @@ Zero-downtime reload for the web app; the worker restarts after finishing in-fli
 - [ ] Scanner at `/scan` on a phone: camera opens, a pass scans green, the same pass scans amber
 - [ ] `pm2 status` shows both processes online; reboot the server once and check they come back
 
+## Troubleshooting
+- **`Interpreter bun is NOT AVAILABLE in PATH`**: PM2 picks Bun for `.ts` files unless told otherwise. The
+  ecosystem file now sets `interpreter: "node"` for both apps. If you started PM2 with the old file, clear it:
+  ```bash
+  git pull
+  pm2 delete indinite-web indinite-worker
+  pm2 start ecosystem.config.cjs && pm2 save
+  ```
+- **`--env-file` / `--import` not recognised**: PM2 is using an old Node. Check `node -v` (needs 22) and that
+  aaPanel's Node.js manager sets Node 22 as the command-line version, then `pm2 update`.
+- **Started PM2 by hand instead of `deploy.sh`?** Also run `ln -sfn ../../.env.local apps/web/.env.local` and
+  `pnpm --filter @indinite/web build` first, or the web app has no settings / no build.
+
 ## Notes
 - **Live server later:** same steps with `DEPLOY_ENV` removed (or `live`) and `PAYMENTS_MODE=stripe`; demo
   payments are refused on a live server by design. Online card checkout needs the Stripe milestones first.

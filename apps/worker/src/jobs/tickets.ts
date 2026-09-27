@@ -16,6 +16,15 @@ export function nightsLabel(validSessionIds: unknown[], sessions: { _id: unknown
 }
 
 
+/** Only labels the email; a misconfigured PAYMENTS_MODE must never stop passes being sent. */
+function isDemoPayments() {
+  try {
+    return resolvePaymentsMode(process.env) === "demo";
+  } catch {
+    return false;
+  }
+}
+
 export function viewUrl(publicId: string) {
   return `${appUrl()}/orders/${encodeURIComponent(publicId)}?t=${signOrderLink(publicId, linkSecret())}`;
 }
@@ -69,7 +78,7 @@ export async function sendTickets(job: SendTicketsJob, jobId: string) {
     totalPence: order.totalPence,
     tickets: passes,
     viewUrl: viewUrl(order.publicId),
-    demo: resolvePaymentsMode(process.env) === "demo" && order.source === "online" && !order.stripe?.paymentIntentId,
+    demo: isDemoPayments() && order.source !== "offline" && !order.stripe?.paymentIntentId,
     reason: job.reason,
   };
 
