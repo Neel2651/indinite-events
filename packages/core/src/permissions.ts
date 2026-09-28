@@ -39,12 +39,6 @@ const PLATFORM_ONLY: ReadonlySet<Permission> = new Set([
   "audit.readGlobal",
 ]);
 
-/**
- * Super admin can do everything except refund: refunds are the organiser owner's decision (SPEC §4.6).
- * Super admins may start/resend Stripe onboarding (SPEC §4.8, agreed 28 Sep 2026).
- */
-const SUPER_ADMIN_EXCLUDED: ReadonlySet<Permission> = new Set(["order.refund"]);
-
 export const ROLE_PERMISSIONS: Record<OrgRole, ReadonlySet<Permission>> = {
   owner: new Set<Permission>([
     "event.read",
@@ -107,7 +101,8 @@ export interface OrgResource {
  * scoped to that organizer; the organizerId must come from the loaded record, never the request body.
  */
 export function can(user: AuthUser, permission: Permission, resource?: OrgResource): boolean {
-  if (user.isSuperAdmin) return !SUPER_ADMIN_EXCLUDED.has(permission);
+  // Super admin can do everything, including refunds and Stripe onboarding (SPEC §2, agreed 28 Sep 2026).
+  if (user.isSuperAdmin) return true;
   if (PLATFORM_ONLY.has(permission)) return false;
   if (!resource) return false;
 

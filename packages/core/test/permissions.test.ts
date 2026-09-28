@@ -45,12 +45,12 @@ describe("can()", () => {
     expect(can(user("manager"), "stripe.onboard", ORG_A)).toBe(false);
   });
 
-  it("super admin can start Stripe onboarding for an organiser, but only owners refund", () => {
+  it("super admin can start Stripe onboarding and refund for any organiser", () => {
     expect(can(superAdmin, "stripe.onboard", ORG_A)).toBe(true);
-    expect(can(superAdmin, "order.refund", ORG_A)).toBe(false);
+    expect(can(superAdmin, "order.refund", ORG_A)).toBe(true);
   });
 
-  it("refunds are owner-only (not managers, box office or finance)", () => {
+  it("refunds are owner or super admin only (not managers, box office, scanner or finance)", () => {
     for (const role of ORG_ROLES) {
       const user = { id: "u", isSuperAdmin: false, memberships: [{ organizerId: ORG_A.organizerId, role }] };
       expect(can(user, "order.refund", ORG_A)).toBe(role === "owner");

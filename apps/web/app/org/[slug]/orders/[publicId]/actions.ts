@@ -24,10 +24,10 @@ export async function resendTicketsAction(slug: string, publicId: string): Promi
   return { ok: `Passes will be emailed to ${order.customer?.email} again.` };
 }
 
-/** SPEC §4.6: owner-only, before the event starts, ticket price only. The organiser comes from the URL + membership. */
+/** SPEC §4.6: organiser owner or super admin, before the event starts, ticket price only. The organiser comes from the URL + membership. */
 export async function refundAction(slug: string, publicId: string, ticketIds: string[], reason: string): Promise<{ ok?: string; error?: string }> {
   const { user, organizer, can } = await requireOrg(slug);
-  if (!can("order.refund")) return { error: "Only the organiser's owner can refund." };
+  if (!can("order.refund")) return { error: "Only the organiser's owner or Indinite can refund." };
   try {
     const r = await asStaff(user, () => refundTickets({ user, organizerId: organizer.id, publicId, ticketIds, reason }), organizer.id);
     revalidatePath(`/org/${slug}/orders/${publicId}`);
@@ -42,7 +42,7 @@ export async function refundAction(slug: string, publicId: string, ticketIds: st
     };
   } catch (e) {
     if (e instanceof RefundError || e instanceof StripeNotConfiguredError) return { error: e.message };
-    if (e instanceof ForbiddenError) return { error: "Only the organiser's owner can refund." };
+    if (e instanceof ForbiddenError) return { error: "Only the organiser's owner or Indinite can refund." };
     console.error("[refund] failed", e instanceof Error ? e.message : e);
     return { error: "The refund didn't go through. Nothing was changed; please try again." };
   }

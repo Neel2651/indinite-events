@@ -12,7 +12,7 @@ import { withTransaction } from "../transaction";
 
 /**
  * Refunds (SPEC §4.6, agreed 28 Sep 2026):
- * - only the organiser OWNER (not managers, not Indinite super admins);
+ * - only the organiser OWNER or an Indinite super admin (not managers, box office or finance);
  * - only before the event starts, and only passes that haven't been scanned;
  * - only the ticket price actually paid (after coupon) — platform fee, organiser charges and tax are never refunded;
  * - card/payment-link orders are refunded through Stripe (Indinite keeps its fee; the amount comes back from the
