@@ -4,6 +4,8 @@ const config: NextConfig = {
   transpilePackages: ["@indinite/core", "@indinite/db"],
   serverExternalPackages: ["mongoose"],
   poweredByHeader: false,
+  // Event image uploads (5 MB max, checked in addEventImage) go through server actions.
+  experimental: { serverActions: { bodySizeLimit: "6mb" } },
   async headers() {
     return [
       {

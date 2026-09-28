@@ -69,3 +69,12 @@ export function returnSoldOp(ticketTypeId: unknown, qty: number) {
 export function available(doc: QuotaDoc): number {
   return Math.max(0, doc.quota - doc.sold - doc.held);
 }
+
+/** Change a ticket type's quota (admin), never below what's already sold or held. Check matchedCount. */
+export function setQuotaOp(ticketTypeId: unknown, quota: number) {
+  if (!Number.isInteger(quota) || quota < 0) throw new Error(`Invalid quota ${quota}`);
+  return {
+    filter: { _id: ticketTypeId, $expr: { $lte: [{ $add: ["$sold", "$held"] }, quota] } },
+    update: { $set: { quota } },
+  } as const;
+}
