@@ -80,6 +80,17 @@ export default async function PayPage({ params, searchParams }: Props) {
               </div>
             </dl>
             <PayButton publicId={order.publicId} token={t} label={demo ? `Confirm booking · ${price(order.totalPence)}` : `Pay ${price(order.totalPence)}`} />
+            <p className="text-center text-xs text-muted-foreground">
+              By booking you agree to our{" "}
+              <a href="/booking-terms" target="_blank" className="font-semibold underline">
+                booking terms
+              </a>
+              . See how we use your data in our{" "}
+              <a href="/privacy" target="_blank" className="font-semibold underline">
+                privacy policy
+              </a>
+              .
+            </p>
             {demo && <p className="text-center text-xs text-muted-foreground">Demo mode: no payment is taken and the booking is approved straight away.</p>}
             <p className="text-xs text-muted-foreground">Order {order.publicId}</p>
           </div>

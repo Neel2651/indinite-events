@@ -271,6 +271,17 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
               {submitting ? "Booking…" : paymentsMode === "demo" ? `Confirm booking · ${price(breakdown?.total ?? 0)}` : `Pay ${price(breakdown?.total ?? 0)}`}
             </button>
             {paymentsMode === "demo" && <p className="text-center text-xs text-muted-foreground">Demo mode: no payment is taken and your booking is approved straight away.</p>}
+            <p className="text-center text-xs text-muted-foreground">
+              By booking you agree to our{" "}
+              <a href="/booking-terms" target="_blank" className="font-semibold underline">
+                booking terms
+              </a>
+              . See how we use your data in our{" "}
+              <a href="/privacy" target="_blank" className="font-semibold underline">
+                privacy policy
+              </a>
+              .
+            </p>
           </>
         )}
       </section>

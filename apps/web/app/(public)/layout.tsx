@@ -27,9 +27,20 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             <p>Tickets sold by Indinite on behalf of event organisers. Payments processed securely by Stripe.</p>
             <p className="mt-2">© {new Date().getFullYear()} Indinite</p>
           </div>
-          <Link href="/sign-in" className="hover:text-foreground hover:underline">
-            Staff sign in
-          </Link>
+          <nav aria-label="Policies and staff" className="flex flex-wrap gap-x-5 gap-y-2">
+            <Link href="/booking-terms" className="hover:text-foreground hover:underline">
+              Booking terms
+            </Link>
+            <Link href="/refund-policy" className="hover:text-foreground hover:underline">
+              Refund policy
+            </Link>
+            <Link href="/privacy" className="hover:text-foreground hover:underline">
+              Privacy policy
+            </Link>
+            <Link href="/sign-in" className="hover:text-foreground hover:underline">
+              Staff sign in
+            </Link>
+          </nav>
         </div>
       </footer>
     </>
