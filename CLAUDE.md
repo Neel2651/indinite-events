@@ -42,7 +42,9 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
 - `pnpm test` — Vitest (unit); `pnpm --filter @indinite/db test:db` — real-MongoDB concurrency tests
 - `pnpm --filter @indinite/core gen:qr-keys` — generate QR signing keys for .env.local
 - `pnpm --filter @indinite/db seed` / `sync-indexes`
-- `pnpm typecheck && pnpm test` — must pass before any milestone is done (ESLint not configured yet)
+- `pnpm lint` — ESLint (TypeScript, Next.js, jsx-a11y accessibility rules); must have no errors
+- `pnpm typecheck && pnpm lint && pnpm test` — must pass before any milestone is done
+- `pnpm --filter @indinite/e2e test:a11y` — axe WCAG 2.1 AA check of public pages (dev server running; `A11Y_BASE_URL` to change)
 - `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
 
 ## Non-negotiable rules

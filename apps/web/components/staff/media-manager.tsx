@@ -35,7 +35,7 @@ export function MediaManager({ eventId, media }: { eventId: string; media: Media
           {media.map((m, i) => (
             <li key={m.url} className="overflow-hidden rounded-md border border-border bg-background">
               {m.type === "image" ? (
-                // eslint-disable-next-line @next/next/no-img-element
+                 
                 <img src={m.url} alt={m.alt} className="aspect-video w-full object-cover" />
               ) : (
                 <div className="flex aspect-video items-center justify-center bg-muted text-sm text-muted-foreground">

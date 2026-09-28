@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "demo:videos": "tsx --env-file-if-exists=../.env.local demo-videos/record.ts",
-    "test:offline-limit": "tsx --env-file-if-exists=../.env.local tests/offline-limit.ts"
+    "test:offline-limit": "tsx --env-file-if-exists=../.env.local tests/offline-limit.ts",
+    "test:a11y": "tsx tests/a11y.ts"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@indinite/core": "workspace:^",
     "@types/node": "^22.7.0",
     "@types/qrcode": "^1.5.6",

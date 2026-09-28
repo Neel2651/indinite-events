@@ -19,7 +19,7 @@ export function EventCard({ event }: { event: PublicEvent }) {
             : "BOOKINGS CLOSED"}
       </span>
       {cover ? (
-        // eslint-disable-next-line @next/next/no-img-element
+         
         <img src={cover.url} alt={cover.alt} className="aspect-[16/9] w-full object-cover" />
       ) : (
         <div className="aspect-[16/9] w-full bg-brand-navy" aria-hidden />

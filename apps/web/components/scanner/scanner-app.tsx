@@ -625,17 +625,32 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
 function ManualEntry({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (code: string) => void }) {
   const [code, setCode] = useState("");
   return (
-    <div className="absolute inset-0 z-20 flex items-end bg-black/60" onClick={onCancel}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="manual-entry-title"
+      className="absolute inset-0 z-20 flex items-end bg-black/60"
+    >
+      {/* Tapping outside the sheet closes it. */}
+      <button type="button" aria-label="Close" tabIndex={-1} onClick={onCancel} className="absolute inset-0 cursor-default" />
       <form
-        onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
           onSubmit(code);
         }}
-        className="w-full space-y-4 rounded-t-3xl bg-white p-6 text-brand-navy"
+        className="relative w-full space-y-4 rounded-t-3xl bg-white p-6 text-brand-navy"
       >
-        <h2 className="text-xl">Enter the code under the QR</h2>
+        <h2 id="manual-entry-title" className="text-xl">
+          Enter the code under the QR
+        </h2>
+        <label htmlFor="manual-code" className="sr-only">
+          Pass code
+        </label>
         <input
+          id="manual-code"
+          onKeyDown={(e) => e.key === "Escape" && onCancel()}
+          // Focus moves into the dialog that just opened (the gate phone's keyboard comes up straight away).
+          // eslint-disable-next-line jsx-a11y/no-autofocus
           autoFocus
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
@@ -717,7 +732,10 @@ function ResultScreen({
   const canOverride = canManualAdmit && (d.result === "already_used" || d.result === "wrong_session");
 
   return (
-    <div role="alert" className={`absolute inset-0 z-30 flex flex-col items-center justify-center px-6 text-center text-white ${TONE[d.result]}`} onClick={reasonOpen ? undefined : onDone}>
+    <div role="alert" className={`absolute inset-0 z-30 flex flex-col items-center justify-center px-6 text-center text-white ${TONE[d.result]}`}>
+      {/* The whole screen is a "next scan" button for fast gate flow; content sits above it and lets taps through. */}
+      {!reasonOpen && <button type="button" aria-label="Scan the next pass" onClick={onDone} className="absolute inset-0 cursor-default" />}
+      <div className="pointer-events-none relative flex flex-col items-center [&_button]:pointer-events-auto [&_form]:pointer-events-auto">
       <div className="text-7xl font-bold" aria-hidden>
         {d.result === "admitted" ? "✓" : d.result === "already_used" ? "!" : "✕"}
       </div>
@@ -747,7 +765,6 @@ function ResultScreen({
       )}
       {reasonOpen && (
         <form
-          onClick={(e) => e.stopPropagation()}
           onSubmit={(e) => {
             e.preventDefault();
             if (reason.trim().length >= 3) onManualAdmit(reason.trim());
@@ -756,6 +773,8 @@ function ResultScreen({
         >
           <label className="block text-left text-sm font-semibold">
             Reason (required)
+            {/* Focus the reason field the moment "Admit anyway" opens it. */}
+            {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
             <input autoFocus value={reason} onChange={(e) => setReason(e.target.value)} minLength={3} maxLength={300} className="mt-1 w-full rounded-md px-3 py-3 text-brand-navy" placeholder="e.g. Manager approved, bought wrong night" />
           </label>
           <button type="submit" className="w-full rounded-full bg-white py-3 font-semibold text-brand-navy">
@@ -763,7 +782,8 @@ function ResultScreen({
           </button>
         </form>
       )}
-      {!reasonOpen && d.result !== "admitted" && <p className="absolute inset-x-0 bottom-10 text-sm opacity-90">Tap to scan the next pass</p>}
+      </div>
+      {!reasonOpen && d.result !== "admitted" && <p className="pointer-events-none absolute inset-x-0 bottom-10 text-sm opacity-90">Tap to scan the next pass</p>}
     </div>
   );
 }

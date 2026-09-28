@@ -31,7 +31,7 @@ export default async function EventPage({ params }: Props) {
       <section className="dark relative isolate overflow-hidden bg-background text-foreground">
         {cover && (
           <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img src={cover.url} alt="" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-45" />
             <div className="absolute inset-0 -z-10 bg-gradient-to-t from-brand-navy via-brand-navy/70 to-transparent" aria-hidden />
           </>
@@ -73,7 +73,7 @@ export default async function EventPage({ params }: Props) {
                         className="aspect-video w-full rounded-lg border-0 bg-brand-navy"
                       />
                     ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
+                       
                       <img src={m.url} alt={m.alt} loading="lazy" className="aspect-[16/9] w-full rounded-lg object-cover" />
                     )}
                   </li>

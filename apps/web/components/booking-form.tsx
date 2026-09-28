@@ -109,25 +109,12 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
     }
   }
 
-  const StepHeader = ({ n, title, done, onEdit }: { n: Step; title: string; done?: string; onEdit?: () => void }) => (
-    <div className="flex items-center justify-between gap-3">
-      <p className={`font-display font-semibold ${step === n ? "" : "text-muted-foreground"}`}>
-        <span className={`mr-2 inline-flex size-6 items-center justify-center rounded-full text-xs ${step >= n ? "bg-brand-orange text-white" : "bg-muted"}`}>{n}</span>
-        {title}
-      </p>
-      {done && step > n && (
-        <button type="button" onClick={onEdit} className="text-right text-sm">
-          <span className="text-muted-foreground">{done}</span> <span className="font-semibold text-brand-orange-strong">Change</span>
-        </button>
-      )}
-    </div>
-  );
 
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       {/* 1. Day */}
       <section className="space-y-3">
-        <StepHeader n={1} title="Choose a day" done={session ? `${session.label} · ${session.dayLabel}` : undefined} onEdit={() => setStep(1)} />
+        <StepHeader step={step} n={1} title="Choose a day" done={session ? `${session.label} · ${session.dayLabel}` : undefined} onEdit={() => setStep(1)} />
         {step === 1 && (
           <ul className="grid grid-cols-2 gap-2">
             {sessions.map((s) => {
@@ -158,7 +145,7 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
 
       {/* 2. Passes */}
       <section className="space-y-3 border-t border-border pt-4">
-        <StepHeader n={2} title="Choose passes" done={count ? `${count} ${count === 1 ? "pass" : "passes"}` : undefined} onEdit={() => setStep(2)} />
+        <StepHeader step={step} n={2} title="Choose passes" done={count ? `${count} ${count === 1 ? "pass" : "passes"}` : undefined} onEdit={() => setStep(2)} />
         {step === 2 && (
           <>
             <ul className="space-y-3">
@@ -198,7 +185,7 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
 
       {/* 3. Details, coupon, pay */}
       <section className="space-y-4 border-t border-border pt-4">
-        <StepHeader n={3} title="Your details and payment" />
+        <StepHeader step={step} n={3} title="Your details and payment" />
         {step === 3 && (
           <>
             <label className="block text-sm">
@@ -286,5 +273,22 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
         )}
       </section>
     </form>
+  );
+}
+
+/** Heading for each booking step, with a "Change" link once it's done. */
+function StepHeader({ step, n, title, done, onEdit }: { step: Step; n: Step; title: string; done?: string; onEdit?: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <p className={`font-display font-semibold ${step === n ? "" : "text-muted-foreground"}`}>
+        <span className={`mr-2 inline-flex size-6 items-center justify-center rounded-full text-xs ${step >= n ? "bg-brand-orange text-white" : "bg-muted"}`}>{n}</span>
+        {title}
+      </p>
+      {done && step > n && (
+        <button type="button" onClick={onEdit} className="text-right text-sm">
+          <span className="text-muted-foreground">{done}</span> <span className="font-semibold text-brand-orange-strong">Change</span>
+        </button>
+      )}
+    </div>
   );
 }
