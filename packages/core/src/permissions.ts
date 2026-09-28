@@ -39,8 +39,11 @@ const PLATFORM_ONLY: ReadonlySet<Permission> = new Set([
   "audit.readGlobal",
 ]);
 
-/** Super admin can do everything except act as an organizer's Stripe account owner. */
-const SUPER_ADMIN_EXCLUDED: ReadonlySet<Permission> = new Set(["stripe.onboard"]);
+/**
+ * Super admin can do everything except refund: refunds are the organiser owner's decision (SPEC §4.6).
+ * Super admins may start/resend Stripe onboarding (SPEC §4.8, agreed 28 Sep 2026).
+ */
+const SUPER_ADMIN_EXCLUDED: ReadonlySet<Permission> = new Set(["order.refund"]);
 
 export const ROLE_PERMISSIONS: Record<OrgRole, ReadonlySet<Permission>> = {
   owner: new Set<Permission>([

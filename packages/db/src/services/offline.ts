@@ -123,10 +123,10 @@ export async function issueOfflineOrder(organizerId: string, issuedBy: string, r
  * SPEC §4.2: staff create a pending booking and a payment link (valid 1–24 h, seats held meanwhile).
  * The customer pays on /pay/<ref>; Stripe Checkout once connected, instant approval in demo mode.
  */
-export async function createPaymentLinkOrder(organizerId: string, createdBy: string, rawInput: PaymentLinkBookingInput) {
+export async function createPaymentLinkOrder(organizerId: string, createdBy: string, rawInput: PaymentLinkBookingInput, opts: { requireCardPayments?: boolean } = {}) {
   const input = paymentLinkBookingSchema.parse(rawInput);
   return createPendingOrder(
     { eventId: input.eventId, customer: input.customer, items: input.items, couponCode: input.couponCode },
-    { source: "payment_link", holdMs: input.validForHours * 3_600_000, createdBy, staff: true, organizerId },
+    { source: "payment_link", holdMs: input.validForHours * 3_600_000, createdBy, staff: true, organizerId, requireCardPayments: opts.requireCardPayments },
   );
 }

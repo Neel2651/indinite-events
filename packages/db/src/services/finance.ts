@@ -3,14 +3,16 @@ import { CommissionLedger } from "../models/commission-ledger";
 import { Event } from "../models/event";
 import { Order } from "../models/order";
 
-const PAID = ["paid", "partially_refunded"];
+const PAID = ["paid", "partially_refunded", "refunded"];
 
 export interface EventFinance {
   eventId: string;
   title: string;
   organizerId: string;
-  /** Everything customers paid, all channels. */
+  /** Everything customers paid, all channels, minus refunds. */
   totalSalesPence: number;
+  /** Refunded to customers (ticket price only; fees kept, except full refunds when a late payment couldn't be honoured). */
+  refundedPence: number;
   orders: number;
   passes: number;
   /** Cash + organiser's own account: money the organiser holds directly. */
@@ -41,13 +43,17 @@ export async function eventFinance(eventId: string): Promise<EventFinance | null
   const event = await Event.findById(eventId, { title: 1, organizerId: 1 }).lean();
   if (!event) return null;
   const [groups, ledger] = await Promise.all([
-    Order.aggregate<{ _id: { source: string; method: string | null }; total: number; fees: number; orders: number; passes: number }>([
+    Order.aggregate<{ _id: { source: string; method: string | null }; total: number; fees: number; refunded: number; orders: number; passes: number }>([
       { $match: { eventId: event._id, status: { $in: PAID } } },
       {
         $group: {
           _id: { source: "$source", method: { $ifNull: ["$offline.method", null] } },
-          total: { $sum: "$totalPence" },
-          fees: { $sum: "$applicationFeePence" },
+          // Net of refunds.
+          total: { $sum: { $subtract: ["$totalPence", { $ifNull: ["$refundedPence", 0] }] } },
+          refunded: { $sum: { $ifNull: ["$refundedPence", 0] } },
+          // Indinite keeps its fee on refunds, except when the whole booking was refunded by the system
+          // (late payment after the passes sold out), where the fee was returned too.
+          fees: { $sum: { $cond: [{ $in: ["system", { $ifNull: ["$refunds.refundedBy", []] }] }, 0, "$applicationFeePence"] } },
           orders: { $sum: 1 },
           passes: { $sum: { $sum: "$items.qty" } },
         },
@@ -71,6 +77,7 @@ export async function eventFinance(eventId: string): Promise<EventFinance | null
     title: event.title,
     organizerId: String(event.organizerId),
     totalSalesPence: groups.reduce((n, g) => n + g.total, 0),
+    refundedPence: groups.reduce((n, g) => n + g.refunded, 0),
     orders: groups.reduce((n, g) => n + g.orders, 0),
     passes: groups.reduce((n, g) => n + g.passes, 0),
     direct: {

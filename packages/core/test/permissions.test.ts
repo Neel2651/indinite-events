@@ -45,8 +45,16 @@ describe("can()", () => {
     expect(can(user("manager"), "stripe.onboard", ORG_A)).toBe(false);
   });
 
-  it("super admin cannot onboard Stripe on an organizer's behalf", () => {
-    expect(can(superAdmin, "stripe.onboard", ORG_A)).toBe(false);
+  it("super admin can start Stripe onboarding for an organiser, but only owners refund", () => {
+    expect(can(superAdmin, "stripe.onboard", ORG_A)).toBe(true);
+    expect(can(superAdmin, "order.refund", ORG_A)).toBe(false);
+  });
+
+  it("refunds are owner-only (not managers, box office or finance)", () => {
+    for (const role of ORG_ROLES) {
+      const user = { id: "u", isSuperAdmin: false, memberships: [{ organizerId: ORG_A.organizerId, role }] };
+      expect(can(user, "order.refund", ORG_A)).toBe(role === "owner");
+    }
   });
 
   it("every role grants only known permissions", () => {

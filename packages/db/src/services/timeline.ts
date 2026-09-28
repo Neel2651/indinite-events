@@ -78,6 +78,18 @@ export async function getOrderHistory(organizerId: string, publicId: string) {
       }
       case "order.tickets_sent":
         return { at, kind: "emailed", title: a.reason === "resend" ? "Passes emailed again" : "Passes emailed to customer", by, tone: "neutral" };
+      case "order.checkout_started":
+        return { at, kind: "other", title: "Card checkout started", by, tone: "neutral" };
+      case "order.refunded": {
+        const m = (a.metadata ?? {}) as { amountPence?: number; tickets?: number; method?: string };
+        const amount = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format((m.amountPence ?? 0) / 100);
+        const how = m.method === "stripe" ? "to card" : m.method === "outside_indinite" ? "repaid by the organiser" : "passes cancelled";
+        return { at, kind: "refund", title: `Refunded ${amount} (${m.tickets ?? 0} pass${m.tickets === 1 ? "" : "es"}, ${how})`, detail: a.reason ?? undefined, by, tone: "warning" };
+      }
+      case "order.late_payment_refunded":
+        return { at, kind: "refund", title: "Refunded in full: passes sold out while the payment was completing", by, tone: "danger" };
+      case "order.resend_requested":
+        return { at, kind: "emailed", title: "Staff asked to email the passes again", by, tone: "neutral" };
       case "order.hold_released":
         return { at, kind: "other", title: "Booking expired unpaid; passes released", by, tone: "warning" };
       default:
@@ -90,7 +102,15 @@ export async function getOrderHistory(organizerId: string, publicId: string) {
     const entries: TimelineEntry[] = [
       ...ticketAudits
         .filter((a) => a.entity?.id === id)
-        .map((a) => ({ at: a.createdAt as Date, kind: "ticket_issued" as const, title: a.action === "ticket.issued" ? "Pass generated" : a.action, by: actorName(a), ticketId: id, tone: "neutral" as const })),
+        .map((a) => ({
+          at: a.createdAt as Date,
+          kind: (a.action === "ticket.refunded" ? "refund" : "ticket_issued") as TimelineEntry["kind"],
+          title: a.action === "ticket.issued" ? "Pass generated" : a.action === "ticket.refunded" ? "Refunded (no longer valid at the gate)" : a.action,
+          detail: a.action === "ticket.refunded" ? (a.reason ?? undefined) : undefined,
+          by: actorName(a),
+          ticketId: id,
+          tone: (a.action === "ticket.refunded" ? "warning" : "neutral") as TimelineEntry["tone"],
+        })),
       ...scans
         .filter((s) => String(s.ticketId) === id)
         .map((s) => {

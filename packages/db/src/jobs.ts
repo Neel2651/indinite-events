@@ -6,6 +6,7 @@ export const QUEUES = {
   sendTickets: "send-tickets",
   sendAuthEmail: "send-auth-email",
   sendPaymentLink: "send-payment-link",
+  sendRefundEmail: "send-refund-email",
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
@@ -18,12 +19,22 @@ export interface SendTicketsJob {
 /** Account emails for staff (admins and organiser users). */
 export type SendAuthEmailJob =
   | { kind: "invitation"; to: string; url: string; organizationName: string; role: string; inviterName: string }
-  | { kind: "reset-password"; to: string; url: string; name: string };
+  | { kind: "reset-password"; to: string; url: string; name: string }
+  | { kind: "merchant-setup"; to: string; url: string; organizationName: string }
+  | { kind: "merchant-active"; to: string; url: string; organizationName: string };
 
 /** SPEC §4.2: email the customer their payment link. */
 export interface SendPaymentLinkJob {
   orderId: string;
   url: string;
+}
+
+/** SPEC §4.6: tell the customer about a refund (owner refund, or sold out after a late payment). */
+export interface SendRefundEmailJob {
+  orderId: string;
+  kind: "refund" | "sold_out";
+  /** Index into order.refunds (owner refunds). */
+  refundIndex?: number;
 }
 
 export interface ClaimedJob<T> {
@@ -73,6 +84,10 @@ export function enqueueSendAuthEmail(job: SendAuthEmailJob) {
 
 export function enqueueSendPaymentLink(job: SendPaymentLinkJob, opts: { session?: ClientSession } = {}) {
   return enqueue(QUEUES.sendPaymentLink, `${job.orderId}:payment-link`, job, { maxAttempts: 4, session: opts.session });
+}
+
+export function enqueueSendRefundEmail(job: SendRefundEmailJob, opts: { session?: ClientSession } = {}) {
+  return enqueue(QUEUES.sendRefundEmail, `${job.orderId}:refund:${job.kind}:${job.refundIndex ?? 0}`, job, { maxAttempts: 5, session: opts.session });
 }
 
 /**

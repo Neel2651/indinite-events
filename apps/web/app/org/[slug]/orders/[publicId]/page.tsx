@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { linkSecret, signOrderLink } from "@indinite/core/links";
-import { getOrderHistory, type TimelineEntry } from "@indinite/db";
+import { getOrderHistory, quoteRefund, type TimelineEntry } from "@indinite/db";
+import { RefundPanel } from "@/components/staff/refund-panel";
 import { ResendButton } from "@/components/staff/order-actions";
 import { PageHeader } from "@/components/staff/shell";
 import { formatDay, formatTime, price } from "@/lib/format";
@@ -43,6 +44,7 @@ export default async function OrderPage({ params }: { params: Promise<{ slug: st
   const how = HOW[order.offline?.method ?? order.source] ?? order.source;
   const viewUrl = paid ? `/orders/${order.publicId}?t=${encodeURIComponent(signOrderLink(order.publicId, linkSecret()))}` : null;
   const nights = new Map((event?.sessions ?? []).map((s) => [String(s._id), formatDay(s.startsAt)]));
+  const refund = can("order.refund") ? await quoteRefund(organizer.id, order.publicId) : null;
 
   return (
     <>
@@ -144,6 +146,35 @@ export default async function OrderPage({ params }: { params: Promise<{ slug: st
               {order.offline?.note && ` · “${order.offline.note}”`}
             </p>
           </section>
+          {refund && (
+            <section className="rounded-lg border border-border bg-card p-6">
+              <h2 className="mb-3 text-lg">Refund</h2>
+              <RefundPanel
+                slug={slug}
+                publicId={order.publicId}
+                eligible={refund.eligible}
+                reason={refund.reason}
+                method={refund.method}
+                tickets={refund.tickets.map((t, i) => ({ id: t.id, label: `Pass ${i + 1}: ${t.ticketTypeName}`, refundablePence: t.refundablePence, status: t.status, scanned: t.scanned }))}
+              />
+            </section>
+          )}
+          {(order.refunds ?? []).length > 0 && (
+            <section className="rounded-lg border border-border bg-card p-6 text-sm">
+              <h2 className="mb-2 text-lg">Refunds</h2>
+              <ul className="space-y-2">
+                {order.refunds!.map((r, i) => (
+                  <li key={i} className="flex justify-between gap-3">
+                    <span>
+                      {r.ticketIds?.length ? `${r.ticketIds.length} pass${r.ticketIds.length === 1 ? "" : "es"}` : "Whole booking"} · {r.method === "stripe" ? "to card" : r.method === "outside_indinite" ? "repaid by organiser" : "cancelled"}
+                      <span className="block text-xs text-muted-foreground">{r.reason}</span>
+                    </span>
+                    <span className="font-semibold">{price(r.amountPence)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           <Link href={`/org/${slug}/orders`} className="font-semibold text-brand-orange-strong hover:underline">
             Back to orders
           </Link>

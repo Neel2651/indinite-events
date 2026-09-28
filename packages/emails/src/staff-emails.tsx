@@ -127,3 +127,94 @@ export function PaymentLinkEmail(d: PaymentLinkEmailData) {
     </Shell>
   );
 }
+
+export interface MerchantEmailData {
+  organizationName: string;
+  url: string;
+}
+
+export const merchantSetupSubject = (d: MerchantEmailData) => `Set up card payments for ${d.organizationName}`;
+
+/** Owner: finish Stripe onboarding (links to our Payments page, which makes a fresh Stripe link). */
+export function MerchantSetupEmail(d: MerchantEmailData) {
+  return (
+    <Shell preview="Connect a bank account to receive ticket money" title="Set up card payments">
+      <Text style={p}>
+        To sell tickets online for <strong style={{ color: brand.ink }}>{d.organizationName}</strong>, connect your business to Stripe, our payment
+        provider. You&apos;ll add your bank details and confirm your identity on Stripe&apos;s secure page; it usually takes about 10 minutes.
+      </Text>
+      <Button href={d.url} style={button}>
+        Set up payments
+      </Button>
+      <Text style={{ ...p, fontSize: "13px", marginTop: "16px" }}>
+        Sign in with your Indinite Events account, then choose &ldquo;Set up payments with Stripe&rdquo;. Indinite never sees your bank or ID details.
+      </Text>
+    </Shell>
+  );
+}
+
+export const merchantActiveSubject = (d: MerchantEmailData) => `${d.organizationName} can now take card payments`;
+
+export function MerchantActiveEmail(d: MerchantEmailData) {
+  return (
+    <Shell preview="Stripe has approved your account" title="You can take card payments">
+      <Text style={p}>
+        Stripe has approved <strong style={{ color: brand.ink }}>{d.organizationName}</strong>. Customers can now pay by card online and through payment
+        links, and ticket money is paid out to your bank account by Stripe.
+      </Text>
+      <Button href={d.url} style={button}>
+        View payments
+      </Button>
+    </Shell>
+  );
+}
+
+export interface RefundEmailData {
+  customerName: string;
+  eventTitle: string;
+  publicId: string;
+  kind: "refund" | "sold_out";
+  amountText: string;
+  passes: number;
+  method: "stripe" | "outside_indinite" | "none";
+  policyUrl: string;
+}
+
+export const refundSubject = (d: RefundEmailData) =>
+  d.kind === "sold_out" ? `Your booking for ${d.eventTitle} couldn't be completed` : `Refund for ${d.eventTitle} (${d.publicId})`;
+
+/** Customer: refund confirmation, or apology + full refund when passes sold out during a late payment. */
+export function RefundEmail(d: RefundEmailData) {
+  const how =
+    d.method === "stripe"
+      ? "It goes back to the card you paid with and usually shows within 5–10 working days."
+      : d.method === "outside_indinite"
+        ? "You paid the organiser directly, so they'll repay you the same way."
+        : "These were complimentary passes, so there's nothing to repay.";
+  return (
+    <Shell preview={d.kind === "sold_out" ? "We've refunded your payment in full" : `Refund of ${d.amountText}`} title={d.kind === "sold_out" ? "Sorry, those passes sold out" : "Your refund"}>
+      <Text style={p}>Hi {d.customerName.split(" ")[0]},</Text>
+      {d.kind === "sold_out" ? (
+        <Text style={p}>
+          Your payment for <strong style={{ color: brand.ink }}>{d.eventTitle}</strong> reached us after your reserved passes were released, and they sold
+          out in the meantime. We&apos;re sorry. We&apos;ve refunded the full <strong style={{ color: brand.ink }}>{d.amountText}</strong>, including fees.
+        </Text>
+      ) : (
+        <Text style={p}>
+          The organiser has refunded {d.passes} {d.passes === 1 ? "pass" : "passes"} on order <strong style={{ color: brand.ink }}>{d.publicId}</strong> for{" "}
+          {d.eventTitle}: <strong style={{ color: brand.ink }}>{d.amountText}</strong>. Refunded passes no longer work at the gate.
+        </Text>
+      )}
+      <Text style={p}>{how}</Text>
+      {d.kind === "refund" && (
+        <Text style={{ ...p, fontSize: "13px" }}>
+          Only the ticket price is refundable; the platform fee, organiser charges and tax aren&apos;t. See our{" "}
+          <a href={d.policyUrl} style={{ color: brand.orangeStrong }}>
+            refund policy
+          </a>
+          .
+        </Text>
+      )}
+    </Shell>
+  );
+}

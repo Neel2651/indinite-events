@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { resolvePaymentsMode } from "@indinite/core";
 import { linkSecret, verifyOrderLink } from "@indinite/core/links";
+import { AutoRefresh } from "@/components/staff/auto-refresh";
 import { getOrderConfirmation } from "@/lib/queries";
 import { formatDateRange, price } from "@/lib/format";
 
@@ -22,6 +23,8 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
 
   return (
     <>
+      {/* Card payments are confirmed by Stripe's webhook, usually within seconds. */}
+      {!paid && order.status === "pending" && <AutoRefresh seconds={3} />}
       <section className="dark bg-background text-foreground">
         <div className="mx-auto max-w-3xl px-5 py-14">
           <span className="badge-pill">{paid ? "BOOKING CONFIRMED" : "BOOKING PENDING"}</span>

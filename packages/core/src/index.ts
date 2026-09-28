@@ -10,3 +10,4 @@ export * from "./schemas";
 export * from "./base64url";
 export * from "./payments-mode";
 export * from "./scan";
+export * from "./merchant";

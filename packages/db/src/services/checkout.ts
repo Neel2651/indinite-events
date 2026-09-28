@@ -1,5 +1,5 @@
 import { Types, type ClientSession } from "mongoose";
-import { generatePublicId, normalisePassCode, passCode, priceOrder, signTicket, type LineItem, type OrderPricing, type PublicCheckoutInput } from "@indinite/core";
+import { canTakeCardPayments, generatePublicId, normalisePassCode, passCode, priceOrder, signTicket, type LineItem, type OrderPricing, type PublicCheckoutInput } from "@indinite/core";
 import { audited } from "../audit";
 import { enqueueSendTickets } from "../jobs";
 import { Event } from "../models/event";
@@ -35,7 +35,17 @@ export class HoldExpiredError extends Error {
 
 export type PaymentConfirmation =
   | { mode: "demo" }
+  /** £0 bookings (100% coupon): nothing to charge, so no Stripe session. */
+  | { mode: "free" }
   | { mode: "stripe"; checkoutSessionId: string; paymentIntentId: string };
+
+/** A card payment completed after its seats were released, and there aren't enough left: refund in full. */
+export class LateSoldOutError extends Error {
+  readonly status = 409;
+  constructor(readonly orderId: string) {
+    super(`Order ${orderId} was paid after its hold expired and the passes have since sold out`);
+  }
+}
 
 const isDuplicateKey = (e: unknown) => typeof e === "object" && e !== null && "code" in e && e.code === 11000;
 
@@ -49,6 +59,8 @@ export interface PendingOrderOptions {
   staff?: boolean;
   /** Only this organiser's events (staff flows). */
   organizerId?: string;
+  /** Real card payments (PAYMENTS_MODE=stripe): the organiser must be an active, un-paused merchant. */
+  requireCardPayments?: boolean;
 }
 
 /**
@@ -62,6 +74,9 @@ export async function createPendingOrder(input: PublicCheckoutInput, opts: Pendi
 
   const organizer = await Organizer.findOne({ _id: event.organizerId, status: "active" }).lean();
   if (!organizer) throw new CheckoutError("This event isn't available.", 404);
+  if (opts.requireCardPayments && !canTakeCardPayments(organizer)) {
+    throw new CheckoutError("Card payments aren't available for this event yet.", 409);
+  }
 
   // Merge duplicate lines so maxPerOrder can't be dodged by splitting.
   const qtyByType = new Map<string, number>();
@@ -160,8 +175,8 @@ export async function createPendingOrder(input: PublicCheckoutInput, opts: Pendi
 }
 
 /** SPEC §4.1: public checkout, seats held for 30 minutes. */
-export function createCheckoutOrder(input: PublicCheckoutInput, now = new Date()) {
-  return createPendingOrder(input, { source: "online", holdMs: CHECKOUT_HOLD_MS }, now);
+export function createCheckoutOrder(input: PublicCheckoutInput, now = new Date(), opts: { requireCardPayments?: boolean } = {}) {
+  return createPendingOrder(input, { source: "online", holdMs: CHECKOUT_HOLD_MS, requireCardPayments: opts.requireCardPayments }, now);
 }
 
 /** Order fields for a pricing result (stored so receipts never change). */
@@ -231,25 +246,38 @@ export function qrPrivateKey(): string {
  */
 export async function fulfilOrder(orderId: string | Types.ObjectId, payment: PaymentConfirmation) {
   const privateKey = qrPrivateKey();
+  // Money has been taken by Stripe: honour it even if the hold expired meanwhile (if seats are left).
+  const allowLate = payment.mode === "stripe";
 
   return withTransaction(async (session) => {
     const existing = await Order.findById(orderId, null, { session }).lean();
     if (!existing) throw new Error(`Order ${orderId} not found`);
     if (existing.status === "paid") return { order: existing, ticketsIssued: 0 };
-    if (existing.status !== "pending") throw new HoldExpiredError(String(orderId));
+    const late = existing.status === "expired" && allowLate;
+    if (existing.status !== "pending" && !late) throw new HoldExpiredError(String(orderId));
 
     const hold = await Hold.findOneAndUpdate(
       { orderId: existing._id, releasedAt: null },
       { $set: { releasedAt: new Date(), outcome: "committed" } },
       { session, new: true },
     );
-    // TODO(M4 webhook): late Stripe payment after the hold was released → re-reserve, or refund if sold out.
-    if (!hold) throw new HoldExpiredError(String(orderId));
-    for (const item of hold.items) await quota.commitHold(item.ticketTypeId, item.qty, session);
+    if (hold) {
+      for (const item of hold.items) await quota.commitHold(item.ticketTypeId, item.qty, session);
+    } else if (allowLate) {
+      // SPEC §4.1 step 3: late payment → re-reserve directly; if sold out the caller refunds in full.
+      try {
+        for (const item of existing.items) await quota.sellDirect(item.ticketTypeId, item.qty, session);
+      } catch (e) {
+        if (e instanceof SoldOutError) throw new LateSoldOutError(String(orderId));
+        throw e;
+      }
+    } else {
+      throw new HoldExpiredError(String(orderId));
+    }
 
     const paidAt = new Date();
     const order = await Order.findOneAndUpdate(
-      { _id: existing._id, status: "pending" },
+      { _id: existing._id, status: { $in: ["pending", "expired"] } },
       {
         $set: {
           status: "paid",
@@ -270,7 +298,7 @@ export async function fulfilOrder(orderId: string | Types.ObjectId, payment: Pay
       entity: { type: "order", id: order._id },
       before: { status: existing.status },
       after: { status: order.status, paidAt },
-      reason: payment.mode === "demo" ? "demo_payment" : undefined,
+      reason: payment.mode === "demo" ? "demo_payment" : payment.mode === "free" ? "free_order" : late || !hold ? "late_payment" : undefined,
       organizerId: order.organizerId,
       metadata: { paymentsMode: payment.mode, ticketsIssued: tickets.length },
     });

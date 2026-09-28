@@ -1,5 +1,5 @@
 import "server-only";
-import { available, PUBLIC_ID_RE, receiptLines, type OrderCharge } from "@indinite/core";
+import { available, canTakeCardPayments, PUBLIC_ID_RE, receiptLines, resolvePaymentsMode, type OrderCharge } from "@indinite/core";
 import { connectDb, Event, Order, Organizer, pricingFor, Ticket, TicketType } from "@indinite/db";
 
 export interface PublicTicketType {
@@ -34,6 +34,8 @@ export interface PublicEvent {
   bookingsOpenAt: Date | null;
   /** SPEC §4.7 pricing settings, for showing the breakdown before checkout. */
   pricing: { commissionBps: number; taxBps: number; charges: OrderCharge[] };
+  /** Online booking possible now: demo mode, or (Stripe mode) the organiser is an active merchant. */
+  onlinePaymentsAvailable: boolean;
 }
 
 const PUBLIC_FILTER = { status: "published", deletedAt: null } as const;
@@ -41,7 +43,11 @@ const PUBLIC_FILTER = { status: "published", deletedAt: null } as const;
 async function withTicketTypes(events: Awaited<ReturnType<typeof loadEvents>>): Promise<PublicEvent[]> {
   const ids = events.map((e) => e._id);
   const types = await TicketType.find({ eventId: { $in: ids }, active: true }).sort({ sortOrder: 1 }).lean();
-  const orgs = await Organizer.find({ _id: { $in: events.map((e) => e.organizerId) } }, { commissionBps: 1 }).lean();
+  const orgs = await Organizer.find(
+    { _id: { $in: events.map((e) => e.organizerId) } },
+    { commissionBps: 1, stripeAccountId: 1, chargesEnabled: 1, detailsSubmitted: 1, stripeDisabledReason: 1, stripeCurrentlyDue: 1, onlineSalesPaused: 1 },
+  ).lean();
+  const stripeMode = resolvePaymentsMode(process.env) === "stripe";
   const orgById = new Map(orgs.map((o) => [String(o._id), o]));
   const now = new Date();
 
@@ -76,6 +82,7 @@ async function withTicketTypes(events: Awaited<ReturnType<typeof loadEvents>>): 
       ticketTypes: tts,
       bookingsOpen,
       pricing: pricingFor(e, orgById.get(String(e.organizerId)) ?? {}),
+      onlinePaymentsAvailable: !stripeMode || canTakeCardPayments(orgById.get(String(e.organizerId)) ?? {}),
       bookingsOpenAt: !bookingsOpen && upcoming.length ? new Date(Math.min(...upcoming.map((d) => d.getTime()))) : null,
     };
   });

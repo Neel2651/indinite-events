@@ -9,10 +9,12 @@ import {
   type QueueName,
   type SendAuthEmailJob,
   type SendPaymentLinkJob,
+  type SendRefundEmailJob,
   type SendTicketsJob,
 } from "@indinite/db";
 import { sendAuthEmail } from "./jobs/auth-emails";
 import { sendPaymentLink } from "./jobs/payment-link";
+import { sendRefundEmail } from "./jobs/refund-email";
 import { sendTickets } from "./jobs/tickets";
 
 await connectDb();
@@ -66,9 +68,10 @@ const loops = [
   ...runQueue<SendTicketsJob>(QUEUES.sendTickets, 3, sendTickets),
   ...runQueue<SendAuthEmailJob>(QUEUES.sendAuthEmail, 2, sendAuthEmail),
   ...runQueue<SendPaymentLinkJob>(QUEUES.sendPaymentLink, 2, sendPaymentLink),
+  ...runQueue<SendRefundEmailJob>(QUEUES.sendRefundEmail, 2, sendRefundEmail),
   sweepLoop(),
 ];
-console.log("Worker running: send-tickets, send-auth-email, send-payment-link, sweep-holds");
+console.log("Worker running: send-tickets, send-auth-email, send-payment-link, send-refund-email, sweep-holds");
 
 const shutdown = async () => {
   if (stopping) return;

@@ -1,5 +1,5 @@
 import type { SendAuthEmailJob } from "@indinite/db";
-import { renderInvitationEmail, renderResetPasswordEmail } from "@indinite/emails";
+import { renderInvitationEmail, renderMerchantActiveEmail, renderMerchantSetupEmail, renderResetPasswordEmail } from "@indinite/emails";
 import { sendEmail } from "../mailer";
 
 /** send-auth-email: staff invitations and password resets. */
@@ -7,7 +7,11 @@ export async function sendAuthEmail(job: SendAuthEmailJob, jobId: string) {
   const email =
     job.kind === "invitation"
       ? await renderInvitationEmail({ organizationName: job.organizationName, role: job.role, inviterName: job.inviterName, url: job.url })
-      : await renderResetPasswordEmail({ name: job.name, url: job.url });
+      : job.kind === "reset-password"
+        ? await renderResetPasswordEmail({ name: job.name, url: job.url })
+        : job.kind === "merchant-setup"
+          ? await renderMerchantSetupEmail({ organizationName: job.organizationName, url: job.url })
+          : await renderMerchantActiveEmail({ organizationName: job.organizationName, url: job.url });
   const id = await sendEmail({
     to: job.to,
     subject: email.subject,

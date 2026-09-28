@@ -1,6 +1,6 @@
 "use server";
 
-import { ForbiddenError, offlineIssueSchema, paymentLinkBookingSchema, type Discount } from "@indinite/core";
+import { ForbiddenError, offlineIssueSchema, paymentLinkBookingSchema, resolvePaymentsMode, type Discount } from "@indinite/core";
 import { linkSecret, signOrderLink } from "@indinite/core/links";
 import { Types } from "mongoose";
 import { appUrl } from "@indinite/auth";
@@ -45,7 +45,7 @@ export async function createPaymentLinkAction(slug: string, payload: unknown): P
   const parsed = paymentLinkBookingSchema.safeParse(payload);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the details and try again." };
   try {
-    const order = await asStaff(user, () => createPaymentLinkOrder(organizer.id, user.id, parsed.data), organizer.id);
+    const order = await asStaff(user, () => createPaymentLinkOrder(organizer.id, user.id, parsed.data, { requireCardPayments: resolvePaymentsMode(process.env) === "stripe" }), organizer.id);
     const ttl = Math.max(60_000, (order.expiresAt?.getTime() ?? Date.now()) - Date.now());
     const t = signOrderLink(order.publicId, linkSecret(), Date.now(), ttl);
     const url = `${appUrl()}/pay/${encodeURIComponent(order.publicId)}?t=${encodeURIComponent(t)}`;

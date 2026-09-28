@@ -16,6 +16,7 @@ export default async function OrgLayout({ children, params }: { children: React.
   nav.push({ href: `${base}/pricing`, label: "Pricing" });
   if (can("reports.read") || can("scan.perform")) nav.push({ href: `${base}/checkins`, label: "Check-ins" });
   if (can("org.members.manage")) nav.push({ href: `${base}/members`, label: "Team" });
+  nav.push({ href: `${base}/payments`, label: "Payments" });
 
   const links: { href: string; label: string }[] = [];
   if (can("scan.perform")) links.push({ href: "/scan", label: "Open scanner" });

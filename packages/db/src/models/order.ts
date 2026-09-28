@@ -53,10 +53,28 @@ const orderSchema = new Schema(
     /** Indinite's commission on this order (= platform fee; for comps, % of the normal price). */
     applicationFeePence: penceField,
     refundedPence: { type: Number, default: 0, min: 0 },
+    /** Refunds (SPEC §4.6): ticket price only; fees, charges and tax are never refunded. */
+    refunds: {
+      type: [
+        {
+          ticketIds: [{ type: Schema.Types.ObjectId, ref: "Ticket" }],
+          amountPence: { type: Number, required: true, min: 0 },
+          method: { type: String, enum: ["stripe", "outside_indinite", "none"], required: true },
+          stripeRefundId: String,
+          reason: { type: String, required: true },
+          refundedBy: { type: String, required: true },
+          createdAt: { type: Date, default: () => new Date() },
+        },
+      ],
+      default: [],
+    },
     stripe: {
       checkoutSessionId: { type: String },
       paymentIntentId: String,
       url: String,
+      sessionExpiresAt: Date,
+      /** Application fee sent to Stripe (platform fee, plus card fee when the organiser bears it). */
+      applicationFeePence: Number,
     },
     offline: {
       /** bank_transfer = paid into the organiser's own account. */

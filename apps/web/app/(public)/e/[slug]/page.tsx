@@ -81,7 +81,14 @@ export default async function EventPage({ params }: Props) {
         <aside className="card-brand h-fit space-y-5">
           <h2 className="text-xl">Book passes</h2>
           {event.ticketTypes.length === 0 && <p className="text-muted-foreground">Passes aren&apos;t on sale yet.</p>}
-          {event.bookingsOpen ? (
+          {event.bookingsOpen && !event.onlinePaymentsAvailable ? (
+            <div className="space-y-3">
+              <p className="text-muted-foreground">Card payments for this event are coming soon. Please check back shortly or contact the organiser.</p>
+              <button type="button" className="btn-cta w-full opacity-60" disabled>
+                Card payments coming soon
+              </button>
+            </div>
+          ) : event.bookingsOpen ? (
             <BookingForm
               eventId={event.id}
               paymentsMode={resolvePaymentsMode(process.env)}

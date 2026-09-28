@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { merchantStatus, MERCHANT_STATUS_LABELS } from "@indinite/core";
 import { Event, Organizer } from "@indinite/db";
 import { CommissionCell } from "@/components/staff/commission-cell";
 import { CreateOrganizerForm } from "@/components/staff/create-organizer-form";
@@ -26,7 +27,7 @@ export default async function OrganisersPage() {
               <th className="px-4 py-3 font-semibold">Contact</th>
               <th className="px-4 py-3 font-semibold">Commission</th>
               <th className="px-4 py-3 font-semibold">Events</th>
-              <th className="px-4 py-3 font-semibold">Stripe</th>
+              <th className="px-4 py-3 font-semibold">Payments</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -44,8 +45,15 @@ export default async function OrganisersPage() {
                   <CommissionCell organizerId={String(o._id)} percent={o.commissionBps / 100} />
                 </td>
                 <td className="px-4 py-3">{eventsBy.get(String(o._id)) ?? 0}</td>
-                <td className="px-4 py-3">{o.chargesEnabled ? "Connected" : "Not connected"}</td>
+                <td className="px-4 py-3">
+                  {MERCHANT_STATUS_LABELS[merchantStatus(o)]}
+                  {o.onlineSalesPaused && <span className="block text-xs text-warning">Online sales paused</span>}
+                </td>
                 <td className="px-4 py-3 text-right">
+                  <Link href={`/admin/organisers/${String(o._id)}`} className="font-semibold text-brand-orange-strong hover:underline">
+                    Manage
+                  </Link>
+                  <span className="text-muted-foreground"> · </span>
                   <Link href={`/org/${o.slug}`} className="font-semibold text-brand-orange-strong hover:underline">
                     Open panel
                   </Link>
