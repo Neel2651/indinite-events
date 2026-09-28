@@ -52,6 +52,7 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
     const p = priceOrder({ items, ...pricing, discount: coupon?.rule });
     return {
       total: p.totalPence,
+      couponProblem: p.discountIneligible,
       lines: receiptLines({
         items: items.map((i) => ({ name: i.name, qty: i.qty, unitPricePence: i.unitPricePence })),
         discountPence: p.discountPence,
@@ -224,7 +225,15 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
                   {checking ? "Checking…" : "Apply"}
                 </button>
               </div>
-              {coupon && (
+              {coupon && breakdown?.couponProblem && (
+                <p className="mt-1 text-xs text-destructive">
+                  {breakdown.couponProblem}{" "}
+                  <button type="button" onClick={() => setCoupon(null)} className="underline">
+                    Remove code
+                  </button>
+                </p>
+              )}
+              {coupon && !breakdown?.couponProblem && (
                 <p className="mt-1 text-xs text-success">
                   {coupon.code} applied{" "}
                   <button type="button" onClick={() => setCoupon(null)} className="underline">
@@ -258,7 +267,7 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
                 {error}
               </p>
             )}
-            <button type="submit" disabled={submitting || !count} className="btn-cta w-full disabled:opacity-60">
+            <button type="submit" disabled={submitting || !count || Boolean(breakdown?.couponProblem)} className="btn-cta w-full disabled:opacity-60">
               {submitting ? "Booking…" : paymentsMode === "demo" ? `Confirm booking · ${price(breakdown?.total ?? 0)}` : `Pay ${price(breakdown?.total ?? 0)}`}
             </button>
             {paymentsMode === "demo" && <p className="text-center text-xs text-muted-foreground">Demo mode: no payment is taken and your booking is approved straight away.</p>}

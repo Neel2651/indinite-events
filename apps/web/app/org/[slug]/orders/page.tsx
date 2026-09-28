@@ -14,11 +14,11 @@ const HOW: Record<string, string> = { online: "Online", payment_link: "Payment l
 const STATUS: Record<string, string> = { pending: "Awaiting payment", paid: "Paid", expired: "Expired", cancelled: "Cancelled", refunded: "Refunded", partially_refunded: "Part refunded" };
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ q?: string; how?: string }> };
+type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ q?: string; how?: string; coupon?: string }> };
 
 export default async function OrdersPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { q = "", how = "" } = await searchParams;
+  const { q = "", how = "", coupon = "" } = await searchParams;
   const { organizer, can } = await requireOrg(slug);
   if (!can("order.read")) notFound();
 
@@ -28,6 +28,8 @@ export default async function OrdersPage({ params, searchParams }: Props) {
     const rx = new RegExp(escapeRegex(term), "i");
     filter.$or = [{ publicId: rx }, { "customer.email": rx }, { "customer.name": rx }];
   }
+  const couponCode = coupon.trim().toUpperCase().slice(0, 40);
+  if (couponCode) filter.couponCode = couponCode;
   if (how === "online" || how === "payment_link") filter.source = how;
   else if (["cash", "bank_transfer", "complimentary"].includes(how)) filter["offline.method"] = how;
 
@@ -36,7 +38,16 @@ export default async function OrdersPage({ params, searchParams }: Props) {
   return (
     <>
       <PageHeader title="Orders" description="Every booking for this organiser, newest first." />
+      {couponCode && (
+        <p className="mb-3 text-sm">
+          Showing bookings that used <strong>{couponCode}</strong>.{" "}
+          <Link href={`/org/${slug}/orders`} className="font-semibold text-brand-orange-strong hover:underline">
+            Show all orders
+          </Link>
+        </p>
+      )}
       <form className="mb-4 flex flex-wrap gap-3" role="search">
+        {couponCode && <input type="hidden" name="coupon" value={couponCode} />}
         <input name="q" defaultValue={q} placeholder="Search by order ref, name or email" className={`${inputClass} mt-0 max-w-sm`} />
         <select name="how" defaultValue={how} className={`${inputClass} mt-0 w-auto`}>
           <option value="">All payment types</option>

@@ -20,7 +20,7 @@ export function CouponForm({ slug, events }: { slug: string; events: { id: strin
         Discount
         <select name="kind" defaultValue="percent" className={inputClass}>
           <option value="percent">% off tickets</option>
-          <option value="fixed">£ off the order</option>
+          <option value="fixed">£ off the tickets</option>
         </select>
       </label>
       <label className="block text-sm">
@@ -42,13 +42,21 @@ export function CouponForm({ slug, events }: { slug: string; events: { id: strin
         Maximum uses (optional)
         <input name="maxUses" type="number" min={1} className={inputClass} />
       </label>
-      <div className="grid grid-cols-2 gap-2">
+      <label className="block text-sm">
+        Max discount £ (optional, % codes)
+        <input name="maxDiscount" inputMode="decimal" placeholder="e.g. 10.00" className={inputClass} />
+      </label>
+      <label className="block text-sm">
+        Minimum ticket spend £ (optional)
+        <input name="minSpend" inputMode="decimal" placeholder="e.g. 30.00" className={inputClass} />
+      </label>
+      <div className="grid grid-cols-2 gap-2 sm:col-span-2">
         <label className="block text-sm">
-          From
+          From (start of day, UK)
           <input name="validFrom" type="date" className={inputClass} />
         </label>
         <label className="block text-sm">
-          Until
+          Until (end of day, UK)
           <input name="validTo" type="date" className={inputClass} />
         </label>
       </div>

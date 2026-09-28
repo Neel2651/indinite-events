@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Types } from "mongoose";
 import { Discount, Event } from "@indinite/db";
@@ -44,11 +45,25 @@ export default async function CouponsPage({ params }: { params: Promise<{ slug: 
               return (
                 <tr key={String(c._id)}>
                   <td className="px-4 py-3 font-display font-semibold tracking-wider">{c.code}</td>
-                  <td className="px-4 py-3">{c.kind === "percent" ? `${c.value / 100}% off` : `${price(c.value)} off`}</td>
+                  <td className="px-4 py-3">
+                    {c.kind === "percent" ? `${c.value / 100}% off` : `${price(c.value)} off`}
+                    {(c.maxDiscountPence || c.minSubtotalPence) && (
+                      <span className="block text-xs text-muted-foreground">
+                        {[c.maxDiscountPence ? `up to ${price(c.maxDiscountPence)}` : "", c.minSubtotalPence ? `min spend ${price(c.minSubtotalPence)}` : ""].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">{c.eventId ? title.get(String(c.eventId)) : "All events"}</td>
                   <td className="px-4 py-3">
-                    {c.used ?? 0}
-                    {c.maxUses ? ` / ${c.maxUses}` : ""}
+                    {(c.used ?? 0) > 0 ? (
+                      <Link href={`/org/${slug}/orders?coupon=${encodeURIComponent(c.code!)}`} className="font-semibold text-brand-orange-strong hover:underline">
+                        {c.used}
+                        {c.maxUses ? ` / ${c.maxUses}` : ""}
+                        <span className="sr-only"> uses: see orders</span>
+                      </Link>
+                    ) : (
+                      <>0{c.maxUses ? ` / ${c.maxUses}` : ""}</>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {ended ? `Ended ${formatDay(c.validTo!)}` : full ? "Fully used" : notYet ? `Starts ${formatDay(c.validFrom!)}` : "Active"}

@@ -23,7 +23,7 @@ export async function releaseHold(holdId: Types.ObjectId | string, reason: "expi
     for (const item of hold.items) await quota.releaseHold(item.ticketTypeId, item.qty, session);
 
     const before = await Order.findById(hold.orderId, null, { session }).lean();
-    if (before?.couponId) await releaseCoupon(before.couponId, session);
+    if (before?.couponId) await releaseCoupon(before.couponId, session, { orderId: before._id, publicId: before.publicId, organizerId: before.organizerId, reason });
     const order = await Order.findOneAndUpdate(
       { _id: hold.orderId, status: "pending" },
       { $set: { status: "expired" } },

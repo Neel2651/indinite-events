@@ -1,5 +1,6 @@
 import type { ClientSession, Types } from "mongoose";
 import { DEFAULT_COMMISSION_BPS, type Discount as DiscountRule, type OrderCharge } from "@indinite/core";
+import { audited } from "../audit";
 import { Discount } from "../models/discount";
 
 /** Pricing settings for an event: event override → organiser rate → 6% default. */
@@ -30,21 +31,38 @@ export async function findCoupon(organizerId: Types.ObjectId | string, eventId: 
   return {
     id: coupon._id,
     code: coupon.code!,
-    rule: { kind: coupon.kind, value: coupon.value } as DiscountRule,
+    rule: { kind: coupon.kind, value: coupon.value, maxAmountPence: coupon.maxDiscountPence ?? null, minSubtotalPence: coupon.minSubtotalPence ?? null } as DiscountRule,
   };
 }
 
-/** Atomically use one redemption (inside the order's transaction). */
-export async function redeemCoupon(couponId: Types.ObjectId, session: ClientSession) {
+/** Atomically use one redemption (inside the order's transaction), audited against the coupon. */
+export async function redeemCoupon(couponId: Types.ObjectId, session: ClientSession, order?: { orderId: Types.ObjectId; publicId: string; amountPence: number; organizerId: Types.ObjectId }) {
   const res = await Discount.updateOne(
     { _id: couponId, $or: [{ maxUses: null }, { maxUses: { $exists: false } }, { $expr: { $lt: ["$used", "$maxUses"] } }] },
     { $inc: { used: 1 } },
     { session },
   );
   if (res.modifiedCount !== 1) throw new CouponError("That code has just been fully used.");
+  if (order) {
+    await audited(session, {
+      action: "coupon.redeemed",
+      entity: { type: "discount", id: couponId },
+      organizerId: order.organizerId,
+      metadata: { orderId: String(order.orderId), publicId: order.publicId, amountPence: order.amountPence },
+    });
+  }
 }
 
-/** Give a redemption back (order expired unpaid). */
-export async function releaseCoupon(couponId: Types.ObjectId, session: ClientSession) {
-  await Discount.updateOne({ _id: couponId, used: { $gt: 0 } }, { $inc: { used: -1 } }, { session });
+/** Give a redemption back (order expired unpaid or cancelled), audited against the coupon. */
+export async function releaseCoupon(couponId: Types.ObjectId, session: ClientSession, order?: { orderId: Types.ObjectId; publicId: string; organizerId: Types.ObjectId; reason: string }) {
+  const res = await Discount.updateOne({ _id: couponId, used: { $gt: 0 } }, { $inc: { used: -1 } }, { session });
+  if (order && res.modifiedCount === 1) {
+    await audited(session, {
+      action: "coupon.released",
+      entity: { type: "discount", id: couponId },
+      reason: order.reason,
+      organizerId: order.organizerId,
+      metadata: { orderId: String(order.orderId), publicId: order.publicId },
+    });
+  }
 }

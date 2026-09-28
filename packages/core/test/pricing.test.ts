@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyBps, cardFeePence, complimentaryCommission, DEFAULT_FREE_COMPLIMENTARY_PASSES, discountAsBps, formatGBP, priceOrder, receiptLines, type LineItem } from "../src";
+import { applyBps, cardFeePence, complimentaryCommission, discountAmount, DEFAULT_FREE_COMPLIMENTARY_PASSES, discountAsBps, formatGBP, priceOrder, receiptLines, type LineItem } from "../src";
 
 const one = (price: number, qty = 1): LineItem[] => [{ ticketTypeId: "a", name: "Night pass", unitPricePence: price, qty }];
 const items: LineItem[] = [
@@ -141,5 +141,26 @@ describe("complimentary allowance", () => {
   it("defaults to 5 per event and rejects a negative allowance", () => {
     expect(DEFAULT_FREE_COMPLIMENTARY_PASSES).toBe(5);
     expect(() => complimentaryCommission(mixed, 600, -1)).toThrow();
+  });
+});
+
+describe("coupon limits (ticket subtotal, before fees)", () => {
+  it("caps a percent discount at the maximum", () => {
+    expect(discountAmount(10000, { kind: "percent", value: 2000, maxAmountPence: 1000 })).toEqual({ amountPence: 1000 });
+    expect(discountAmount(4000, { kind: "percent", value: 2000, maxAmountPence: 1000 })).toEqual({ amountPence: 800 });
+  });
+  it("needs the minimum ticket spend", () => {
+    expect(discountAmount(2999, { kind: "percent", value: 1000, minSubtotalPence: 3000 })).toEqual({ ineligible: "Spend at least £30.00 on tickets to use this code." });
+    expect(discountAmount(3000, { kind: "percent", value: 1000, minSubtotalPence: 3000 })).toEqual({ amountPence: 300 });
+  });
+  it("never takes off more than the tickets cost", () => {
+    expect(discountAmount(500, { kind: "fixed", value: 2000 })).toEqual({ amountPence: 500 });
+  });
+  it("priceOrder applies the cap before fees, and flags an unmet minimum without discounting", () => {
+    const capped = priceOrder({ items: one(4500, 3), commissionBps: 600, discount: { kind: "percent", value: 5000, maxAmountPence: 1000 } });
+    expect(capped).toMatchObject({ subtotalPence: 13500, discountPence: 1000, ticketsPence: 12500, platformFeePence: 750 });
+    expect(capped.discountIneligible).toBeUndefined();
+    const short = priceOrder({ items: one(1000), commissionBps: 600, discount: { kind: "fixed", value: 500, minSubtotalPence: 3000 } });
+    expect(short).toMatchObject({ discountPence: 0, ticketsPence: 1000, discountIneligible: "Spend at least £30.00 on tickets to use this code." });
   });
 });

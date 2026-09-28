@@ -41,7 +41,20 @@ const SUBMIT: Record<Method, string> = {
   payment_link: "Create and email payment link",
 };
 
-export function OfflineBookingForm({ slug, events, canPaymentLink, canOffline }: { slug: string; events: BookableEvent[]; canPaymentLink: boolean; canOffline: boolean }) {
+export function OfflineBookingForm({
+  slug,
+  events,
+  canPaymentLink,
+  canOffline,
+  discountLimitBps = 0,
+}: {
+  slug: string;
+  events: BookableEvent[];
+  canPaymentLink: boolean;
+  canOffline: boolean;
+  /** Most this user may discount a payment link (bps of the ticket subtotal); 0 = not allowed. */
+  discountLimitBps?: number;
+}) {
   const [eventId, setEventId] = useState(events[0]?.id ?? "");
   const [qty, setQty] = useState<Record<string, number>>({});
   const methods = METHODS.filter((m) => (m.value === "payment_link" ? canPaymentLink : canOffline));
@@ -50,6 +63,9 @@ export function OfflineBookingForm({ slug, events, canPaymentLink, canOffline }:
   const [coupon, setCoupon] = useState<{ code: string; rule: Discount } | null>(null);
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
   const [hours, setHours] = useState(24);
+  const [staffKind, setStaffKind] = useState<"percent" | "fixed">("percent");
+  const [staffAmount, setStaffAmount] = useState("");
+  const [staffReason, setStaffReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [issued, setIssued] = useState<Extract<OfflineResult, { ok: true }> | null>(null);
   const [link, setLink] = useState<Extract<PaymentLinkResult, { ok: true }> | null>(null);
@@ -59,6 +75,9 @@ export function OfflineBookingForm({ slug, events, canPaymentLink, canOffline }:
   const items = (event?.ticketTypes ?? []).filter((t) => (qty[t.id] ?? 0) > 0);
   const count = items.reduce((n, t) => n + (qty[t.id] ?? 0), 0);
   const complimentary = method === "complimentary";
+  const canStaffDiscount = method === "payment_link" && discountLimitBps > 0 && !coupon;
+  const staffValue = Math.round(Number(staffAmount.replace(/[£%,\s]/g, "")) * 100);
+  const staffDiscount: Discount | undefined = canStaffDiscount && staffAmount.trim() && Number.isFinite(staffValue) && staffValue > 0 ? { kind: staffKind, value: staffValue } : undefined;
   const preview =
     event && count > 0
       ? priceOrder({
@@ -66,7 +85,7 @@ export function OfflineBookingForm({ slug, events, canPaymentLink, canOffline }:
           commissionBps: event.commissionBps,
           taxBps: event.taxBps,
           charges: event.charges,
-          discount: complimentary ? undefined : coupon?.rule,
+          discount: complimentary ? undefined : (coupon?.rule ?? staffDiscount),
           complimentary,
           complimentaryFreeLeft: complimentary ? event.freeComplimentaryLeft : undefined,
           cardFee: method === "payment_link" ? event.cardFee : undefined,
@@ -76,7 +95,7 @@ export function OfflineBookingForm({ slug, events, canPaymentLink, canOffline }:
     ? receiptLines({
         items: items.map((t) => ({ name: t.name, qty: qty[t.id]!, unitPricePence: t.pricePence })),
         discountPence: preview.discountPence,
-        discountLabel: coupon ? `Code ${coupon.code}` : undefined,
+        discountLabel: coupon ? `Code ${coupon.code}` : staffDiscount ? staffReason.trim() || "Discount" : undefined,
         complimentary,
         platformFeePence: preview.platformFeePence,
         commissionBps: event!.commissionBps,
@@ -118,7 +137,8 @@ export function OfflineBookingForm({ slug, events, canPaymentLink, canOffline }:
     setError(null);
     start(async () => {
       if (method === "payment_link") {
-        const res = await createPaymentLinkAction(slug, { eventId, customer, items: payloadItems, couponCode: coupon?.code, validForHours: hours });
+        const discount = staffDiscount ? { ...staffDiscount, ...(staffReason.trim() ? { reason: staffReason.trim() } : {}) } : undefined;
+        const res = await createPaymentLinkAction(slug, { eventId, customer, items: payloadItems, couponCode: coupon?.code, discount, validForHours: hours });
         if (res.ok) setLink(res);
         else setError(res.error);
         return;
@@ -266,9 +286,36 @@ export function OfflineBookingForm({ slug, events, canPaymentLink, canOffline }:
                 Apply
               </button>
             </div>
-            {coupon && <p className="mt-1 text-xs text-success">{coupon.code} applied</p>}
+            {coupon && preview?.discountIneligible && <p className="mt-1 text-xs text-destructive">{preview.discountIneligible}</p>}
+            {coupon && !preview?.discountIneligible && <p className="mt-1 text-xs text-success">{coupon.code} applied</p>}
             {couponMsg && <p className="mt-1 text-xs text-destructive">{couponMsg}</p>}
           </div>
+        )}
+
+        {canStaffDiscount && (
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-semibold">Discount (optional)</legend>
+            <div className="flex gap-2">
+              <label className="sr-only" htmlFor="staff-discount-kind">
+                Discount type
+              </label>
+              <select id="staff-discount-kind" value={staffKind} onChange={(e) => setStaffKind(e.target.value as "percent" | "fixed")} className={`${inputClass} mt-0 w-28`}>
+                <option value="percent">% off</option>
+                <option value="fixed">£ off</option>
+              </select>
+              <label className="sr-only" htmlFor="staff-discount-amount">
+                Discount amount
+              </label>
+              <input id="staff-discount-amount" value={staffAmount} onChange={(e) => setStaffAmount(e.target.value)} inputMode="decimal" placeholder={staffKind === "percent" ? "10" : "5.00"} className={`${inputClass} mt-0`} />
+            </div>
+            <label className="block text-sm">
+              Reason
+              <input value={staffReason} onChange={(e) => setStaffReason(e.target.value)} maxLength={200} className={inputClass} placeholder="e.g. Group of 10" />
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Comes off the ticket price. {discountLimitBps >= 10000 ? "No limit for your role." : `You can give up to ${(discountLimitBps / 100).toFixed(2).replace(/\.?0+$/, "")}% off.`}
+            </p>
+          </fieldset>
         )}
 
         {complimentary && event && (

@@ -9,6 +9,10 @@ const discountSchema = new Schema(
     code: { type: String, uppercase: true, trim: true },
     kind: { type: String, enum: ["percent", "fixed"], required: true },
     value: { type: Number, required: true, min: 0 }, // bps or pence
+    /** Percent codes: most it can take off (pence). Measured on the ticket subtotal before fees. */
+    maxDiscountPence: { type: Number, min: 1 },
+    /** Minimum ticket subtotal (pence) for the code to apply. */
+    minSubtotalPence: { type: Number, min: 1 },
     maxUses: { type: Number, min: 1 },
     used: { type: Number, default: 0 },
     validFrom: Date,

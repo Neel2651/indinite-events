@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { londonLocalToUtc } from "@indinite/core";
 import { createCoupon, endCoupon, SettingsError } from "@indinite/db";
 import { asStaff, requireOrg } from "@/lib/staff";
 
@@ -12,7 +13,20 @@ export async function createCouponAction(slug: string, _: State, form: FormData)
   const kind = form.get("kind") === "fixed" ? "fixed" : "percent";
   const amount = Number(String(form.get("amount") ?? "").replace(/[£%\s]/g, ""));
   const maxUses = String(form.get("maxUses") ?? "").trim();
-  const date = (k: string) => (String(form.get(k) ?? "") ? new Date(String(form.get(k))) : null);
+  // Dates are UK calendar days: "from" starts at 00:00, "until" runs to the end of that day.
+  const day = (k: string, endOfDay: boolean) => {
+    const v = String(form.get(k) ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+    const start = londonLocalToUtc(`${v}T00:00`);
+    if (!start || !endOfDay) return start;
+    const next = new Date(`${v}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    return londonLocalToUtc(next.toISOString().slice(0, 16));
+  };
+  const pounds = (k: string) => {
+    const v = String(form.get(k) ?? "").replace(/[£,\s]/g, "");
+    return v ? Math.round(Number(v) * 100) : null;
+  };
   try {
     await asStaff(
       user,
@@ -23,8 +37,10 @@ export async function createCouponAction(slug: string, _: State, form: FormData)
           kind,
           value: Math.round(amount * 100),
           maxUses: maxUses ? Number(maxUses) : null,
-          validFrom: date("validFrom"),
-          validTo: date("validTo"),
+          maxDiscountPence: kind === "percent" ? pounds("maxDiscount") : null,
+          minSubtotalPence: pounds("minSpend"),
+          validFrom: day("validFrom", false),
+          validTo: day("validTo", true),
         }),
       organizer.id,
     );

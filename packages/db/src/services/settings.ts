@@ -74,6 +74,10 @@ export const couponInputSchema = z.object({
   kind: z.enum(["percent", "fixed"]),
   value: z.number().int().min(1),
   maxUses: z.number().int().min(1).nullable(),
+  /** Percent codes only: the most it takes off, in pence. */
+  maxDiscountPence: z.number().int().min(1).nullable().default(null),
+  /** Minimum ticket subtotal in pence. */
+  minSubtotalPence: z.number().int().min(1).nullable().default(null),
   validFrom: z.coerce.date().nullable(),
   validTo: z.coerce.date().nullable(),
 });
@@ -81,6 +85,8 @@ export const couponInputSchema = z.object({
 export async function createCoupon(organizerId: string, createdBy: string, input: z.input<typeof couponInputSchema>) {
   const data = couponInputSchema.parse(input);
   if (data.kind === "percent" && data.value > 10000) throw new SettingsError("A percentage can't be over 100%.");
+  if (data.kind === "fixed" && data.maxDiscountPence) throw new SettingsError("A maximum discount only applies to % codes.");
+  if (data.validFrom && data.validTo && data.validTo <= data.validFrom) throw new SettingsError("The end date must be after the start date.");
   if (data.eventId && !(await Event.exists({ _id: data.eventId, organizerId }))) throw new SettingsError("Event not found.", 404);
   if (await Discount.exists({ organizerId, code: data.code })) throw new SettingsError(`${data.code} already exists.`, 409);
   return withTransaction(async (session) => {

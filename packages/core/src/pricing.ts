@@ -1,5 +1,5 @@
 import { customerCardFeePence, type CardFeeSettings } from "./merchant";
-import { applyBps, assertPence, type Pence } from "./money";
+import { applyBps, assertPence, formatGBP, type Pence } from "./money";
 
 export interface LineItem {
   ticketTypeId: string;
@@ -9,8 +9,36 @@ export interface LineItem {
   qty: number;
 }
 
-/** percent discounts are in basis points (1000 = 10%); fixed discounts are in pence. */
-export type Discount = { kind: "percent"; value: number } | { kind: "fixed"; value: Pence };
+/**
+ * percent discounts are in basis points (1000 = 10%); fixed discounts are in pence. Coupon limits, both measured
+ * on the ticket subtotal before fees (agreed 28 Sep 2026): `maxAmountPence` caps a percent discount,
+ * `minSubtotalPence` is the minimum ticket spend for the code to apply.
+ */
+export type Discount = ({ kind: "percent"; value: number } | { kind: "fixed"; value: Pence }) & {
+  maxAmountPence?: Pence | null;
+  minSubtotalPence?: Pence | null;
+};
+
+/** How much a discount takes off a ticket subtotal, or why it doesn't apply. */
+export function discountAmount(subtotalPence: Pence, d: Discount): { amountPence: Pence } | { ineligible: string } {
+  assertPence(subtotalPence, "subtotalPence");
+  if (d.minSubtotalPence && subtotalPence < d.minSubtotalPence) {
+    return { ineligible: `Spend at least ${formatGBP(d.minSubtotalPence)} on tickets to use this code.` };
+  }
+  let amount: Pence;
+  if (d.kind === "percent") {
+    assertBps(d.value, "discount");
+    amount = applyBps(subtotalPence, d.value);
+    if (d.maxAmountPence != null) {
+      assertPence(d.maxAmountPence, "maxAmountPence");
+      amount = Math.min(amount, d.maxAmountPence);
+    }
+  } else {
+    assertPence(d.value, "fixed discount");
+    amount = d.value;
+  }
+  return { amountPence: Math.min(amount, subtotalPence) };
+}
 
 /** Organiser charge, applied per ticket: fixed pence, or bps of the ticket price. Goes to the organiser. */
 export interface OrderCharge {
@@ -43,6 +71,8 @@ export interface OrderPricing {
   /** Tickets at their normal price. */
   subtotalPence: Pence;
   discountPence: Pence;
+  /** Set when the discount's minimum spend isn't met (no discount is applied); services refuse the booking. */
+  discountIneligible?: string;
   /** Tickets after discount (what the customer pays for the passes themselves). */
   ticketsPence: Pence;
   platformFeePence: Pence;
@@ -96,15 +126,11 @@ export function priceOrder(input: PricingInput): OrderPricing {
   }
 
   let discountPence = 0;
+  let discountIneligible: string | undefined;
   if (discount) {
-    if (discount.kind === "percent") {
-      assertBps(discount.value, "discount");
-      discountPence = applyBps(subtotalPence, discount.value);
-    } else {
-      assertPence(discount.value, "fixed discount");
-      discountPence = discount.value;
-    }
-    discountPence = Math.min(discountPence, subtotalPence);
+    const d = discountAmount(subtotalPence, discount);
+    if ("ineligible" in d) discountIneligible = d.ineligible;
+    else discountPence = d.amountPence;
   }
   const ticketsPence = subtotalPence - discountPence;
   const platformFeePence = applyBps(ticketsPence, commissionBps);
@@ -127,6 +153,7 @@ export function priceOrder(input: PricingInput): OrderPricing {
   return {
     subtotalPence,
     discountPence,
+    ...(discountIneligible ? { discountIneligible } : {}),
     ticketsPence,
     platformFeePence,
     charges: chargeLines,
@@ -169,7 +196,9 @@ export function discountAsBps(subtotalPence: Pence, discount: Discount): number 
 
 export const DEFAULT_COMMISSION_BPS = 600;
 
-const pct = (bps: number) => `${(bps / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+/** 5000 → "50%", 1250 → "12.5%". */
+export const formatBpsPercent = (bps: number) => `${(bps / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+const pct = formatBpsPercent;
 
 /** Receipt lines for an order (emails, pay page, confirmation), in the SPEC §4.7 order. */
 export function receiptLines(o: {

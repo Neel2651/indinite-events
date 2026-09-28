@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Types } from "mongoose";
-import { available, cardFeeOf, DEFAULT_FREE_COMPLIMENTARY_PASSES } from "@indinite/core";
+import { available, cardFeeOf, DEFAULT_FREE_COMPLIMENTARY_PASSES, maxDiscountBps } from "@indinite/core";
 import { Event, Organizer, pricingFor, TicketType } from "@indinite/db";
 import { OfflineBookingForm, type BookableEvent } from "@/components/staff/offline-booking-form";
 import { PageHeader } from "@/components/staff/shell";
@@ -11,7 +11,8 @@ export const metadata: Metadata = { title: "New booking" };
 
 export default async function NewBookingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const { organizer, can } = await requireOrg(slug);
+  const { user, organizer, can } = await requireOrg(slug);
+  const discountLimitBps = can("order.applyDiscount") ? maxDiscountBps(user, { organizerId: organizer.id, maxDiscountBpsForManager: organizer.maxDiscountBpsForManager }) : 0;
   if (!can("order.issueOffline") && !can("order.createPaymentLink")) notFound();
   const org = await Organizer.findById(organizer.id, { commissionBps: 1, cardFee: 1 }).lean();
 
@@ -41,7 +42,7 @@ export default async function NewBookingPage({ params }: { params: Promise<{ slu
     <>
       <PageHeader title="New booking" description="Book for a customer: paid in cash or to your account, complimentary, or send them a card payment link." />
       <div className="rounded-lg border border-border bg-card p-6">
-        <OfflineBookingForm slug={slug} events={bookable} canOffline={can("order.issueOffline")} canPaymentLink={can("order.createPaymentLink")} />
+        <OfflineBookingForm slug={slug} events={bookable} canOffline={can("order.issueOffline")} canPaymentLink={can("order.createPaymentLink")} discountLimitBps={discountLimitBps} />
       </div>
     </>
   );

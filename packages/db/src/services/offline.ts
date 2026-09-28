@@ -1,5 +1,5 @@
 
-import { DEFAULT_FREE_COMPLIMENTARY_PASSES, generatePublicId, offlineIssueSchema, paymentLinkBookingSchema, priceOrder, type LineItem, type OfflineIssueInput, type PaymentLinkBookingInput } from "@indinite/core";
+import { DEFAULT_FREE_COMPLIMENTARY_PASSES, generatePublicId, type AuthUser, offlineIssueSchema, paymentLinkBookingSchema, priceOrder, type LineItem, type OfflineIssueInput, type PaymentLinkBookingInput } from "@indinite/core";
 import { audited } from "../audit";
 import { enqueueSendTickets } from "../jobs";
 import { CommissionLedger } from "../models/commission-ledger";
@@ -55,6 +55,7 @@ export async function issueOfflineOrder(organizerId: string, issuedBy: string, r
   }
   const settings = pricingFor(event, organizer);
   const basePrice = priceOrder({ items, ...settings, complimentary, discount: coupon?.rule });
+  if (basePrice.discountIneligible) throw new CheckoutError(basePrice.discountIneligible);
   const compQty = complimentary ? items.reduce((n, i) => n + i.qty, 0) : 0;
   const privateKey = qrPrivateKey();
 
@@ -109,7 +110,7 @@ export async function issueOfflineOrder(organizerId: string, issuedBy: string, r
           ],
           { session },
         );
-        if (coupon) await redeemCoupon(coupon.id, session);
+        if (coupon) await redeemCoupon(coupon.id, session, { orderId: order!._id, publicId, amountPence: price.discountPence, organizerId: organizer._id });
         const tickets = await issueTickets(order!, session, privateKey);
         if (price.commissionPence > 0) {
           await CommissionLedger.create(
@@ -140,10 +141,19 @@ export async function issueOfflineOrder(organizerId: string, issuedBy: string, r
  * SPEC §4.2: staff create a pending booking and a payment link (valid 1–24 h, seats held meanwhile).
  * The customer pays on /pay/<ref>; Stripe Checkout once connected, instant approval in demo mode.
  */
-export async function createPaymentLinkOrder(organizerId: string, createdBy: string, rawInput: PaymentLinkBookingInput, opts: { requireCardPayments?: boolean } = {}) {
+export async function createPaymentLinkOrder(organizerId: string, createdBy: string, rawInput: PaymentLinkBookingInput, opts: { requireCardPayments?: boolean; user?: AuthUser } = {}) {
   const input = paymentLinkBookingSchema.parse(rawInput);
+  if (input.discount && !opts.user) throw new CheckoutError("Only staff can give a discount.");
   return createPendingOrder(
     { eventId: input.eventId, customer: input.customer, items: input.items, couponCode: input.couponCode },
-    { source: "payment_link", holdMs: input.validForHours * 3_600_000, createdBy, staff: true, organizerId, requireCardPayments: opts.requireCardPayments },
+    {
+      source: "payment_link",
+      holdMs: input.validForHours * 3_600_000,
+      createdBy,
+      staff: true,
+      organizerId,
+      requireCardPayments: opts.requireCardPayments,
+      ...(input.discount ? { staffDiscount: { discount: input.discount, by: opts.user! } } : {}),
+    },
   );
 }

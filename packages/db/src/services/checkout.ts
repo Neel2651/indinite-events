@@ -1,5 +1,5 @@
 import { Types, type ClientSession } from "mongoose";
-import { canTakeCardPayments, cardFeeOf, generatePublicId, normalisePassCode, passCode, priceOrder, signTicket, type LineItem, type OrderPricing, type PublicCheckoutInput } from "@indinite/core";
+import { can, canTakeCardPayments, cardFeeOf, discountAsBps, formatBpsPercent, generatePublicId, maxDiscountBps, normalisePassCode, passCode, priceOrder, signTicket, type AuthUser, type Discount, type LineItem, type OrderPricing, type PublicCheckoutInput } from "@indinite/core";
 import { audited } from "../audit";
 import { enqueueSendTickets } from "../jobs";
 import { Event } from "../models/event";
@@ -61,6 +61,11 @@ export interface PendingOrderOptions {
   organizerId?: string;
   /** Real card payments (PAYMENTS_MODE=stripe): the organiser must be an active, un-paused merchant. */
   requireCardPayments?: boolean;
+  /**
+   * Payment links only (SPEC §4.2): an ad-hoc discount given by a staff member. Needs `order.applyDiscount`
+   * and stays within their limit (`maxDiscountBps`: owner unlimited, manager per organiser, others none).
+   */
+  staffDiscount?: { discount: Discount & { reason?: string }; by: AuthUser };
 }
 
 /**
@@ -107,9 +112,25 @@ export async function createPendingOrder(input: PublicCheckoutInput, opts: Pendi
     }
   }
 
+  let staffDiscount: (Discount & { reason?: string }) | undefined;
+  if (opts.staffDiscount) {
+    const { discount, by } = opts.staffDiscount;
+    if (!opts.staff) throw new CheckoutError("Only staff can give a discount.");
+    if (coupon) throw new CheckoutError("Use either a coupon code or a discount, not both.");
+    const resource = { organizerId: String(organizer._id) };
+    if (!can(by, "order.applyDiscount", resource)) throw new CheckoutError("You don't have permission to give discounts.");
+    const limit = maxDiscountBps(by, { ...resource, maxDiscountBpsForManager: organizer.maxDiscountBpsForManager ?? 5000 });
+    const subtotal = items.reduce((s, i) => s + i.unitPricePence * i.qty, 0);
+    if (discountAsBps(subtotal, discount) > limit) {
+      throw new CheckoutError(`You can give up to ${formatBpsPercent(limit)} off. Ask the organiser's owner for more.`);
+    }
+    staffDiscount = { ...discount, reason: discount.reason?.trim() || undefined };
+  }
+
   const settings = pricingFor(event, organizer);
   // Card bookings (online and payment links): the customer may pay Stripe's fee (SPEC §4.8).
-  const price = priceOrder({ items, ...settings, discount: coupon?.rule, cardFee: cardFeeOf(organizer) });
+  const price = priceOrder({ items, ...settings, discount: coupon?.rule ?? staffDiscount, cardFee: cardFeeOf(organizer) });
+  if (price.discountIneligible) throw new CheckoutError(price.discountIneligible);
   const expiresAt = new Date(now.getTime() + opts.holdMs);
 
   for (let attempt = 0; ; attempt++) {
@@ -129,7 +150,9 @@ export async function createPendingOrder(input: PublicCheckoutInput, opts: Pendi
               ...orderPricingFields(price, settings),
               ...(coupon
                 ? { couponCode: coupon.code, couponId: coupon.id, discount: { kind: coupon.rule.kind, value: coupon.rule.value, amountPence: price.discountPence, reason: `Code ${coupon.code}` } }
-                : {}),
+                : staffDiscount
+                  ? { discount: { kind: staffDiscount.kind, value: staffDiscount.value, amountPence: price.discountPence, reason: staffDiscount.reason ?? "Staff discount", appliedBy: opts.staffDiscount!.by.id } }
+                  : {}),
               createdBy: opts.createdBy,
               expiresAt,
             },
@@ -147,7 +170,7 @@ export async function createPendingOrder(input: PublicCheckoutInput, opts: Pendi
         }
         if (coupon) {
           try {
-            await redeemCoupon(coupon.id, session);
+            await redeemCoupon(coupon.id, session, { orderId: order!._id, publicId: order!.publicId, amountPence: price.discountPence, organizerId: organizer._id });
           } catch (e) {
             if (e instanceof CouponError) throw new CheckoutError(e.message, 409);
             throw e;
