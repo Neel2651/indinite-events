@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { resolvePaymentsMode } from "@indinite/core";
+import { resolvePaymentsMode, embedUrlFor } from "@indinite/core";
 import { BookingForm } from "@/components/booking-form";
 import { getEventBySlug } from "@/lib/queries";
 import { formatDateRange, formatDay, formatDayTime, formatTime, price } from "@/lib/format";
@@ -18,7 +18,13 @@ export default async function EventPage({ params }: Props) {
   const event = await getEventBySlug((await params).slug);
   if (!event) notFound();
 
-  const [cover, ...gallery] = event.media.filter((m) => m.type === "image");
+  // The first image is the hero background; the gallery shows every image and video in the admin's order.
+  const cover = event.media.find((m) => m.type === "image");
+  const gallery = event.media.flatMap((m) => {
+    if (m.type === "image") return [{ ...m, embed: null as string | null }];
+    const embed = embedUrlFor(m.url);
+    return embed ? [{ ...m, embed }] : [];
+  });
 
   return (
     <>
@@ -50,14 +56,26 @@ export default async function EventPage({ params }: Props) {
               <p className="mt-3 max-w-prose whitespace-pre-line text-muted-foreground">{event.description}</p>
             </section>
           )}
-          {(cover || gallery.length > 0) && (
+          {gallery.length > 0 && (
             <section>
               <h2 className="text-2xl">Gallery</h2>
               <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-                {[cover!, ...gallery].filter(Boolean).map((m, i) => (
-                  <li key={m.url} className={i === 0 ? "sm:col-span-2" : undefined}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={m.url} alt={m.alt} loading="lazy" className="aspect-[16/9] w-full rounded-lg object-cover" />
+                {gallery.map((m, i) => (
+                  <li key={m.url} className={i === 0 || m.embed ? "sm:col-span-2" : undefined}>
+                    {m.embed ? (
+                      <iframe
+                        src={m.embed}
+                        title={m.alt || "Event video"}
+                        loading="lazy"
+                        allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                        allowFullScreen
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        className="aspect-video w-full rounded-lg border-0 bg-brand-navy"
+                      />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.url} alt={m.alt} loading="lazy" className="aspect-[16/9] w-full rounded-lg object-cover" />
+                    )}
                   </li>
                 ))}
               </ul>

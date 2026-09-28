@@ -24,7 +24,11 @@ export async function POST(req: Request) {
   if (resolvePaymentsMode(process.env) === "stripe") {
     try {
       const back = `${appUrl()}/pay/${encodeURIComponent(publicId)}?t=${encodeURIComponent(body.t)}`;
-      const { url } = await withRequestContext({ type: "customer" }, () => startCardCheckout(String(order._id), { successUrl: `${appUrl()}${viewUrl()}`, cancelUrl: back }));
+      const { url } = await withRequestContext({ type: "customer" }, () => startCardCheckout(String(order._id), {
+          // Same confirmation page as public checkout: it waits for Stripe's webhook instead of showing an error.
+          successUrl: `${appUrl()}/checkout/success?order=${encodeURIComponent(publicId)}&t=${encodeURIComponent(signOrderLink(publicId, linkSecret()))}`,
+          cancelUrl: back,
+        }));
       return Response.json({ redirectUrl: url });
     } catch (e) {
       if (e instanceof CheckoutError) return error(e.message, e.status);

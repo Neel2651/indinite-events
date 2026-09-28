@@ -111,6 +111,8 @@ export interface OrderConfirmation {
   items: { name: string; qty: number; unitPricePence: number }[];
   lines: { label: string; amountPence: number; negative?: boolean }[];
   event: { title: string; slug: string; startsAt: Date; endsAt: Date; venue: string };
+  /** Refunded automatically because the passes sold out while the customer was paying. */
+  soldOutRefund: boolean;
 }
 
 /**
@@ -132,6 +134,7 @@ export async function getOrderConfirmation(publicId: string): Promise<OrderConfi
     items: order.items.map((i) => ({ name: i.name, qty: i.qty, unitPricePence: i.unitPricePence })),
     lines: linesFor(order),
     event: { title: event.title, slug: event.slug, startsAt: event.startsAt, endsAt: event.endsAt, venue: `${event.venue.name}, ${event.venue.postcode}` },
+    soldOutRefund: (order.refunds ?? []).some((r) => r.refundedBy === "system"),
   };
 }
 
