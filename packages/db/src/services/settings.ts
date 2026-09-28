@@ -129,3 +129,31 @@ export async function recordCommissionPayment(eventId: string, recordedBy: strin
   });
 }
 
+
+export const organizerUpdateSchema = z.object({
+  name: z.string().trim().min(2, "Enter the organiser's name").max(120),
+  contactEmail: z.email("Enter a valid contact email").transform((e) => e.toLowerCase()),
+  orderPrefix: z.string().trim().toUpperCase().regex(/^[A-Z]{2,5}$/, "Use 2 to 5 letters, e.g. NAV"),
+  status: z.enum(["active", "suspended"]),
+  maxDiscountBpsForManager: bps,
+});
+
+/**
+ * Admin: organiser details. Suspending stops online sales, payment links and new bookings (checkout and
+ * booking services only accept active organisers); existing passes keep working.
+ */
+export async function updateOrganizer(organizerId: string, input: z.input<typeof organizerUpdateSchema>) {
+  const data = organizerUpdateSchema.parse(input);
+  return withTransaction(async (session) => {
+    const before = await Organizer.findById(organizerId, { name: 1, contactEmail: 1, orderPrefix: 1, status: 1, maxDiscountBpsForManager: 1 }, { session }).lean();
+    if (!before) throw new SettingsError("Organiser not found.", 404);
+    await Organizer.updateOne({ _id: organizerId }, { $set: data }, { session, runValidators: true });
+    await audited(session, {
+      action: before.status !== data.status ? (data.status === "suspended" ? "organizer.suspended" : "organizer.reactivated") : "organizer.updated",
+      entity: { type: "organizer", id: organizerId },
+      before: { name: before.name, contactEmail: before.contactEmail, orderPrefix: before.orderPrefix, status: before.status, maxDiscountBpsForManager: before.maxDiscountBpsForManager },
+      after: data,
+      organizerId,
+    });
+  });
+}

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createOrganizer, createOrganizerSchema, inviteMember, MembershipError } from "@indinite/auth";
 import { appUrl } from "@indinite/auth";
 import { CARD_FEE_PAYERS } from "@indinite/core";
-import { MerchantError, merchantDashboardLink, saveMerchantPrefill, sendMerchantSetupEmail, setCardFeeSettings, startMerchantOnboarding, StripeNotConfiguredError, setOnlineSalesPaused, setOrganizerCommission, SettingsError } from "@indinite/db";
+import { MerchantError, merchantDashboardLink, saveMerchantPrefill, sendMerchantSetupEmail, setCardFeeSettings, startMerchantOnboarding, StripeNotConfiguredError, setOnlineSalesPaused, setOrganizerCommission, SettingsError, updateOrganizer } from "@indinite/db";
 import { auth } from "@/lib/auth";
 import { asStaff, requireSuperAdmin } from "@/lib/staff";
 
@@ -130,4 +130,33 @@ export async function adminSendSetupEmailAction(organizerId: string): Promise<Ac
   } catch (e) {
     return { error: stripeMessage(e) };
   }
+}
+
+/** Super admin: organiser name, contact, order prefix, status (suspend / reactivate) and manager discount limit. */
+export async function updateOrganizerAction(organizerId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireSuperAdmin();
+  const maxPercent = Number(String(form.get("maxDiscountPercent") ?? "").trim());
+  if (!Number.isFinite(maxPercent) || maxPercent < 0 || maxPercent > 100) return { error: "Enter the managers' discount limit as a percentage between 0 and 100." };
+  const status = form.get("status") === "suspended" ? "suspended" : "active";
+  try {
+    await asStaff(
+      user,
+      () =>
+        updateOrganizer(organizerId, {
+          name: String(form.get("name") ?? ""),
+          contactEmail: String(form.get("contactEmail") ?? ""),
+          orderPrefix: String(form.get("orderPrefix") ?? ""),
+          status,
+          maxDiscountBpsForManager: Math.round(maxPercent * 100),
+        }),
+      organizerId,
+    );
+  } catch (e) {
+    if (e instanceof SettingsError) return { error: e.message };
+    if (e instanceof Error && "issues" in e) return { error: (e as unknown as { issues: { message: string }[] }).issues[0]?.message ?? "Check the details." };
+    return { error: "Couldn't save." };
+  }
+  revalidatePath(`/admin/organisers/${organizerId}`);
+  revalidatePath("/admin/organisers");
+  return { ok: status === "suspended" ? "Saved. The organiser is suspended: online sales, payment links and new bookings are stopped." : "Saved." };
 }

@@ -15,8 +15,8 @@ interface Props {
 
 export function StaffShell({ area, areaHref, nav, user, links = [], children }: Props) {
   return (
-    <div className="flex min-h-dvh flex-col bg-muted">
-      <header className="dark bg-background text-foreground">
+    <div className="flex min-h-dvh flex-col bg-muted print:bg-white">
+      <header className="dark bg-background text-foreground print:hidden">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 pt-4">
           <div className="flex items-center gap-3">
             <Link href="/" className="font-display text-lg font-bold tracking-tight text-brand-orange" title="Public site">
@@ -46,7 +46,7 @@ export function StaffShell({ area, areaHref, nav, user, links = [], children }: 
           <StaffNav items={nav} />
         </div>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 print:max-w-none print:p-0">{children}</main>
     </div>
   );
 }

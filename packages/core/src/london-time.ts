@@ -38,3 +38,6 @@ export function utcToLondonLocal(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${w.y}-${pad(w.mo)}-${pad(w.d)}T${pad(w.h)}:${pad(w.mi)}`;
 }
+
+/** "2026-10-11 19:30" in London (exports, print). */
+export const formatLondonDateTime = (d: Date) => utcToLondonLocal(d).replace("T", " ");

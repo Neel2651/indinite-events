@@ -5,7 +5,7 @@ import { Types } from "mongoose";
 import { appUrl } from "@indinite/auth";
 import { merchantStatus, MERCHANT_STATUS_LABELS } from "@indinite/core";
 import { Organizer, refreshMerchantAccount, stripeConfigured } from "@indinite/db";
-import { AdminOnboardingActions, CardFeeForm, SalesPausedForm } from "@/components/staff/admin-merchant-forms";
+import { AdminOnboardingActions, CardFeeForm, OrganizerDetailsForm, SalesPausedForm } from "@/components/staff/admin-merchant-forms";
 import { PageHeader } from "@/components/staff/shell";
 import { formatDayTime } from "@/lib/format";
 import { asStaff, requireSuperAdmin } from "@/lib/staff";
@@ -80,6 +80,17 @@ export default async function AdminOrganiserPage({ params, searchParams }: Props
           </div>
         </section>
       </div>
+      <section className="mt-6 rounded-lg border border-border bg-card p-6">
+        <h2 className="mb-4 text-lg">Organiser details</h2>
+        <OrganizerDetailsForm
+          organizerId={id}
+          name={org.name}
+          contactEmail={org.contactEmail}
+          orderPrefix={org.orderPrefix ?? "NAV"}
+          status={org.status ?? "active"}
+          maxDiscountPercent={(org.maxDiscountBpsForManager ?? 5000) / 100}
+        />
+      </section>
     </>
   );
 }

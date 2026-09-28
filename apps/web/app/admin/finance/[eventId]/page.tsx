@@ -19,7 +19,19 @@ export default async function EventFinancePage({ params }: { params: Promise<{ e
 
   return (
     <>
-      <PageHeader title={f.title} description={`${organizer?.name} · ${f.orders} orders · ${f.passes} passes`} actions={<Link href="/admin/finance" className="font-semibold text-brand-orange-strong hover:underline">All events</Link>} />
+      <PageHeader title={f.title} description={`${organizer?.name} · ${f.orders} orders · ${f.passes} passes`} actions={
+          <div className="flex flex-wrap gap-4 text-sm">
+            {(["orders", "attendees", "checkins"] as const).map((k) => (
+              <a key={k} href={`/admin/export/${k}?event=${eventId}`} className="font-semibold text-brand-orange-strong hover:underline">
+                {k === "orders" ? "Orders" : k === "attendees" ? "Attendees" : "Check-ins"} (CSV)
+              </a>
+            ))}
+            <Link href="/admin/finance" className="font-semibold text-brand-orange-strong hover:underline">
+              All events
+            </Link>
+          </div>
+        }
+      />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total sales" value={price(f.totalSalesPence)} hint="Everything customers paid" />
         <StatCard label="Organiser direct" value={price(f.direct.cashPence + f.direct.accountPence)} hint={`Cash ${price(f.direct.cashPence)} · Account ${price(f.direct.accountPence)}`} />

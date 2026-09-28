@@ -27,7 +27,7 @@ const SCAN_TITLE: Record<string, [string, TimelineEntry["tone"]]> = {
 };
 
 /** Staff names for audit/scan actors (Better Auth "user" collection). */
-async function userNames(ids: string[]): Promise<Map<string, string>> {
+export async function userNames(ids: string[]): Promise<Map<string, string>> {
   const valid = [...new Set(ids)].filter((id) => Types.ObjectId.isValid(id));
   if (!valid.length) return new Map();
   const users = await mongoose.connection.db!.collection("user")

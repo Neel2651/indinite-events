@@ -7,6 +7,7 @@ import {
   adminStartOnboardingAction,
   cardFeeAction,
   salesPausedAction,
+  updateOrganizerAction,
   type ActionState,
 } from "@/app/admin/organisers/actions";
 import { FormError, inputClass } from "./ui";
@@ -114,5 +115,51 @@ export function AdminOnboardingActions({ organizerId, status, stripeReady }: { o
       <FormError message={state?.error} />
       <Ok state={state} />
     </div>
+  );
+}
+
+export function OrganizerDetailsForm({ organizerId, name, contactEmail, orderPrefix, status, maxDiscountPercent }: { organizerId: string; name: string; contactEmail: string; orderPrefix: string; status: string; maxDiscountPercent: number }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(updateOrganizerAction.bind(null, organizerId), null);
+  return (
+    <form action={action} className="grid gap-4 sm:grid-cols-2">
+      <label className="block text-sm">
+        Name
+        <input name="name" required maxLength={120} defaultValue={name} className={inputClass} />
+      </label>
+      <label className="block text-sm">
+        Contact email
+        <input name="contactEmail" type="email" required defaultValue={contactEmail} className={inputClass} />
+      </label>
+      <label className="block text-sm">
+        Order reference prefix
+        <input name="orderPrefix" required minLength={2} maxLength={5} pattern="[A-Za-z]{2,5}" defaultValue={orderPrefix} className={`${inputClass} uppercase`} aria-describedby="prefix-help" />
+        <span id="prefix-help" className="mt-1 block text-xs text-muted-foreground">New bookings only; existing references don&apos;t change.</span>
+      </label>
+      <label className="block text-sm">
+        Managers can give up to (% off)
+        <input name="maxDiscountPercent" type="number" required min={0} max={100} step={0.5} defaultValue={maxDiscountPercent} className={inputClass} aria-describedby="discount-help" />
+        <span id="discount-help" className="mt-1 block text-xs text-muted-foreground">Discounts on payment links. Owners have no limit; box office can&apos;t give discounts.</span>
+      </label>
+      <fieldset className="sm:col-span-2">
+        <legend className="text-sm">Status</legend>
+        <div className="mt-1 flex flex-wrap gap-4 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="radio" name="status" value="active" defaultChecked={status !== "suspended"} className="accent-[var(--brand-orange)]" />
+            Active
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="radio" name="status" value="suspended" defaultChecked={status === "suspended"} className="accent-[var(--brand-orange)]" />
+            Suspended: no online sales, payment links or new bookings (existing passes still work)
+          </label>
+        </div>
+      </fieldset>
+      <div className="space-y-3 sm:col-span-2">
+        <FormError message={state?.error} />
+        <Ok state={state} />
+        <button type="submit" disabled={pending} className="btn-cta disabled:opacity-60">
+          {pending ? "Saving…" : "Save organiser"}
+        </button>
+      </div>
+    </form>
   );
 }

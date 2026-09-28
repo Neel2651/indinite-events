@@ -22,7 +22,24 @@ export default async function CheckinsPage({ params }: { params: Promise<{ slug:
       {stats.length === 0 && <p className="text-muted-foreground">No published events.</p>}
       {stats.map(({ event, nights }) => (
         <section key={String(event._id)} className="mb-8 rounded-lg border border-border bg-card p-6">
-          <h2 className="text-xl">{event.title}</h2>
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="text-xl">{event.title}</h2>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <a href={`/org/${organizer.slug}/events/${String(event._id)}/print`} className="font-semibold text-brand-orange-strong hover:underline">
+                Printable gate list
+              </a>
+              {can("reports.read") && (
+                <>
+                  <a href={`/org/${organizer.slug}/export/checkins?event=${String(event._id)}`} className="font-semibold text-brand-orange-strong hover:underline">
+                    Download check-ins (CSV)
+                  </a>
+                  <a href={`/org/${organizer.slug}/export/attendees?event=${String(event._id)}`} className="font-semibold text-brand-orange-strong hover:underline">
+                    Download attendees (CSV)
+                  </a>
+                </>
+              )}
+            </div>
+          </div>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border text-muted-foreground">

@@ -12,7 +12,9 @@ export type AuditEntityType =
   | "discount"
   | "member"
   | "scan"
-  | "refund";
+  | "refund"
+  /** Exports and printed lists of personal data. */
+  | "report";
 
 export interface AuditInput {
   action: string; // e.g. "order.issued_offline", "event.updated"

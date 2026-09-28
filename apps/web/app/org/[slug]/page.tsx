@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Types } from "mongoose";
-import { Event, Order, Ticket } from "@indinite/db";
+import { Event, gateStats, Order, Ticket } from "@indinite/db";
 import { PageHeader, StatCard } from "@/components/staff/shell";
-import { formatDateRange, price } from "@/lib/format";
+import { formatDateRange, formatDay, price } from "@/lib/format";
 import { requireOrg } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -23,6 +24,11 @@ export default async function OrgDashboard({ params }: { params: Promise<{ slug:
     Ticket.countDocuments({ organizerId, status: "valid" }),
   ]);
   const totals = sales[0] ?? { count: 0, total: 0 };
+  // Check-ins per night for events that haven't finished yet (SPEC M6 dashboard).
+  const canSeeCheckins = can("reports.read") || can("scan.perform");
+  const now = new Date();
+  const live = canSeeCheckins ? events.filter((e) => e.status === "published" && e.endsAt > now) : [];
+  const checkins = await Promise.all(live.map(async (e) => ({ event: e, nights: (await gateStats(String(e._id))) ?? [] })));
 
   return (
     <>
@@ -32,6 +38,35 @@ export default async function OrgDashboard({ params }: { params: Promise<{ slug:
         {canSeeMoney && <StatCard label="Paid orders" value={totals.count} />}
         {canSeeMoney && <StatCard label="Ticket sales" value={price(totals.total)} hint="Before refunds and Indinite commission" />}
       </div>
+
+      {checkins.map(({ event, nights }) => (
+        <section key={String(event._id)} className="mt-8 rounded-lg border border-border bg-card p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="text-xl">Check-ins · {event.title}</h2>
+            <Link href={`/org/${organizer.slug}/checkins`} className="text-sm font-semibold text-brand-orange-strong hover:underline">
+              Gates and live view
+            </Link>
+          </div>
+          <ul className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {nights.map((n) => {
+              const pct = n.expected ? Math.round((n.admitted / n.expected) * 100) : 0;
+              return (
+                <li key={n.sessionId} className="rounded-md border border-border p-3">
+                  <p className="text-sm font-semibold">{n.label}</p>
+                  <p className="text-xs text-muted-foreground">{formatDay(n.startsAt)}</p>
+                  <p className="mt-2 font-display text-xl font-bold tabular-nums">
+                    {n.admitted}
+                    <span className="text-sm font-normal text-muted-foreground"> / {n.expected}</span>
+                  </p>
+                  <div className="mt-1 h-1.5 rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${n.label}: ${pct}% checked in`}>
+                    <div className="h-1.5 rounded-full bg-brand-orange" style={{ width: `${Math.min(100, pct)}%` }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
 
       <section className="mt-8 rounded-lg border border-border bg-card p-6">
         <h2 className="text-xl">Events</h2>

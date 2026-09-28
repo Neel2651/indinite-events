@@ -37,7 +37,17 @@ export default async function OrdersPage({ params, searchParams }: Props) {
 
   return (
     <>
-      <PageHeader title="Orders" description="Every booking for this organiser, newest first." />
+      <PageHeader
+        title="Orders"
+        description="Every booking for this organiser, newest first."
+        actions={
+          can("reports.read") ? (
+            <a href={`/org/${slug}/export/orders`} className="font-semibold text-brand-orange-strong hover:underline">
+              Download orders (CSV)
+            </a>
+          ) : undefined
+        }
+      />
       {couponCode && (
         <p className="mb-3 text-sm">
           Showing bookings that used <strong>{couponCode}</strong>.{" "}

@@ -12,8 +12,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       areaHref="/admin"
       nav={[
         { href: "/admin", label: "Overview", exact: true },
-        { href: "/admin/events", label: "Events" }, { href: "/admin/organisers", label: "Organisers" },
-        { href: "/admin/finance", label: "Finance" },
+        { href: "/admin/events", label: "Events" }, { href: "/admin/orders", label: "Orders" }, { href: "/admin/organisers", label: "Organisers" },
+        { href: "/admin/finance", label: "Finance" }, { href: "/admin/audit", label: "Audit log" },
       ]}
       user={{ name: user.name, email: user.email, roleLabel: "Super admin" }}
       links={[{ href: "/org", label: "Organiser panels" }]}
