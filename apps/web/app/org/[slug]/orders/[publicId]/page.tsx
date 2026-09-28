@@ -132,6 +132,12 @@ export default async function OrderPage({ params }: { params: Promise<{ slug: st
                   <dd>{price(order.taxPence!)}</dd>
                 </div>
               )}
+              {(order.cardFeePence ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <dt>Card processing fee</dt>
+                  <dd>{price(order.cardFeePence!)}</dd>
+                </div>
+              )}
               <div className="flex justify-between border-t border-border pt-2 font-display text-base font-bold">
                 <dt>Total</dt>
                 <dd>{price(order.totalPence)}</dd>

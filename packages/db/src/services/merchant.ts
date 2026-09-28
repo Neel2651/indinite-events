@@ -1,5 +1,5 @@
 import mongoose, { Types } from "mongoose";
-import { merchantStatus, type CardFeeSettings, type MerchantStatus } from "@indinite/core";
+import { CARD_FEE_PAYERS, merchantStatus, type CardFeeSettings, type MerchantStatus } from "@indinite/core";
 import { audited } from "../audit";
 import { enqueueSendAuthEmail } from "../jobs";
 import { Organizer } from "../models/organizer";
@@ -182,7 +182,7 @@ export async function setOnlineSalesPaused(organizerId: string, paused: boolean,
 
 /** Super admin: who bears Stripe's card fee, and the rate. Applies to new card checkouts. */
 export async function setCardFeeSettings(organizerId: string, fee: CardFeeSettings) {
-  if (!["platform", "organizer"].includes(fee.payer)) throw new MerchantError("Choose who pays card fees.");
+  if (!CARD_FEE_PAYERS.includes(fee.payer)) throw new MerchantError("Choose who pays card fees.");
   if (!Number.isInteger(fee.bps) || fee.bps < 0 || fee.bps > 1000) throw new MerchantError("Card fee % must be between 0 and 10.");
   if (!Number.isInteger(fee.fixedPence) || fee.fixedPence < 0 || fee.fixedPence > 500) throw new MerchantError("Fixed card fee must be between £0 and £5.");
   return withTransaction(async (session) => {

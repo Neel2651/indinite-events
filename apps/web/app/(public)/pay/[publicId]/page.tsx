@@ -43,6 +43,7 @@ export default async function PayPage({ params, searchParams }: Props) {
     charges: order.charges,
     taxPence: order.taxPence,
     taxBps: order.taxBps,
+    cardFeePence: order.cardFeePence,
   });
   const demo = resolvePaymentsMode(process.env) === "demo";
 

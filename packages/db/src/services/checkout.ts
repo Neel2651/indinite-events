@@ -1,5 +1,5 @@
 import { Types, type ClientSession } from "mongoose";
-import { canTakeCardPayments, generatePublicId, normalisePassCode, passCode, priceOrder, signTicket, type LineItem, type OrderPricing, type PublicCheckoutInput } from "@indinite/core";
+import { canTakeCardPayments, cardFeeOf, generatePublicId, normalisePassCode, passCode, priceOrder, signTicket, type LineItem, type OrderPricing, type PublicCheckoutInput } from "@indinite/core";
 import { audited } from "../audit";
 import { enqueueSendTickets } from "../jobs";
 import { Event } from "../models/event";
@@ -108,7 +108,8 @@ export async function createPendingOrder(input: PublicCheckoutInput, opts: Pendi
   }
 
   const settings = pricingFor(event, organizer);
-  const price = priceOrder({ items, ...settings, discount: coupon?.rule });
+  // Card bookings (online and payment links): the customer may pay Stripe's fee (SPEC §4.8).
+  const price = priceOrder({ items, ...settings, discount: coupon?.rule, cardFee: cardFeeOf(organizer) });
   const expiresAt = new Date(now.getTime() + opts.holdMs);
 
   for (let attempt = 0; ; attempt++) {
@@ -189,6 +190,7 @@ export function orderPricingFields(price: OrderPricing, settings: { commissionBp
     chargesPence: price.chargesPence,
     taxBps: settings.taxBps,
     taxPence: price.taxPence,
+    cardFeePence: price.cardFeePence,
     commissionBps: settings.commissionBps,
     totalPence: price.totalPence,
     applicationFeePence: price.commissionPence,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
-import { priceOrder, receiptLines, type Discount, type OrderCharge } from "@indinite/core";
+import { priceOrder, receiptLines, type CardFeeSettings, type Discount, type OrderCharge } from "@indinite/core";
 import {
   checkCouponAction,
   createPaymentLinkAction,
@@ -18,6 +18,8 @@ export interface BookableEvent {
   commissionBps: number;
   taxBps: number;
   charges: OrderCharge[];
+  /** Applies to payment links only (card payments). */
+  cardFee: CardFeeSettings;
   ticketTypes: { id: string; name: string; pricePence: number; available: number; nightsLabel: string }[];
 }
 
@@ -63,6 +65,7 @@ export function OfflineBookingForm({ slug, events, canPaymentLink, canOffline }:
           charges: event.charges,
           discount: complimentary ? undefined : coupon?.rule,
           complimentary,
+          cardFee: method === "payment_link" ? event.cardFee : undefined,
         })
       : null;
   const lines = preview
@@ -76,6 +79,7 @@ export function OfflineBookingForm({ slug, events, canPaymentLink, canOffline }:
         charges: preview.charges,
         taxPence: preview.taxPence,
         taxBps: event!.taxBps,
+        cardFeePence: preview.cardFeePence,
       })
     : [];
 

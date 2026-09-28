@@ -1,4 +1,4 @@
-import { applicationFeeFor, canTakeCardPayments, DEFAULT_CARD_FEE, type CardFeeSettings } from "@indinite/core";
+import { applicationFeeFor, canTakeCardPayments, cardFeeOf } from "@indinite/core";
 import { runWithContext, stripeActor } from "@indinite/core/context";
 import { audited } from "../audit";
 import { enqueueSendRefundEmail } from "../jobs";
@@ -16,14 +16,6 @@ import { disconnectMerchantAccount, syncMerchantAccount } from "./merchant";
 /** Stripe needs a Checkout Session to live at least 30 minutes (and at most 24 hours). */
 const MIN_SESSION_MS = 31 * 60_000;
 const MAX_SESSION_MS = 24 * 3_600_000 - 60_000;
-
-export function cardFeeOf(org: { cardFee?: { payer?: string | null; bps?: number | null; fixedPence?: number | null } | null }): CardFeeSettings {
-  return {
-    payer: org.cardFee?.payer === "organizer" ? "organizer" : "platform",
-    bps: org.cardFee?.bps ?? DEFAULT_CARD_FEE.bps,
-    fixedPence: org.cardFee?.fixedPence ?? DEFAULT_CARD_FEE.fixedPence,
-  };
-}
 
 /**
  * M4: send a pending order (public checkout or payment link) to Stripe Checkout as a destination charge.
@@ -61,7 +53,7 @@ export async function startCardCheckout(orderId: string, urls: { successUrl: str
   const sessionExpiresAt = new Date(Math.min(expiresAt.getTime(), now.getTime() + MAX_SESSION_MS));
 
   const event = await Event.findById(order.eventId, { title: 1 }).lean();
-  const applicationFeePence = applicationFeeFor({ totalPence: order.totalPence, platformFeePence: order.platformFeePence ?? order.applicationFeePence }, cardFeeOf(org));
+  const applicationFeePence = applicationFeeFor({ totalPence: order.totalPence, platformFeePence: order.platformFeePence ?? order.applicationFeePence, cardFeePence: order.cardFeePence }, cardFeeOf(org));
   const description = `${event?.title ?? "Event"}: ${order.items.map((i) => `${i.qty} × ${i.name}`).join(", ")}`;
   const session = await gw.createCheckoutSession({
     orderId: String(order._id),

@@ -28,9 +28,11 @@ export interface EventFinance {
   /** Online card + payment links: money through Indinite (Stripe). */
   platform: {
     grossPence: number;
-    /** Paid out to the organiser (total − platform fee). */
+    /** Paid out to the organiser (total − platform fee − card fees recovered for Stripe). */
     organizerCreditedPence: number;
     platformFeesPence: number;
+    /** Stripe card fees recovered through the application fee (paid by the customer or organiser); not income. */
+    cardFeesPence: number;
   };
   /** Indinite's income: platform fees collected + commission owed on direct sales. */
   ourIncomePence: number;
@@ -43,7 +45,7 @@ export async function eventFinance(eventId: string): Promise<EventFinance | null
   const event = await Event.findById(eventId, { title: 1, organizerId: 1 }).lean();
   if (!event) return null;
   const [groups, ledger] = await Promise.all([
-    Order.aggregate<{ _id: { source: string; method: string | null }; total: number; fees: number; refunded: number; orders: number; passes: number }>([
+    Order.aggregate<{ _id: { source: string; method: string | null }; total: number; fees: number; cardFees: number; refunded: number; orders: number; passes: number }>([
       { $match: { eventId: event._id, status: { $in: PAID } } },
       {
         $group: {
@@ -54,6 +56,17 @@ export async function eventFinance(eventId: string): Promise<EventFinance | null
           // Indinite keeps its fee on refunds, except when the whole booking was refunded by the system
           // (late payment after the passes sold out), where the fee was returned too.
           fees: { $sum: { $cond: [{ $in: ["system", { $ifNull: ["$refunds.refundedBy", []] }] }, 0, "$applicationFeePence"] } },
+          // Card fee recovered on top of the platform fee: what Stripe's application fee held beyond it, or
+          // the customer's card processing fee when no Stripe fee was recorded (demo payments).
+          cardFees: {
+            $sum: {
+              $cond: [
+                { $in: ["system", { $ifNull: ["$refunds.refundedBy", []] }] },
+                0,
+                { $ifNull: [{ $subtract: ["$stripe.applicationFeePence", "$applicationFeePence"] }, { $ifNull: ["$cardFeePence", 0] }] },
+              ],
+            },
+          },
           orders: { $sum: 1 },
           passes: { $sum: { $sum: "$items.qty" } },
         },
@@ -62,7 +75,7 @@ export async function eventFinance(eventId: string): Promise<EventFinance | null
     CommissionLedger.find({ eventId: event._id }).sort({ createdAt: 1 }).lean(),
   ]);
   const pick = (source: string, method: string | null = null) => groups.filter((g) => g._id.source === source && g._id.method === method);
-  const sum = (gs: typeof groups, k: "total" | "fees" | "passes") => gs.reduce((n, g) => n + g[k], 0);
+  const sum = (gs: typeof groups, k: "total" | "fees" | "cardFees" | "passes") => gs.reduce((n, g) => n + g[k], 0);
 
   const online = [...pick("online"), ...pick("payment_link")];
   const cash = pick("offline", "cash");
@@ -71,6 +84,7 @@ export async function eventFinance(eventId: string): Promise<EventFinance | null
   const owed = ledger.filter((l) => l.kind === "offline_sale_owed").reduce((n, l) => n + l.amountPence, 0);
   const paid = ledger.filter((l) => l.kind === "settled").reduce((n, l) => n + l.amountPence, 0);
   const platformFees = sum(online, "fees");
+  const cardFees = sum(online, "cardFees");
 
   return {
     eventId: String(event._id),
@@ -90,8 +104,9 @@ export async function eventFinance(eventId: string): Promise<EventFinance | null
     },
     platform: {
       grossPence: sum(online, "total"),
-      organizerCreditedPence: sum(online, "total") - platformFees,
+      organizerCreditedPence: sum(online, "total") - platformFees - cardFees,
       platformFeesPence: platformFees,
+      cardFeesPence: cardFees,
     },
     ourIncomePence: platformFees + owed,
     payments: ledger.filter((l) => l.kind === "settled").map((l) => ({ at: l.createdAt as Date, amountPence: l.amountPence, note: l.note ?? "" })),

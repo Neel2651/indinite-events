@@ -82,7 +82,7 @@ export default async function PaymentsPage({ params, searchParams }: Props) {
             <span className="text-muted-foreground">Payouts to your bank:</span> {org.payoutsEnabled ? "On" : "Off"}
           </p>
           <p>
-            <span className="text-muted-foreground">Card fees paid by:</span> {org.cardFee?.payer === "organizer" ? "you (deducted from payouts)" : "Indinite"}
+            <span className="text-muted-foreground">Card fees paid by:</span> {org.cardFee?.payer === "organizer" ? "you (deducted from payouts)" : org.cardFee?.payer === "customer" ? "your customers (added to card bookings)" : "Indinite"}
           </p>
           {org.merchantSyncedAt && <p className="text-xs text-muted-foreground">Last checked with Stripe {formatDayTime(org.merchantSyncedAt)}</p>}
         </aside>

@@ -39,15 +39,32 @@ export const MERCHANT_STATUS_LABELS: Record<MerchantStatus, string> = {
   restricted: "Action needed",
 };
 
+export type CardFeePayer = "platform" | "organizer" | "customer";
+
+export const CARD_FEE_PAYERS: readonly CardFeePayer[] = ["platform", "organizer", "customer"];
+
 /** Stripe's card processing fee as configured by the super admin (default 1.5% + 20p, UK cards). */
 export interface CardFeeSettings {
-  /** Who bears Stripe's fee: Indinite (out of the platform fee) or the organiser (deducted from their payout). */
-  payer: "platform" | "organizer";
+  /**
+   * Who bears Stripe's fee: Indinite (out of the platform fee), the organiser (deducted from their payout) or the
+   * customer (added to card bookings as a "Card processing fee" line).
+   */
+  payer: CardFeePayer;
   bps: number;
   fixedPence: Pence;
 }
 
 export const DEFAULT_CARD_FEE: CardFeeSettings = { payer: "platform", bps: 150, fixedPence: 20 };
+
+/** An organiser's stored card fee settings, with defaults. */
+export function cardFeeOf(org: { cardFee?: { payer?: string | null; bps?: number | null; fixedPence?: number | null } | null }): CardFeeSettings {
+  const payer = org.cardFee?.payer;
+  return {
+    payer: CARD_FEE_PAYERS.includes(payer as CardFeePayer) ? (payer as CardFeePayer) : DEFAULT_CARD_FEE.payer,
+    bps: org.cardFee?.bps ?? DEFAULT_CARD_FEE.bps,
+    fixedPence: org.cardFee?.fixedPence ?? DEFAULT_CARD_FEE.fixedPence,
+  };
+}
 
 export function cardFeePence(totalPence: Pence, s: Pick<CardFeeSettings, "bps" | "fixedPence">): Pence {
   assertPence(totalPence, "totalPence");
@@ -56,11 +73,23 @@ export function cardFeePence(totalPence: Pence, s: Pick<CardFeeSettings, "bps" |
 }
 
 /**
- * Stripe application fee for a destination charge: Indinite's platform fee, plus Stripe's card fee when the
- * organiser bears it (with destination charges Stripe takes its fee from the platform, so we recover it here).
+ * Card processing fee the customer pays when `payer` is "customer": grossed up so that it covers Stripe's fee on
+ * the whole charge (base + this fee). `basePence` is the order total before the fee. Not taxed.
  */
-export function applicationFeeFor(o: { totalPence: Pence; platformFeePence: Pence }, fee: CardFeeSettings): Pence {
-  const extra = fee.payer === "organizer" ? cardFeePence(o.totalPence, fee) : 0;
+export function customerCardFeePence(basePence: Pence, s: Pick<CardFeeSettings, "bps" | "fixedPence">): Pence {
+  assertPence(basePence, "basePence");
+  if (basePence === 0) return 0;
+  if (!Number.isInteger(s.bps) || s.bps < 0 || s.bps >= 10000) throw new Error(`Invalid card fee bps ${s.bps}`);
+  return Math.ceil((basePence * s.bps + s.fixedPence * 10000) / (10000 - s.bps));
+}
+
+/**
+ * Stripe application fee for a destination charge: Indinite's platform fee, plus Stripe's card fee when the
+ * organiser or customer bears it (with destination charges Stripe takes its fee from the platform, so we recover
+ * it here). A customer-paid fee is fixed on the order when it's priced (`cardFeePence`).
+ */
+export function applicationFeeFor(o: { totalPence: Pence; platformFeePence: Pence; cardFeePence?: Pence | null }, fee: CardFeeSettings): Pence {
+  const extra = o.cardFeePence ? o.cardFeePence : fee.payer === "organizer" ? cardFeePence(o.totalPence, fee) : 0;
   return Math.min(o.totalPence, o.platformFeePence + extra);
 }
 

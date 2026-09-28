@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createOrganizer, createOrganizerSchema, inviteMember, MembershipError } from "@indinite/auth";
 import { appUrl } from "@indinite/auth";
+import { CARD_FEE_PAYERS } from "@indinite/core";
 import { MerchantError, saveMerchantPrefill, sendMerchantSetupEmail, setCardFeeSettings, setOnlineSalesPaused, setOrganizerCommission, SettingsError } from "@indinite/db";
 import { auth } from "@/lib/auth";
 import { asStaff, requireSuperAdmin } from "@/lib/staff";
@@ -78,7 +79,8 @@ export async function salesPausedAction(organizerId: string, _: ActionState, for
 
 export async function cardFeeAction(organizerId: string, _: ActionState, form: FormData): Promise<ActionState> {
   const user = await requireSuperAdmin();
-  const payer = form.get("payer") === "organizer" ? "organizer" : "platform";
+  const raw = form.get("payer");
+  const payer = CARD_FEE_PAYERS.find((p) => p === raw) ?? "platform";
   const bps = Math.round(Number(form.get("percent")) * 100);
   const fixedPence = Math.round(Number(form.get("fixed")) * 100);
   try {

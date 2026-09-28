@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
-import { priceOrder, receiptLines, type Discount, type OrderCharge } from "@indinite/core";
+import { priceOrder, receiptLines, type CardFeeSettings, type Discount, type OrderCharge } from "@indinite/core";
 import { price } from "@/lib/format";
 
 export interface BookableTicketType {
@@ -19,7 +19,7 @@ interface Props {
   eventId: string;
   sessions: { id: string; label: string; dayLabel: string; timeLabel: string }[];
   ticketTypes: BookableTicketType[];
-  pricing: { commissionBps: number; taxBps: number; charges: OrderCharge[] };
+  pricing: { commissionBps: number; taxBps: number; charges: OrderCharge[]; cardFee: CardFeeSettings };
   paymentsMode: "stripe" | "demo";
 }
 
@@ -61,6 +61,7 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
         charges: p.charges,
         taxPence: p.taxPence,
         taxBps: pricing.taxBps,
+        cardFeePence: p.cardFeePence,
       }),
     };
   }, [chosen, qty, pricing, coupon, count]);

@@ -28,6 +28,7 @@ export async function sendPaymentLink(job: SendPaymentLinkJob, jobId: string) {
       charges: order.charges,
       taxPence: order.taxPence,
       taxBps: order.taxBps,
+      cardFeePence: order.cardFeePence,
     }).map((l) => ({ label: l.label, amount: `${l.negative ? "−" : ""}${gbp.format(l.amountPence / 100)}` })),
   });
   const id = await sendEmail({ to: order.customer.email, subject: email.subject, html: email.html, text: email.text, idempotencyKey: `send-payment-link/${jobId}`, tags: [{ name: "type", value: "payment-link" }] });

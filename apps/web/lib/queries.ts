@@ -1,5 +1,5 @@
 import "server-only";
-import { available, canTakeCardPayments, PUBLIC_ID_RE, receiptLines, resolvePaymentsMode, type OrderCharge } from "@indinite/core";
+import { available, canTakeCardPayments, cardFeeOf, PUBLIC_ID_RE, receiptLines, resolvePaymentsMode, type CardFeeSettings, type OrderCharge } from "@indinite/core";
 import { connectDb, Event, Order, Organizer, pricingFor, Ticket, TicketType } from "@indinite/db";
 
 export interface PublicTicketType {
@@ -33,7 +33,7 @@ export interface PublicEvent {
   /** Earliest upcoming sales start, when bookings aren't open yet. */
   bookingsOpenAt: Date | null;
   /** SPEC §4.7 pricing settings, for showing the breakdown before checkout. */
-  pricing: { commissionBps: number; taxBps: number; charges: OrderCharge[] };
+  pricing: { commissionBps: number; taxBps: number; charges: OrderCharge[]; cardFee: CardFeeSettings };
   /** Online booking possible now: demo mode, or (Stripe mode) the organiser is an active merchant. */
   onlinePaymentsAvailable: boolean;
 }
@@ -45,7 +45,7 @@ async function withTicketTypes(events: Awaited<ReturnType<typeof loadEvents>>): 
   const types = await TicketType.find({ eventId: { $in: ids }, active: true }).sort({ sortOrder: 1 }).lean();
   const orgs = await Organizer.find(
     { _id: { $in: events.map((e) => e.organizerId) } },
-    { commissionBps: 1, stripeAccountId: 1, chargesEnabled: 1, detailsSubmitted: 1, stripeDisabledReason: 1, stripeCurrentlyDue: 1, onlineSalesPaused: 1 },
+    { commissionBps: 1, cardFee: 1, stripeAccountId: 1, chargesEnabled: 1, detailsSubmitted: 1, stripeDisabledReason: 1, stripeCurrentlyDue: 1, onlineSalesPaused: 1 },
   ).lean();
   const stripeMode = resolvePaymentsMode(process.env) === "stripe";
   const orgById = new Map(orgs.map((o) => [String(o._id), o]));
@@ -81,7 +81,7 @@ async function withTicketTypes(events: Awaited<ReturnType<typeof loadEvents>>): 
       fromPence: tts.length ? Math.min(...tts.map((t) => t.pricePence)) : null,
       ticketTypes: tts,
       bookingsOpen,
-      pricing: pricingFor(e, orgById.get(String(e.organizerId)) ?? {}),
+      pricing: { ...pricingFor(e, orgById.get(String(e.organizerId)) ?? {}), cardFee: cardFeeOf(orgById.get(String(e.organizerId)) ?? {}) },
       onlinePaymentsAvailable: !stripeMode || canTakeCardPayments(orgById.get(String(e.organizerId)) ?? {}),
       bookingsOpenAt: !bookingsOpen && upcoming.length ? new Date(Math.min(...upcoming.map((d) => d.getTime()))) : null,
     };
@@ -205,6 +205,7 @@ type OrderLike = {
   charges?: { name?: string | null; amountPence?: number | null }[] | null;
   taxPence?: number | null;
   taxBps?: number | null;
+  cardFeePence?: number | null;
 };
 
 function linesFor(order: OrderLike) {
@@ -218,5 +219,6 @@ function linesFor(order: OrderLike) {
     charges: order.charges,
     taxPence: order.taxPence,
     taxBps: order.taxBps,
+    cardFeePence: order.cardFeePence,
   });
 }

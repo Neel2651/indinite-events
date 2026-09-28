@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Types } from "mongoose";
-import { available } from "@indinite/core";
+import { available, cardFeeOf } from "@indinite/core";
 import { Event, Organizer, pricingFor, TicketType } from "@indinite/db";
 import { OfflineBookingForm, type BookableEvent } from "@/components/staff/offline-booking-form";
 import { PageHeader } from "@/components/staff/shell";
@@ -13,7 +13,7 @@ export default async function NewBookingPage({ params }: { params: Promise<{ slu
   const { slug } = await params;
   const { organizer, can } = await requireOrg(slug);
   if (!can("order.issueOffline") && !can("order.createPaymentLink")) notFound();
-  const org = await Organizer.findById(organizer.id, { commissionBps: 1 }).lean();
+  const org = await Organizer.findById(organizer.id, { commissionBps: 1, cardFee: 1 }).lean();
 
   const events = await Event.find({ organizerId: new Types.ObjectId(organizer.id), status: "published", deletedAt: null, endsAt: { $gt: new Date() } })
     .sort({ startsAt: 1 })
@@ -23,6 +23,7 @@ export default async function NewBookingPage({ params }: { params: Promise<{ slu
     id: String(e._id),
     title: e.title,
     ...pricingFor(e, org ?? {}),
+    cardFee: cardFeeOf(org ?? {}),
     ticketTypes: types
       .filter((t) => String(t.eventId) === String(e._id))
       .map((t) => ({

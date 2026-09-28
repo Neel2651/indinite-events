@@ -1,3 +1,4 @@
+import { customerCardFeePence, type CardFeeSettings } from "./merchant";
 import { applyBps, assertPence, type Pence } from "./money";
 
 export interface LineItem {
@@ -29,6 +30,8 @@ export interface PricingInput {
   discount?: Discount;
   /** Free passes: customer pays nothing, but commission is still owed on the normal price. */
   complimentary?: boolean;
+  /** Card bookings only: when `payer` is "customer", a card processing fee is added after tax. */
+  cardFee?: CardFeeSettings;
 }
 
 export interface OrderPricing {
@@ -41,10 +44,12 @@ export interface OrderPricing {
   charges: { name: string; amountPence: Pence }[];
   chargesPence: Pence;
   taxPence: Pence;
+  /** Card processing fee paid by the customer (0 unless the organiser's card fee payer is "customer"). */
+  cardFeePence: Pence;
   totalPence: Pence;
   /** Indinite's income from this order: the platform fee (for comps, % of the normal price). */
   commissionPence: Pence;
-  /** What the organiser keeps if the money goes through Stripe: total − commission. */
+  /** What the organiser keeps if the money goes through Stripe: total − commission − customer card fee. */
   organizerPence: Pence;
 }
 
@@ -54,7 +59,7 @@ export interface OrderPricing {
  *   = 12.00 + 0.72 + 0.30 + 2.60 = £15.62.
  */
 export function priceOrder(input: PricingInput): OrderPricing {
-  const { items, commissionBps, charges = [], taxBps = 0, discount, complimentary = false } = input;
+  const { items, commissionBps, charges = [], taxBps = 0, discount, complimentary = false, cardFee } = input;
   if (items.length === 0) throw new Error("Order must contain at least one item");
   assertBps(commissionBps, "commissionBps");
   assertBps(taxBps, "taxBps");
@@ -78,6 +83,7 @@ export function priceOrder(input: PricingInput): OrderPricing {
       charges: [],
       chargesPence: 0,
       taxPence: 0,
+      cardFeePence: 0,
       totalPence: 0,
       commissionPence,
       organizerPence: 0,
@@ -109,7 +115,9 @@ export function priceOrder(input: PricingInput): OrderPricing {
   const chargesPence = chargeLines.reduce((s, c) => s + c.amountPence, 0);
 
   const taxPence = applyBps(ticketsPence + platformFeePence + chargesPence, taxBps);
-  const totalPence = ticketsPence + platformFeePence + chargesPence + taxPence;
+  const beforeCardFee = ticketsPence + platformFeePence + chargesPence + taxPence;
+  const cardFeePence = cardFee?.payer === "customer" ? customerCardFeePence(beforeCardFee, cardFee) : 0;
+  const totalPence = beforeCardFee + cardFeePence;
 
   return {
     subtotalPence,
@@ -119,9 +127,10 @@ export function priceOrder(input: PricingInput): OrderPricing {
     charges: chargeLines,
     chargesPence,
     taxPence,
+    cardFeePence,
     totalPence,
     commissionPence: platformFeePence,
-    organizerPence: totalPence - platformFeePence,
+    organizerPence: totalPence - platformFeePence - cardFeePence,
   };
 }
 
@@ -151,11 +160,13 @@ export function receiptLines(o: {
   charges?: { name?: string | null; amountPence?: number | null }[] | null;
   taxPence?: number | null;
   taxBps?: number | null;
+  cardFeePence?: number | null;
 }): { label: string; amountPence: number; negative?: boolean }[] {
   const lines: { label: string; amountPence: number; negative?: boolean }[] = o.items.map((i) => ({ label: `${i.qty} × ${i.name}`, amountPence: i.unitPricePence * i.qty }));
   if (o.discountPence) lines.push({ label: o.complimentary ? "Complimentary" : (o.discountLabel ?? "Discount"), amountPence: o.discountPence, negative: true });
   if (o.platformFeePence) lines.push({ label: `Platform fee (${pct(o.commissionBps ?? 0)})`, amountPence: o.platformFeePence });
   for (const c of o.charges ?? []) if (c.amountPence) lines.push({ label: c.name ?? "Charge", amountPence: c.amountPence });
   if (o.taxPence) lines.push({ label: `Tax (${pct(o.taxBps ?? 0)})`, amountPence: o.taxPence });
+  if (o.cardFeePence) lines.push({ label: "Card processing fee", amountPence: o.cardFeePence });
   return lines;
 }

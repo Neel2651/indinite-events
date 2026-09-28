@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyBps, discountAsBps, formatGBP, priceOrder, type LineItem } from "../src";
+import { applyBps, cardFeePence, discountAsBps, formatGBP, priceOrder, receiptLines, type LineItem } from "../src";
 
 const one = (price: number, qty = 1): LineItem[] => [{ ticketTypeId: "a", name: "Night pass", unitPricePence: price, qty }];
 const items: LineItem[] = [
@@ -24,6 +24,7 @@ describe("priceOrder", () => {
       charges: [{ name: "Venue fee", amountPence: 30 }],
       chargesPence: 30,
       taxPence: 260, // 20% of 13.02
+      cardFeePence: 0,
       totalPence: 1562,
       commissionPence: 72,
       organizerPence: 1490,
@@ -69,5 +70,41 @@ describe("priceOrder", () => {
   it("expresses fixed discounts as bps for limit checks", () => {
     expect(discountAsBps(11000, { kind: "fixed", value: 1100 })).toBe(1000);
     expect(discountAsBps(11000, { kind: "percent", value: 2500 })).toBe(2500);
+  });
+});
+
+describe("customer-paid card processing fee", () => {
+  const example = { items: one(1200), commissionBps: 600, charges: [{ name: "Venue fee", kind: "fixed" as const, value: 30 }], taxBps: 2000 };
+  const fee = { payer: "customer" as const, bps: 150, fixedPence: 20 };
+
+  it("is added after tax, untaxed, and grossed up to cover Stripe's fee on the whole charge", () => {
+    const p = priceOrder({ ...example, cardFee: fee });
+    expect(p.taxPence).toBe(260);
+    expect(p.cardFeePence).toBe(45); // Stripe's fee on £16.07 is 24p + 20p = 44p
+    expect(p.totalPence).toBe(1562 + 45);
+    expect(p.commissionPence).toBe(72);
+    expect(p.organizerPence).toBe(1490);
+  });
+
+  it("always covers Stripe's fee on the final total", () => {
+    for (const price of [1, 99, 500, 1200, 4500, 12345, 99999]) {
+      const p = priceOrder({ items: one(price, 3), commissionBps: 600, taxBps: 2000, cardFee: fee });
+      expect(p.cardFeePence).toBeGreaterThanOrEqual(cardFeePence(p.totalPence, fee));
+      expect(p.cardFeePence - cardFeePence(p.totalPence, fee)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("isn't charged when Indinite or the organiser pays, on free orders or on complimentary passes", () => {
+    expect(priceOrder({ ...example, cardFee: { ...fee, payer: "platform" } }).cardFeePence).toBe(0);
+    expect(priceOrder({ ...example, cardFee: { ...fee, payer: "organizer" } }).cardFeePence).toBe(0);
+    expect(priceOrder({ items: one(1200), commissionBps: 600, discount: { kind: "percent", value: 10000 }, cardFee: fee }).totalPence).toBe(0);
+    expect(priceOrder({ ...example, complimentary: true, cardFee: fee }).cardFeePence).toBe(0);
+  });
+
+  it("shows as a receipt line", () => {
+    const p = priceOrder({ ...example, cardFee: fee });
+    const lines = receiptLines({ items: one(1200), ...p, taxBps: 2000, commissionBps: 600 });
+    expect(lines.at(-1)).toEqual({ label: "Card processing fee", amountPence: 45 });
+    expect(lines.reduce((s, l) => s + (l.negative ? -l.amountPence : l.amountPence), 0)).toBe(p.totalPence);
   });
 });

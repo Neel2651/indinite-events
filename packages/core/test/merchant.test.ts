@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applicationFeeFor, canTakeCardPayments, cardFeePence, DEFAULT_CARD_FEE, merchantStatus, ticketRefundShares } from "../src";
+import { applicationFeeFor, canTakeCardPayments, cardFeePence, customerCardFeePence, DEFAULT_CARD_FEE, merchantStatus, ticketRefundShares } from "../src";
 
 describe("merchant status", () => {
   it("walks through onboarding states", () => {
@@ -31,6 +31,17 @@ describe("card fees", () => {
     expect(applicationFeeFor(order, DEFAULT_CARD_FEE)).toBe(72);
     expect(applicationFeeFor(order, { ...DEFAULT_CARD_FEE, payer: "organizer" })).toBe(72 + 43);
     expect(applicationFeeFor({ totalPence: 10, platformFeePence: 5 }, { payer: "organizer", bps: 150, fixedPence: 20 })).toBe(10);
+  });
+
+  it("customer-paid fee: the card fee fixed on the order goes to Indinite to cover Stripe", () => {
+    const fee = { ...DEFAULT_CARD_FEE, payer: "customer" as const };
+    expect(customerCardFeePence(1562, fee)).toBe(45);
+    expect(customerCardFeePence(0, fee)).toBe(0);
+    expect(applicationFeeFor({ totalPence: 1607, platformFeePence: 72, cardFeePence: 45 }, fee)).toBe(72 + 45);
+    // Priced while the customer paid; the setting changed later: the order's fee still applies.
+    expect(applicationFeeFor({ totalPence: 1607, platformFeePence: 72, cardFeePence: 45 }, DEFAULT_CARD_FEE)).toBe(72 + 45);
+    // Priced before the customer paid; no fee on the order, so nothing extra.
+    expect(applicationFeeFor({ totalPence: 1562, platformFeePence: 72, cardFeePence: 0 }, fee)).toBe(72);
   });
 });
 

@@ -26,7 +26,7 @@ const organizerSchema = new Schema(
     onlineSalesPaused: { type: Boolean, default: false },
     /** Who bears Stripe's card fee and at what rate (super admin, SPEC §4.8). */
     cardFee: {
-      payer: { type: String, enum: ["platform", "organizer"], default: "platform" },
+      payer: { type: String, enum: ["platform", "organizer", "customer"], default: "platform" },
       bps: { type: Number, min: 0, max: 1000, default: 150 },
       fixedPence: { type: Number, min: 0, max: 500, default: 20 },
     },

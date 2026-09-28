@@ -46,6 +46,8 @@ const orderSchema = new Schema(
     chargesPence: { type: Number, min: 0, default: 0 },
     taxBps: { type: Number, min: 0, default: 0 },
     taxPence: { type: Number, min: 0, default: 0 },
+    /** Card processing fee paid by the customer (organiser's card fee payer = customer); goes to cover Stripe. */
+    cardFeePence: { type: Number, min: 0, default: 0 },
     commissionBps: { type: Number, min: 0, default: 0 },
     couponCode: String,
     couponId: { type: Schema.Types.ObjectId, ref: "Discount" },

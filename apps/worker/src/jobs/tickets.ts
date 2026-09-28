@@ -74,6 +74,7 @@ export async function sendTickets(job: SendTicketsJob, jobId: string) {
       charges: order.charges,
       taxPence: order.taxPence,
       taxBps: order.taxBps,
+      cardFeePence: order.cardFeePence,
     }),
     totalPence: order.totalPence,
     tickets: passes,
