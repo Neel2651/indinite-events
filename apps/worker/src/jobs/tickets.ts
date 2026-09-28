@@ -42,7 +42,8 @@ async function loadOrder(orderId: string) {
 /** send-tickets: ticket email with inline QR codes and a PDF of every pass, then audit it. */
 export async function sendTickets(job: SendTicketsJob, jobId: string) {
   const { order, event } = await loadOrder(job.orderId);
-  if (order.status !== "paid") {
+  // Part-refunded bookings still have valid passes: send just those.
+  if (order.status !== "paid" && order.status !== "partially_refunded") {
     console.log(`[send-tickets] skipping ${order.publicId}: status is ${order.status}`);
     return;
   }

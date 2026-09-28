@@ -57,6 +57,14 @@ describe("can()", () => {
     }
   });
 
+  it("anyone who can create payment links can cancel an unpaid booking; only owners cancel paid ones", () => {
+    for (const role of ["owner", "manager", "box_office"] as const) expect(can(user(role), "order.cancelPending", ORG_A)).toBe(true);
+    for (const role of ["scanner", "finance"] as const) expect(can(user(role), "order.cancelPending", ORG_A)).toBe(false);
+    for (const role of ["manager", "box_office", "scanner", "finance"] as const) expect(can(user(role), "order.cancel", ORG_A)).toBe(false);
+    expect(can(user("owner"), "order.cancel", ORG_A)).toBe(true);
+    expect(can(superAdmin, "order.cancel", ORG_A)).toBe(true);
+  });
+
   it("every role grants only known permissions", () => {
     for (const role of ORG_ROLES) {
       for (const p of ROLE_PERMISSIONS[role]) expect(PERMISSIONS).toContain(p);

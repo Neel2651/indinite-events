@@ -81,7 +81,10 @@ export async function eventFinance(eventId: string): Promise<EventFinance | null
   const cash = pick("offline", "cash");
   const account = pick("offline", "bank_transfer");
   const comp = pick("offline", "complimentary");
-  const owed = ledger.filter((l) => l.kind === "offline_sale_owed").reduce((n, l) => n + l.amountPence, 0);
+  // Cancelled bookings reverse what they owed.
+  const owed =
+    ledger.filter((l) => l.kind === "offline_sale_owed").reduce((n, l) => n + l.amountPence, 0) -
+    ledger.filter((l) => l.kind === "offline_sale_reversed").reduce((n, l) => n + l.amountPence, 0);
   const paid = ledger.filter((l) => l.kind === "settled").reduce((n, l) => n + l.amountPence, 0);
   const platformFees = sum(online, "fees");
   const cardFees = sum(online, "cardFees");

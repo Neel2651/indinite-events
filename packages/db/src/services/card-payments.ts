@@ -9,9 +9,10 @@ import { Organizer } from "../models/organizer";
 import { WebhookEvent } from "../models/webhook-event";
 import { requireStripe, snapshotAccount, type Stripe } from "../stripe";
 import { withTransaction } from "../transaction";
-import { CheckoutError, fulfilOrder, LateSoldOutError } from "./checkout";
+import { CheckoutError, fulfilOrder, HoldExpiredError, LateSoldOutError } from "./checkout";
 import { releaseHold } from "./holds";
 import { disconnectMerchantAccount, syncMerchantAccount } from "./merchant";
+import { syncExternalRefunds } from "./stripe-refunds";
 
 /** Stripe needs a Checkout Session to live at least 30 minutes (and at most 24 hours). */
 const MIN_SESSION_MS = 31 * 60_000;
@@ -92,38 +93,41 @@ export async function confirmCardPayment(orderId: string, checkoutSessionId: str
   try {
     return await fulfilOrder(orderId, { mode: "stripe", checkoutSessionId, paymentIntentId });
   } catch (e) {
-    if (!(e instanceof LateSoldOutError)) throw e;
+    const cancelled = e instanceof HoldExpiredError && (await Order.exists({ _id: orderId, status: "cancelled" }));
+    if (!(e instanceof LateSoldOutError) && !cancelled) throw e;
     const order = await Order.findById(orderId).lean();
-    if (!order || order.status === "refunded") return null;
+    if (!order || order.status === "refunded" || (order.refunds ?? []).some((r) => r.stripeRefundId && r.refundedBy === "system")) return null;
+    const why = cancelled ? "The booking was cancelled before the payment completed" : "Passes sold out before your payment completed";
     const refund = await requireStripe().createRefund({
       paymentIntentId,
       amountPence: order.totalPence,
       reverseTransfer: true,
       refundApplicationFee: true,
       idempotencyKey: `late-soldout-${orderId}`,
-      metadata: { orderId: String(order._id), publicId: order.publicId, reason: "sold_out_after_late_payment" },
+      metadata: { orderId: String(order._id), publicId: order.publicId, reason: cancelled ? "paid_after_cancel" : "sold_out_after_late_payment" },
     });
     await withTransaction(async (session) => {
       const updated = await Order.findOneAndUpdate(
-        { _id: order._id, status: { $ne: "refunded" } },
+        { _id: order._id, status: { $ne: "refunded" }, "refunds.refundedBy": { $ne: "system" } },
         {
-          $set: { status: "refunded", "stripe.checkoutSessionId": checkoutSessionId, "stripe.paymentIntentId": paymentIntentId },
+          // A cancelled booking stays cancelled; its payment is simply returned.
+          $set: { ...(cancelled ? {} : { status: "refunded" }), "stripe.checkoutSessionId": checkoutSessionId, "stripe.paymentIntentId": paymentIntentId },
           $inc: { refundedPence: order.totalPence },
-          $push: { refunds: { ticketIds: [], amountPence: order.totalPence, method: "stripe", stripeRefundId: refund.id, reason: "Passes sold out before your payment completed", refundedBy: "system" } },
+          $push: { refunds: { ticketIds: [], amountPence: order.totalPence, method: "stripe", stripeRefundId: refund.id, reason: why, refundedBy: "system" } },
         },
         { session, new: true },
       ).lean();
       if (!updated) return;
       await audited(session, {
-        action: "order.late_payment_refunded",
+        action: cancelled ? "order.payment_after_cancel_refunded" : "order.late_payment_refunded",
         entity: { type: "order", id: order._id },
         before: { status: order.status },
-        after: { status: "refunded", refundedPence: order.totalPence },
-        reason: "Passes sold out before the late payment completed",
+        after: { status: cancelled ? order.status : "refunded", refundedPence: order.totalPence },
+        reason: why,
         organizerId: order.organizerId,
         metadata: { stripeRefundId: refund.id },
       });
-      await enqueueSendRefundEmail({ orderId: String(order._id), kind: "sold_out" }, { session });
+      await enqueueSendRefundEmail({ orderId: String(order._id), kind: cancelled ? "cancelled" : "sold_out" }, { session });
     });
     return null;
   }
@@ -180,6 +184,13 @@ async function processEvent(event: Stripe.Event, appUrl?: string) {
       if (hold) await releaseHold(hold._id, "checkout_expired");
       return;
     }
+    case "charge.refunded": {
+      // A refund made in the Stripe dashboard (ours are already recorded and marked source=indinite).
+      const charge = event.data.object;
+      const pi = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+      if (pi) await syncExternalRefunds(pi);
+      return;
+    }
     case "account.updated":
       await syncMerchantAccount(snapshotAccount(event.data.object), appUrl);
       return;
@@ -187,7 +198,7 @@ async function processEvent(event: Stripe.Event, appUrl?: string) {
       if (event.account) await disconnectMerchantAccount(event.account);
       return;
     default:
-      return; // Not needed (charge.refunded etc. are recorded when we create the refund).
+      return; // Not needed.
   }
 }
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { linkSecret, signOrderLink } from "@indinite/core/links";
 import { getOrderHistory, quoteRefund, type TimelineEntry } from "@indinite/db";
+import { CancelPanel } from "@/components/staff/cancel-panel";
 import { RefundPanel } from "@/components/staff/refund-panel";
 import { ResendButton } from "@/components/staff/order-actions";
 import { PageHeader } from "@/components/staff/shell";
@@ -45,6 +46,7 @@ export default async function OrderPage({ params }: { params: Promise<{ slug: st
   const viewUrl = paid ? `/orders/${order.publicId}?t=${encodeURIComponent(signOrderLink(order.publicId, linkSecret()))}` : null;
   const nights = new Map((event?.sessions ?? []).map((s) => [String(s._id), formatDay(s.startsAt)]));
   const refund = can("order.refund") ? await quoteRefund(organizer.id, order.publicId) : null;
+  const canCancel = (order.status === "pending" && can("order.cancelPending")) || (paid && order.source === "offline" && can("order.cancel"));
 
   return (
     <>
@@ -62,6 +64,18 @@ export default async function OrderPage({ params }: { params: Promise<{ slug: st
           </div>
         }
       />
+      {order.needsReview && (
+        <p role="alert" className="mb-6 rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
+          <strong>Needs review:</strong> {order.reviewNote ?? "Something changed outside Indinite."}
+        </p>
+      )}
+      {order.status === "cancelled" && (
+        <p className="mb-6 rounded-md bg-muted px-4 py-3 text-sm">
+          <strong>Cancelled</strong>
+          {order.cancellation?.at ? ` on ${formatDay(order.cancellation.at)}` : ""}
+          {order.cancellation?.reason ? `: “${order.cancellation.reason}”` : ""}
+        </p>
+      )}
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <section className="rounded-lg border border-border bg-card p-6">
@@ -165,6 +179,12 @@ export default async function OrderPage({ params }: { params: Promise<{ slug: st
               />
             </section>
           )}
+          {canCancel && (
+            <section className="rounded-lg border border-destructive/40 bg-card p-6">
+              <h2 className="mb-3 text-lg">Cancel booking</h2>
+              <CancelPanel slug={slug} publicId={order.publicId} pending={order.status === "pending"} />
+            </section>
+          )}
           {(order.refunds ?? []).length > 0 && (
             <section className="rounded-lg border border-border bg-card p-6 text-sm">
               <h2 className="mb-2 text-lg">Refunds</h2>
@@ -172,7 +192,7 @@ export default async function OrderPage({ params }: { params: Promise<{ slug: st
                 {order.refunds!.map((r, i) => (
                   <li key={i} className="flex justify-between gap-3">
                     <span>
-                      {r.ticketIds?.length ? `${r.ticketIds.length} pass${r.ticketIds.length === 1 ? "" : "es"}` : "Whole booking"} · {r.method === "stripe" ? "to card" : r.method === "outside_indinite" ? "repaid by organiser" : "cancelled"}
+                      {r.ticketIds?.length ? `${r.ticketIds.length} pass${r.ticketIds.length === 1 ? "" : "es"}` : "Whole booking"} · {r.method === "stripe" ? "to card" : r.method === "stripe_dashboard" ? "to card, in the Stripe dashboard" : r.method === "outside_indinite" ? "repaid by organiser" : "cancelled"}
                       <span className="block text-xs text-muted-foreground">{r.reason}</span>
                     </span>
                     <span className="font-semibold">{price(r.amountPence)}</span>

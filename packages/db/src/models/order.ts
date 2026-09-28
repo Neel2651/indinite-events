@@ -61,7 +61,8 @@ const orderSchema = new Schema(
         {
           ticketIds: [{ type: Schema.Types.ObjectId, ref: "Ticket" }],
           amountPence: { type: Number, required: true, min: 0 },
-          method: { type: String, enum: ["stripe", "outside_indinite", "none"], required: true },
+          /** stripe_dashboard = refunded in Stripe directly, outside Indinite (recorded from charge.refunded). */
+          method: { type: String, enum: ["stripe", "stripe_dashboard", "outside_indinite", "none"], required: true },
           stripeRefundId: String,
           reason: { type: String, required: true },
           refundedBy: { type: String, required: true },
@@ -84,6 +85,11 @@ const orderSchema = new Schema(
       note: String,
       issuedBy: String,
     },
+    /** Staff should look at this order (e.g. part-refunded in the Stripe dashboard: which passes?). */
+    needsReview: { type: Boolean, default: false },
+    reviewNote: String,
+    /** Cancelled by staff (pending booking, or a paid cash / account / complimentary booking). */
+    cancellation: { reason: String, by: String, at: Date },
     createdBy: String, // user id for organizer-created orders
     expiresAt: Date,
     paidAt: Date,
@@ -95,6 +101,10 @@ orderSchema.index({ organizerId: 1, createdAt: -1 });
 orderSchema.index({ eventId: 1, status: 1 });
 orderSchema.index({ "customer.email": 1, publicId: 1 });
 orderSchema.index({ "stripe.checkoutSessionId": 1 }, { unique: true, sparse: true });
+orderSchema.index({ "stripe.paymentIntentId": 1 }, { sparse: true });
+/** Admin orders list (all organisers, newest first) and reconciliation. */
+orderSchema.index({ createdAt: -1 });
+orderSchema.index({ status: 1, source: 1, createdAt: -1 });
 
 export type OrderDoc = InferSchemaType<typeof orderSchema>;
 export const Order = defineModel("Order", orderSchema);

@@ -5,6 +5,7 @@ import {
   connectDb,
   disconnectDb,
   processNextJob,
+  reconcileStripe,
   sweepExpiredHolds,
   type QueueName,
   type SendAuthEmailJob,
@@ -25,6 +26,8 @@ const asSystem = <T>(requestId: string, fn: () => Promise<T>) =>
 
 const POLL_MS = 1_000;
 const SWEEP_EVERY_MS = 60_000;
+/** Stripe reconciliation: missed webhooks and refunds made in the Stripe dashboard. */
+const RECONCILE_EVERY_MS = 15 * 60_000;
 const abort = new AbortController();
 let stopping = false;
 /** Idle wait that ends early on shutdown. */
@@ -64,14 +67,29 @@ async function sweepLoop() {
   }
 }
 
+// Also safe on several instances: every fix it makes is conditional and idempotent.
+async function reconcileLoop() {
+  await idle(60_000); // let the web app and webhooks settle after a deploy
+  while (!stopping) {
+    try {
+      const r = await asSystem("job:reconcile-stripe", () => reconcileStripe());
+      if (r && (r.confirmed || r.released || r.refundsRecorded)) console.log(`[reconcile-stripe] confirmed ${r.confirmed}, released ${r.released}, dashboard refunds recorded ${r.refundsRecorded}`);
+    } catch (err) {
+      console.error("[reconcile-stripe] failed:", err instanceof Error ? err.message : err);
+    }
+    await idle(RECONCILE_EVERY_MS);
+  }
+}
+
 const loops = [
   ...runQueue<SendTicketsJob>(QUEUES.sendTickets, 3, sendTickets),
   ...runQueue<SendAuthEmailJob>(QUEUES.sendAuthEmail, 2, sendAuthEmail),
   ...runQueue<SendPaymentLinkJob>(QUEUES.sendPaymentLink, 2, sendPaymentLink),
   ...runQueue<SendRefundEmailJob>(QUEUES.sendRefundEmail, 2, sendRefundEmail),
   sweepLoop(),
+  reconcileLoop(),
 ];
-console.log("Worker running: send-tickets, send-auth-email, send-payment-link, send-refund-email, sweep-holds");
+console.log("Worker running: send-tickets, send-auth-email, send-payment-link, send-refund-email, sweep-holds, reconcile-stripe");
 
 const shutdown = async () => {
   if (stopping) return;

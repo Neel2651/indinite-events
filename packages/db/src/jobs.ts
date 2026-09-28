@@ -32,7 +32,8 @@ export interface SendPaymentLinkJob {
 /** SPEC §4.6: tell the customer about a refund (owner refund, or sold out after a late payment). */
 export interface SendRefundEmailJob {
   orderId: string;
-  kind: "refund" | "sold_out";
+  /** cancelled: staff cancelled the booking; stripe_refund: refunded in full in the Stripe dashboard. */
+  kind: "refund" | "sold_out" | "cancelled" | "stripe_refund";
   /** Index into order.refunds (owner refunds). */
   refundIndex?: number;
 }

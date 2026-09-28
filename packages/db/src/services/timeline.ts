@@ -91,7 +91,16 @@ export async function getOrderHistory(organizerId: string, publicId: string) {
       case "order.resend_requested":
         return { at, kind: "emailed", title: "Staff asked to email the passes again", by, tone: "neutral" };
       case "order.hold_released":
-        return { at, kind: "other", title: "Booking expired unpaid; passes released", by, tone: "warning" };
+        return { at, kind: "other", title: a.reason === "cancelled" ? "Unpaid booking cancelled; passes released" : "Booking expired unpaid; passes released", by, tone: "warning" };
+      case "order.cancelled":
+        return { at, kind: "refund", title: "Booking cancelled", detail: a.reason ?? undefined, by, tone: "danger" };
+      case "order.refunded_in_stripe": {
+        const m = (a.metadata ?? {}) as { amountPence?: number; passesRefunded?: number };
+        const amount = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format((m.amountPence ?? 0) / 100);
+        return { at, kind: "refund", title: `Refunded ${amount} in the Stripe dashboard${m.passesRefunded ? ` (${m.passesRefunded} pass${m.passesRefunded === 1 ? "" : "es"} stopped)` : ""}`, detail: a.reason ?? undefined, by, tone: "warning" };
+      }
+      case "order.payment_after_cancel_refunded":
+        return { at, kind: "refund", title: "Paid after it was cancelled, so refunded in full", by, tone: "danger" };
       default:
         return { at, kind: "other", title: a.action, by, detail: a.reason ?? undefined, tone: "neutral" };
     }
@@ -104,12 +113,12 @@ export async function getOrderHistory(organizerId: string, publicId: string) {
         .filter((a) => a.entity?.id === id)
         .map((a) => ({
           at: a.createdAt as Date,
-          kind: (a.action === "ticket.refunded" ? "refund" : "ticket_issued") as TimelineEntry["kind"],
-          title: a.action === "ticket.issued" ? "Pass generated" : a.action === "ticket.refunded" ? "Refunded (no longer valid at the gate)" : a.action,
-          detail: a.action === "ticket.refunded" ? (a.reason ?? undefined) : undefined,
+          kind: (a.action === "ticket.refunded" || a.action === "ticket.cancelled" ? "refund" : "ticket_issued") as TimelineEntry["kind"],
+          title: a.action === "ticket.issued" ? "Pass generated" : a.action === "ticket.refunded" ? "Refunded (no longer valid at the gate)" : a.action === "ticket.cancelled" ? "Cancelled (no longer valid at the gate)" : a.action,
+          detail: a.action === "ticket.refunded" || a.action === "ticket.cancelled" ? (a.reason ?? undefined) : undefined,
           by: actorName(a),
           ticketId: id,
-          tone: (a.action === "ticket.refunded" ? "warning" : "neutral") as TimelineEntry["tone"],
+          tone: (a.action === "ticket.refunded" || a.action === "ticket.cancelled" ? "warning" : "neutral") as TimelineEntry["tone"],
         })),
       ...scans
         .filter((s) => String(s.ticketId) === id)

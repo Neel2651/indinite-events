@@ -173,24 +173,60 @@ export interface RefundEmailData {
   customerName: string;
   eventTitle: string;
   publicId: string;
-  kind: "refund" | "sold_out";
+  /** cancelled: staff cancelled the booking; stripe_refund: refunded in full through Stripe. */
+  kind: "refund" | "sold_out" | "cancelled" | "stripe_refund";
   amountText: string;
   passes: number;
-  method: "stripe" | "outside_indinite" | "none";
+  method: "stripe" | "stripe_dashboard" | "outside_indinite" | "none";
+  /** Cancelled bookings: how it was paid (so we say who repays, if anyone). */
+  offlineMethod?: "cash" | "bank_transfer" | "complimentary" | null;
   policyUrl: string;
 }
 
 export const refundSubject = (d: RefundEmailData) =>
-  d.kind === "sold_out" ? `Your booking for ${d.eventTitle} couldn't be completed` : `Refund for ${d.eventTitle} (${d.publicId})`;
+  d.kind === "sold_out"
+    ? `Your booking for ${d.eventTitle} couldn't be completed`
+    : d.kind === "cancelled"
+      ? `Your booking for ${d.eventTitle} has been cancelled (${d.publicId})`
+      : `Refund for ${d.eventTitle} (${d.publicId})`;
 
 /** Customer: refund confirmation, or apology + full refund when passes sold out during a late payment. */
 export function RefundEmail(d: RefundEmailData) {
   const how =
-    d.method === "stripe"
+    d.method === "stripe" || d.method === "stripe_dashboard"
       ? "It goes back to the card you paid with and usually shows within 5–10 working days."
       : d.method === "outside_indinite"
         ? "You paid the organiser directly, so they'll repay you the same way."
         : "These were complimentary passes, so there's nothing to repay.";
+  if (d.kind === "cancelled") {
+    const repay =
+      d.method === "stripe"
+        ? `Your card payment of ${d.amountText} has been refunded in full. ${how}`
+        : d.offlineMethod === "complimentary"
+          ? "These were complimentary passes, so there's nothing to repay."
+          : "You paid the organiser directly, so please contact them about any repayment.";
+    return (
+      <Shell preview="Your booking has been cancelled" title="Booking cancelled">
+        <Text style={p}>Hi {d.customerName.split(" ")[0]},</Text>
+        <Text style={p}>
+          Your booking <strong style={{ color: brand.ink }}>{d.publicId}</strong> for {d.eventTitle} has been cancelled by the organiser. Its passes no longer work at the gate.
+        </Text>
+        <Text style={p}>{repay}</Text>
+        <Text style={{ ...p, fontSize: "13px" }}>If you think this is a mistake, reply to the organiser or contact us.</Text>
+      </Shell>
+    );
+  }
+  if (d.kind === "stripe_refund") {
+    return (
+      <Shell preview={`Refund of ${d.amountText}`} title="Your refund">
+        <Text style={p}>Hi {d.customerName.split(" ")[0]},</Text>
+        <Text style={p}>
+          Your booking <strong style={{ color: brand.ink }}>{d.publicId}</strong> for {d.eventTitle} has been refunded: <strong style={{ color: brand.ink }}>{d.amountText}</strong>. Its passes no longer work at the gate.
+        </Text>
+        <Text style={p}>{how}</Text>
+      </Shell>
+    );
+  }
   return (
     <Shell preview={d.kind === "sold_out" ? "We've refunded your payment in full" : `Refund of ${d.amountText}`} title={d.kind === "sold_out" ? "Sorry, those passes sold out" : "Your refund"}>
       <Text style={p}>Hi {d.customerName.split(" ")[0]},</Text>

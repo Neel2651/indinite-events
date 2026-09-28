@@ -29,6 +29,10 @@ export interface StripeGateway {
     cancelUrl: string;
   }): Promise<{ id: string; url: string }>;
   expireCheckoutSession(sessionId: string): Promise<void>;
+  /** Current state of a Checkout Session (cancel and reconciliation). */
+  retrieveCheckoutSession(sessionId: string): Promise<{ id: string; status: "open" | "complete" | "expired"; paymentStatus: string; paymentIntentId: string | null }>;
+  /** Every refund on a payment, ours (metadata.source = "indinite") and any made in the Stripe dashboard. */
+  listRefunds(paymentIntentId: string): Promise<{ id: string; amountPence: number; status: string; metadata: Record<string, string> }[]>;
   createRefund(input: {
     paymentIntentId: string;
     amountPence: number;
@@ -143,6 +147,20 @@ class LiveStripeGateway implements StripeGateway {
     await this.stripe.checkout.sessions.expire(sessionId).catch(() => {});
   }
 
+  async retrieveCheckoutSession(sessionId: string) {
+    const s = await this.stripe.checkout.sessions.retrieve(sessionId);
+    const pi = typeof s.payment_intent === "string" ? s.payment_intent : (s.payment_intent?.id ?? null);
+    return { id: s.id, status: (s.status ?? "open") as "open" | "complete" | "expired", paymentStatus: s.payment_status, paymentIntentId: pi };
+  }
+
+  async listRefunds(paymentIntentId: string) {
+    const out: { id: string; amountPence: number; status: string; metadata: Record<string, string> }[] = [];
+    for await (const r of this.stripe.refunds.list({ payment_intent: paymentIntentId, limit: 100 })) {
+      out.push({ id: r.id, amountPence: r.amount, status: r.status ?? "pending", metadata: (r.metadata ?? {}) as Record<string, string> });
+    }
+    return out;
+  }
+
   async createRefund(input: Parameters<StripeGateway["createRefund"]>[0]) {
     const refund = await this.stripe.refunds.create(
       {
@@ -150,7 +168,8 @@ class LiveStripeGateway implements StripeGateway {
         amount: input.amountPence,
         reverse_transfer: input.reverseTransfer,
         refund_application_fee: input.refundApplicationFee,
-        metadata: input.metadata,
+        // Marks refunds made by Indinite, so charge.refunded can tell them from Stripe dashboard refunds.
+        metadata: { ...input.metadata, source: "indinite" },
       },
       { idempotencyKey: input.idempotencyKey },
     );

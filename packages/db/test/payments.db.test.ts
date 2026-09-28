@@ -31,6 +31,12 @@ import {
   startCardCheckout,
   startMerchantOnboarding,
   syncMerchantAccount,
+  cancelOrder,
+  CancelError,
+  CommissionLedger,
+  eventFinance,
+  reconcileStripe,
+  syncExternalRefunds,
   type Stripe,
   type StripeGateway,
 } from "../src";
@@ -61,15 +67,41 @@ class FakeStripe implements StripeGateway {
   async retrieveAccount(id: string) {
     return { id, chargesEnabled: true, payoutsEnabled: true, detailsSubmitted: true, disabledReason: null, currentlyDue: [] };
   }
+  sessions = new Map<string, { status: "open" | "complete" | "expired"; paymentStatus: string; paymentIntentId: string | null }>();
+  refunds = new Map<string, { id: string; amountPence: number; status: string; metadata: Record<string, string> }[]>();
   async createCheckoutSession(input: { orderId: string }) {
     this.record("createCheckoutSession", input);
     const id = `cs_test_${++this.n}`;
+    this.sessions.set(id, { status: "open", paymentStatus: "unpaid", paymentIntentId: null });
     return { id, url: `https://checkout.stripe.test/${id}` };
   }
-  async expireCheckoutSession() {}
-  async createRefund(input: unknown) {
+  async expireCheckoutSession(id: string) {
+    this.record("expireCheckoutSession", id);
+    const s = this.sessions.get(id);
+    if (s?.status === "open") s.status = "expired";
+  }
+  async retrieveCheckoutSession(id: string) {
+    const s = this.sessions.get(id) ?? { status: "expired" as const, paymentStatus: "unpaid", paymentIntentId: null };
+    return { id, ...s };
+  }
+  /** Test helper: the customer paid on Stripe's page. */
+  completeSession(id: string, paymentIntentId: string) {
+    this.sessions.set(id, { status: "complete", paymentStatus: "paid", paymentIntentId });
+  }
+  async createRefund(input: { paymentIntentId: string; amountPence: number; metadata: Record<string, string> }) {
     this.record("createRefund", input);
-    return { id: `re_test_${++this.n}`, status: "succeeded" };
+    const r = { id: `re_test_${++this.n}`, amountPence: input.amountPence, status: "succeeded", metadata: { ...input.metadata, source: "indinite" } };
+    this.refunds.set(input.paymentIntentId, [...(this.refunds.get(input.paymentIntentId) ?? []), r]);
+    return { id: r.id, status: r.status };
+  }
+  async listRefunds(paymentIntentId: string) {
+    return this.refunds.get(paymentIntentId) ?? [];
+  }
+  /** Test helper: someone refunded in the Stripe dashboard (no Indinite metadata). */
+  dashboardRefund(paymentIntentId: string, amountPence: number) {
+    const r = { id: `re_dash_${++this.n}`, amountPence, status: "succeeded", metadata: {} };
+    this.refunds.set(paymentIntentId, [...(this.refunds.get(paymentIntentId) ?? []), r]);
+    return r;
   }
   verifyWebhook(): Stripe.Event {
     throw new Error("not used");
@@ -321,5 +353,132 @@ describe("refunds (owner only, before the event, ticket price only)", () => {
     const rc = await asUser("owner-1", () => refundTickets({ user: owner(), organizerId: orgId, publicId: comp.order.publicId, ticketIds: [compT!], reason: "Guest cancelled" }));
     expect(rc).toMatchObject({ amountPence: 0, status: "refunded" });
     expect(await Order.findById(comp.order._id).lean()).toMatchObject({ refunds: [expect.objectContaining({ method: "none" })] });
+  });
+});
+
+describe("cancel (agreed 28 Sep 2026)", () => {
+  const boxOffice = (): AuthUser => ({ id: "box-1", isSuperAdmin: false, memberships: [{ organizerId: orgId, role: "box_office" }] });
+
+  it("box office cancels an unpaid card booking: Stripe page closed, seats back, audited", async () => {
+    await activateMerchant();
+    const order = await asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 2 }] }, new Date(), { requireCardPayments: true }));
+    await asCustomer(() => startCardCheckout(String(order._id), urls));
+    expect(await TicketType.findById(passId).lean()).toMatchObject({ held: 2 });
+    const r = await asUser("box-1", () => cancelOrder({ user: boxOffice(), organizerId: orgId, publicId: order.publicId, reason: "Customer changed their mind" }));
+    expect(r).toEqual({ status: "cancelled", passes: 0 });
+    expect(stripe.count("expireCheckoutSession")).toBe(1);
+    expect(await TicketType.findById(passId).lean()).toMatchObject({ held: 0, sold: 0 });
+    expect(await Order.findById(order._id).lean()).toMatchObject({ status: "cancelled", cancellation: { reason: "Customer changed their mind", by: "box-1" } });
+    expect(await AuditLog.findOne({ action: "order.cancelled", "entity.id": String(order._id) }).lean()).toMatchObject({ actor: { id: "box-1" } });
+  });
+
+  it("won't cancel an unpaid booking the customer has just paid for", async () => {
+    await activateMerchant();
+    const order = await asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }] }, new Date(), { requireCardPayments: true }));
+    const { url } = await asCustomer(() => startCardCheckout(String(order._id), urls));
+    stripe.completeSession(url.split("/").pop()!, "pi_just_paid");
+    await expect(asUser("box-1", () => cancelOrder({ user: boxOffice(), organizerId: orgId, publicId: order.publicId, reason: "Too late" }))).rejects.toThrow(/has just paid/);
+    expect((await Order.findById(order._id).lean())!.status).toBe("pending");
+  });
+
+  it("refunds a card payment that completes after the booking was cancelled", async () => {
+    await activateMerchant();
+    const order = await asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }] }, new Date(), { requireCardPayments: true }));
+    const { url } = await asCustomer(() => startCardCheckout(String(order._id), urls));
+    await asUser("box-1", () => cancelOrder({ user: boxOffice(), organizerId: orgId, publicId: order.publicId, reason: "Wrong event" }));
+    await handleStripeEvent(stripeEvent("checkout.session.completed", { id: url.split("/").pop(), payment_status: "paid", payment_intent: "pi_after_cancel", metadata: { orderId: String(order._id) } }), APP);
+    const after = (await Order.findById(order._id).lean())!;
+    expect(after.status).toBe("cancelled");
+    expect(after.refundedPence).toBe(order.totalPence);
+    expect(stripe.last("createRefund")).toMatchObject({ paymentIntentId: "pi_after_cancel", amountPence: order.totalPence, refundApplicationFee: true });
+    expect(await Ticket.countDocuments({ orderId: order._id })).toBe(0);
+  });
+
+  it("owner cancels a paid cash booking: passes stop, seats back, commission reversed, customer emailed", async () => {
+    const { order } = await asUser("box-1", () => issueOfflineOrder(orgId, "box-1", { eventId, customer, items: [{ ticketTypeId: passId, qty: 2 }], method: "cash", note: "Paid at the door" }));
+    await expect(asUser("box-1", () => cancelOrder({ user: boxOffice(), organizerId: orgId, publicId: order.publicId, reason: "Mistake" }))).rejects.toThrow(/Only the organiser's owner/);
+    const owedBefore = (await eventFinance(eventId))!.direct.commissionOwedPence;
+    expect(owedBefore).toBeGreaterThan(0);
+    const r = await asUser("owner-1", () => cancelOrder({ user: owner(), organizerId: orgId, publicId: order.publicId, reason: "Entered twice" }));
+    expect(r).toEqual({ status: "cancelled", passes: 2 });
+    expect(await Ticket.countDocuments({ orderId: order._id, status: "cancelled" })).toBe(2);
+    expect(await TicketType.findById(passId).lean()).toMatchObject({ sold: 0 });
+    expect((await eventFinance(eventId))!.direct.commissionOwedPence).toBe(owedBefore - order.applicationFeePence);
+    expect(await CommissionLedger.findOne({ orderId: order._id, kind: "offline_sale_reversed" }).lean()).toMatchObject({ amountPence: order.applicationFeePence });
+    expect(await Job.countDocuments({ queue: "send-refund-email", "data.kind": "cancelled", "data.orderId": String(order._id) })).toBe(1);
+  });
+
+  it("won't cancel a paid card booking (refund it) or one with a pass used at the gate", async () => {
+    const card = await paidCardOrder(1);
+    await expect(asUser("owner-1", () => cancelOrder({ user: owner(), organizerId: orgId, publicId: card.publicId, reason: "Not coming" }))).rejects.toThrow(/Use Refund/);
+    const { order } = await asUser("box-1", () => issueOfflineOrder(orgId, "box-1", { eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }], method: "cash", note: "Paid" }));
+    const t = (await Ticket.findOne({ orderId: order._id }).lean())!;
+    const ev = (await Event.findById(eventId).lean())!;
+    await Scan.create({ clientScanId: "c1", ticketId: t._id, eventId: ev._id, sessionId: ev.sessions[0]!._id, gate: "A", deviceId: "d", scannerUserId: "s", result: "admitted", scannedAt: new Date() });
+    await expect(asUser("owner-1", () => cancelOrder({ user: owner(), organizerId: orgId, publicId: order.publicId, reason: "Not coming" }))).rejects.toThrow(/used at the gate/);
+  });
+});
+
+describe("refunds made in the Stripe dashboard", () => {
+  it("full refund: unscanned passes refunded, seats back, order refunded, customer emailed", async () => {
+    const order = await paidCardOrder(2);
+    stripe.dashboardRefund("pi_test_1", order.totalPence);
+    await handleStripeEvent(stripeEvent("charge.refunded", { id: "ch_1", payment_intent: "pi_test_1" }), APP);
+    const after = (await Order.findById(order._id).lean())!;
+    expect(after).toMatchObject({ status: "refunded", refundedPence: order.totalPence, needsReview: false });
+    expect(after.refunds.at(-1)).toMatchObject({ method: "stripe_dashboard", refundedBy: "stripe" });
+    expect(await Ticket.countDocuments({ orderId: order._id, status: "refunded" })).toBe(2);
+    expect(await TicketType.findById(passId).lean()).toMatchObject({ sold: 0 });
+    expect(await Job.countDocuments({ queue: "send-refund-email", "data.kind": "stripe_refund" })).toBe(1);
+    // Replaying the event (or reconciliation) records nothing twice.
+    expect(await asUser("sys", () => syncExternalRefunds("pi_test_1"))).toEqual({ recorded: 0, full: false });
+  });
+
+  it("part refund: amount recorded, passes kept, order flagged for review", async () => {
+    const order = await paidCardOrder(2);
+    stripe.dashboardRefund("pi_test_1", 500);
+    await handleStripeEvent(stripeEvent("charge.refunded", { id: "ch_1", payment_intent: "pi_test_1" }), APP);
+    const after = (await Order.findById(order._id).lean())!;
+    expect(after).toMatchObject({ status: "partially_refunded", refundedPence: 500, needsReview: true });
+    expect(after.reviewNote).toMatch(/£5.00 refunded in Stripe outside Indinite/);
+    expect(await Ticket.countDocuments({ orderId: order._id, status: "valid" })).toBe(2);
+    expect(await AuditLog.findOne({ action: "order.refunded_in_stripe", "entity.id": String(order._id) }).lean()).toMatchObject({ actor: { type: "stripe" } });
+  });
+
+  it("doesn't count Indinite's own refunds as dashboard refunds", async () => {
+    const order = await paidCardOrder(2);
+    const [t1] = (await Ticket.find({ orderId: order._id }).sort({ _id: 1 }).lean()).map((t) => String(t._id));
+    await asUser("owner-1", () => refundTickets({ user: owner(), organizerId: orgId, publicId: order.publicId, ticketIds: [t1!], reason: "Can't come" }));
+    await handleStripeEvent(stripeEvent("charge.refunded", { id: "ch_1", payment_intent: "pi_test_1" }), APP);
+    const after = (await Order.findById(order._id).lean())!;
+    expect(after.refunds).toHaveLength(1);
+    expect(after.needsReview).toBe(false);
+  });
+});
+
+describe("Stripe reconciliation", () => {
+  it("confirms a paid checkout whose webhook never arrived, and releases expired ones", async () => {
+    await activateMerchant();
+    const paid = await asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }] }, new Date(), { requireCardPayments: true }));
+    const { url } = await asCustomer(() => startCardCheckout(String(paid._id), urls));
+    stripe.completeSession(url.split("/").pop()!, "pi_missed");
+    const lost = await asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }] }, new Date(), { requireCardPayments: true }));
+    const lostUrl = (await asCustomer(() => startCardCheckout(String(lost._id), urls))).url;
+    await stripe.expireCheckoutSession(lostUrl.split("/").pop()!);
+
+    const later = new Date(Date.now() + 5 * 60_000);
+    const r = await runWithContext({ actor: systemActor }, () => reconcileStripe(later));
+    expect(r).toMatchObject({ confirmed: 1, released: 1 });
+    expect(await Order.findById(paid._id).lean()).toMatchObject({ status: "paid", stripe: { paymentIntentId: "pi_missed" } });
+    expect(await Ticket.countDocuments({ orderId: paid._id })).toBe(1);
+    expect((await Order.findById(lost._id).lean())!.status).toBe("expired");
+  });
+
+  it("records dashboard refunds it finds on recent card orders", async () => {
+    const order = await paidCardOrder(1);
+    stripe.dashboardRefund("pi_test_1", order.totalPence);
+    const r = await runWithContext({ actor: systemActor }, () => reconcileStripe());
+    expect(r?.refundsRecorded).toBe(1);
+    expect((await Order.findById(order._id).lean())!.status).toBe("refunded");
   });
 });

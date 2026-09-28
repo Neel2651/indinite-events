@@ -19,3 +19,6 @@ export * from "./services/merchant";
 export * from "./services/card-payments";
 export * from "./services/refunds";
 export * from "./services/events";
+export * from "./services/cancel";
+export * from "./services/stripe-refunds";
+export * from "./services/reconcile";

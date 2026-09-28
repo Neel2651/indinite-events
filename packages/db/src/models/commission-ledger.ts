@@ -8,7 +8,8 @@ const commissionLedgerSchema = new Schema(
     eventId: { type: Schema.Types.ObjectId, ref: "Event", index: true },
     orderId: { type: Schema.Types.ObjectId, ref: "Order" },
     amountPence: penceField,
-    kind: { type: String, enum: ["offline_sale_owed", "settled"], required: true },
+    /** offline_sale_reversed: commission no longer owed because the booking was cancelled. */
+    kind: { type: String, enum: ["offline_sale_owed", "offline_sale_reversed", "settled"], required: true },
     note: String,
     /** Who recorded a settlement. */
     recordedBy: String,
