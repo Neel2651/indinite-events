@@ -1,24 +1,21 @@
 # Claude Code — milestone prompts
 
 ## Status (28 Sep 2026)
-- M0 ✅ done (monorepo, web, worker, core, db, theme, health route, public listing + event page shells).
-- M1 ✅ done (data layer, audit, quota, permissions, Better Auth invitation-only, roles, /admin + /org shells, seed).
-  ESLint still not configured.
-- M2 🟡 partly: organisers, public listing + event pages, pricing, charges and coupons done; media is served from
-  MEDIA_DIR. **Missing: super-admin CRUD for events, nights and ticket types, and image upload.** Events currently
-  come only from the seed script.
-- M3 ✅ done: Stripe Connect Express onboarding (owner from /org/[slug]/payments, or super admin from
-  /admin/organisers/[id]), account.updated sync, pause online sales, card fee payer (SPEC §4.8).
-- M4 ✅ done: Stripe checkout and payment links (destination charges), idempotent webhook, holds, late-payment refund,
-  demo payment mode. Customer-paid "Card processing fee" option.
-- M5 ✅ done (QR PNG + PDF passes, React Email via Resend, signed 30-min ticket page, lookup with rate limits).
-- M6 🟡 partly: new booking (cash / account / complimentary with per-event free allowance / payment link), Team page,
-  orders table, order detail + history, resend tickets. Remaining: org audit log view, dashboard check against the prompt.
-- M7 🟡 mostly: /scan PWA, offline decision + sync, manual code, manual admit with reason, Check-ins dashboard.
-  Remaining: test on two real phones offline.
-- M8 🟡 partly: refunds (owner or super admin, per pass, quota returned), admin finance. Remaining: CSV exports,
-  super-admin global audit log with filters.
-- M9 ⬜ not started.
+- M0 ✅ done (monorepo, web, worker, core, db, theme, health route, public pages).
+- M1 ✅ done (data layer, audit, quota, permissions, Better Auth invitation-only, roles, seed). ESLint configured.
+- M2 ✅ done: super-admin events, nights, pass types, image upload, YouTube/Vimeo videos, publish/archive/delete;
+  organisers (create, edit, suspend, commission, manager discount limit), pricing, charges, coupons.
+- M3 ✅ done: Stripe Connect Express onboarding (owner or super admin), account.updated sync, pause sales, card fees.
+- M4 ✅ done: Stripe checkout and payment links, idempotent webhook, holds, late-payment refund, demo mode,
+  reconciliation job.
+- M5 ✅ done (QR + PDF passes, emails, signed ticket page, lookup with rate limits).
+- M6 ✅ done: new booking (cash / account / complimentary allowance / payment link with staff discount), orders,
+  order detail + history, resend, cancel, team, org audit log, dashboard check-ins.
+- M7 🟡 mostly: /scan PWA, offline limit, sync, manual admit. Remaining: test on two real phones offline.
+- M8 ✅ done: refunds (owner or super admin), Stripe dashboard refunds, CSV exports, admin finance, global audit log.
+- M9 🟡 partly: printable gate list, legal pages, ESLint + axe accessibility check. Remaining: k6 load test,
+  Playwright E2E for checkout / payment link / offline issue, security review of org scoping, backup restore test,
+  customer data retention job (24 months), docs/RUNBOOK.md.
 
 Paste one prompt per session, in order. Start each in plan mode (Shift+Tab), review the plan, then let it
 build. Commit and review at the end of every milestone before moving on.

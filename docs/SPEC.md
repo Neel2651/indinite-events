@@ -59,14 +59,17 @@ Discount limit for `box_office`: none (cannot apply). `manager`: max percent con
   Hard delete only if zero orders.
 - **ticketTypes**: eventId, name ("Season pass – adult"), description, pricePence, validSessionIds[],
   quota, sold, held, salesStartAt, salesEndAt, maxPerOrder, sortOrder, active.
-- **discounts**: organizerId, eventId?, code?, kind: percent|fixed, value, maxUses, used, validFrom, validTo,
-  createdBy. Ad-hoc discounts on payment links are stored inline on the order, not here.
+- **discounts**: organizerId, eventId?, code?, kind: percent|fixed, value, maxDiscountPence? (cap, % codes),
+  minSubtotalPence? (minimum ticket spend), maxUses, used, validFrom, validTo, createdBy. Ad-hoc discounts on payment
+  links are stored inline on the order, not here.
 - **holds**: orderId, items [{ticketTypeId, qty}], expiresAt, releasedAt.
 - **orders**: publicId (unique, e.g. NAV-7K3F9Q), organizerId, eventId, customer {name, email, phone?},
   source: online|payment_link|offline, status: pending|paid|expired|cancelled|refunded|partially_refunded,
   items [{ticketTypeId, name, unitPricePence, qty}], subtotalPence, discount {kind, value, amountPence,
   reason, appliedBy}?, totalPence, applicationFeePence, stripe {checkoutSessionId, paymentIntentId, url},
-  offline {method: cash|bank_transfer|complimentary, note, issuedBy}?, expiresAt?, paidAt?, timestamps.
+  offline {method: cash|bank_transfer|complimentary, note, issuedBy}?, cardFeePence, refundedPence,
+  refunds [{ticketIds, amountPence, method: stripe|stripe_dashboard|outside_indinite|none, stripeRefundId?, reason,
+  refundedBy}], needsReview, reviewNote?, cancellation {reason, by, at}?, expiresAt?, paidAt?, timestamps.
 - **tickets**: orderId, eventId, ticketTypeId, attendeeName?, qrToken, validSessionIds[],
   status: valid|cancelled|refunded, timestamps.
 - **scans**: ticketId, eventId, sessionId, gate, deviceId, scannerUserId, result:
@@ -77,7 +80,8 @@ Discount limit for `box_office`: none (cannot apply). `manager`: max percent con
   organizerId?, action, entity {type, id}, changes [{path, before, after}], reason?, ip?, userAgent?,
   requestId, createdAt.
   Indexes: {organizerId, createdAt:-1}, {"entity.type","entity.id",createdAt}, {"actor.id",createdAt}.
-- **commissionLedger**: organizerId, orderId, amountPence, kind: offline_sale_owed|settled, createdAt.
+- **commissionLedger**: organizerId, eventId, orderId, amountPence, kind: offline_sale_owed|offline_sale_reversed|settled,
+  note, recordedBy, createdAt. Owed = owed − reversed (a cancelled booking reverses what it owed).
 
 ## 4. Key flows
 
@@ -101,6 +105,10 @@ organiser `chargesEnabled` check is skipped in demo mode. Payment links behave t
 Same as 4.1 but initiated in the organizer panel: customer details, items, optional discount
 (permission + limit checked), link validity (1–24 h, default 24 h). Server emails the Checkout URL to the
 customer and shows it for copying. Audit `order.payment_link_created`.
+**Staff discount (built 28 Sep 2026):** % or £ off the ticket price with a reason, needs `order.applyDiscount`;
+limited by `maxDiscountBps` (owner unlimited, manager `maxDiscountBpsForManager`, default 50%, box office none).
+Stored on `order.discount` with `appliedBy`. A booking has a coupon or a staff discount, never both. After paying,
+the customer returns to `/checkout/success`, which waits for the webhook.
 
 ### 4.3 Organizer offline issue (already paid)
 Customer details, items, method (cash / bank transfer / complimentary), required note. Transaction: reserve
@@ -132,6 +140,23 @@ kept. Card orders: Stripe refund with `reverse_transfer` (Indinite keeps its fee
 the late-payment-sold-out path refunds everything including fees. Cash / account orders are recorded and repaid by
 the organiser. → tickets refunded → **quota always returned to sale** (agreed 28 Sep 2026) → audit → email customer.
 
+**Refunds in the Stripe dashboard (agreed 28 Sep 2026):** `charge.refunded` (and the reconciliation job) list the
+payment's refunds; ours carry `metadata.source = "indinite"` and are skipped. A full refund refunds every unscanned
+pass (quota returned), sets the order `refunded` and emails the customer. A part refund is recorded (`refundedPence`,
+`refunds[]` with method `stripe_dashboard`), the order becomes `partially_refunded` with `needsReview`, and passes
+stay valid for staff to decide.
+
+**Cancel (agreed 28 Sep 2026):** unpaid (pending) bookings: anyone with `order.cancelPending` (owner, manager,
+box office, super admin); the Stripe Checkout Session is expired first, and the cancel is refused if it has just
+completed. Seats and the coupon use come back. Paid cash / account / complimentary bookings: owner or super admin
+(`order.cancel`), only if no pass has been scanned; passes → cancelled, quota returned, coupon use given back,
+commission reversed (`offline_sale_reversed`), customer emailed. The complimentary allowance isn't given back.
+Card bookings are refunded instead. A card payment that completes after a cancel is refunded in full.
+
+**Reconciliation:** the worker runs every 15 min: pending card orders whose session is paid → fulfilled (missed
+webhook); expired sessions → hold released; card orders paid in the last 14 days → dashboard refunds recorded;
+failed webhook events are logged.
+
 ### 4.7 Pricing, charges, coupons and commission (agreed 27 Sep 2026)
 Per order: **tickets − coupon → + platform fee → + organiser charges → + tax on all of that = total.**
 Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 + 0.30 + 2.60 = **£15.62**.
@@ -140,9 +165,11 @@ Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 
 - **Organiser charges** (e.g. "Venue fee"): set by the organiser owner per event, per ticket, fixed £ or % of the
   ticket price. The money goes to the organiser.
 - **Tax**: rate set per event by the admin (0 if not applicable); charged on tickets + platform fee + charges.
-- **Coupons**: created by organiser owners/managers (% off or £ off, one event or all, max uses, dates). Taken off
-  the ticket price before fees (so the platform fee and % charges are on the discounted price). Redemption is atomic;
-  an unpaid booking that expires gives the use back.
+- **Coupons**: created by organiser owners/managers (% off or £ off, one event or all, max uses, dates as UK
+  calendar days, optional maximum discount for % codes and minimum ticket spend, both measured on the ticket
+  subtotal before fees, agreed 28 Sep 2026). Taken off the ticket price before fees (so the platform fee and %
+  charges are on the discounted price). Redemption is atomic and audited against the coupon (`coupon.redeemed`); an
+  unpaid booking that expires or is cancelled gives the use back (`coupon.released`).
 - **Online / payment link (Stripe):** Indinite receives the platform fee (application fee); the organiser receives
   the rest (tickets, charges, tax). *Assumption to confirm: all tax goes to the organiser.*
 - **Organiser bookings** (`/org/.../bookings/new`), four options: **Cash**, **Organiser's account** (bank transfer),
@@ -183,9 +210,12 @@ Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 
 
 ## 5. Routes (indicative)
 
-Public: `/`, `/e/[slug]`, `/checkout/success`, `/orders/lookup`, `/orders/[publicId]?t=<token>`
-Admin: `/admin` (events, ticket types, organizers, orders, audit)
-Organizer: `/org` (dashboard, orders, new booking, members, payouts/Stripe, audit)
+Public: `/`, `/e/[slug]`, `/checkout/success`, `/orders/lookup`, `/orders/[publicId]?t=<token>`, `/pay/[publicId]`,
+`/privacy`, `/booking-terms`, `/refund-policy`
+Admin: `/admin`, `/admin/events` (+ `/new`, `/[id]`: nights, pass types, media, publish, delete), `/admin/orders`,
+`/admin/organisers` (+ `/[id]`), `/admin/finance`, `/admin/audit`, `/admin/export/[orders|attendees|checkins]`
+Organizer: `/org/[slug]` (dashboard with check-ins), `orders`, `bookings/new`, `coupons`, `pricing`, `checkins`,
+`events/[eventId]/print` (gate list), `members`, `audit`, `payments`, `export/[orders|attendees|checkins]`
 Scanner: `/scan`
 API: `/api/checkout`, `/api/webhooks/stripe`, `/api/org/orders` (payment link / offline),
 `/api/org/stripe/onboarding-link`, `/api/scan/manifest`, `/api/scan/sync`, `/api/orders/lookup`
