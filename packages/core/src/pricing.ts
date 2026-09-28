@@ -30,6 +30,11 @@ export interface PricingInput {
   discount?: Discount;
   /** Free passes: customer pays nothing, but commission is still owed on the normal price. */
   complimentary?: boolean;
+  /**
+   * Complimentary only: passes still inside the event's commission-free allowance. Undefined = no allowance
+   * (commission on every pass).
+   */
+  complimentaryFreeLeft?: number;
   /** Card bookings only: when `payer` is "customer", a card processing fee is added after tax. */
   cardFee?: CardFeeSettings;
 }
@@ -59,7 +64,7 @@ export interface OrderPricing {
  *   = 12.00 + 0.72 + 0.30 + 2.60 = £15.62.
  */
 export function priceOrder(input: PricingInput): OrderPricing {
-  const { items, commissionBps, charges = [], taxBps = 0, discount, complimentary = false, cardFee } = input;
+  const { items, commissionBps, charges = [], taxBps = 0, discount, complimentary = false, complimentaryFreeLeft, cardFee } = input;
   if (items.length === 0) throw new Error("Order must contain at least one item");
   assertBps(commissionBps, "commissionBps");
   assertBps(taxBps, "taxBps");
@@ -74,7 +79,7 @@ export function priceOrder(input: PricingInput): OrderPricing {
   }
 
   if (complimentary) {
-    const commissionPence = applyBps(subtotalPence, commissionBps);
+    const { commissionPence } = complimentaryCommission(items, commissionBps, complimentaryFreeLeft ?? 0);
     return {
       subtotalPence,
       discountPence: subtotalPence,
@@ -132,6 +137,23 @@ export function priceOrder(input: PricingInput): OrderPricing {
     commissionPence: platformFeePence,
     organizerPence: totalPence - platformFeePence - cardFeePence,
   };
+}
+
+/** Commission-free complimentary passes per event unless the super admin changes it (agreed 28 Sep 2026). */
+export const DEFAULT_FREE_COMPLIMENTARY_PASSES = 5;
+
+/**
+ * Commission on complimentary passes (SPEC §4.7): the first `freeLeft` passes are free of commission, and the
+ * organiser owes the platform fee on each further pass's normal price. The allowance covers the highest-priced
+ * passes first.
+ */
+export function complimentaryCommission(items: LineItem[], commissionBps: number, freeLeft: number): { commissionPence: Pence; freePasses: number; chargedPasses: number } {
+  assertBps(commissionBps, "commissionBps");
+  if (!Number.isInteger(freeLeft) || freeLeft < 0) throw new Error(`freeLeft must be a non-negative integer, got ${freeLeft}`);
+  const prices = items.flatMap((i) => Array.from({ length: i.qty }, () => i.unitPricePence)).sort((a, b) => b - a);
+  const freePasses = Math.min(freeLeft, prices.length);
+  const chargeable = prices.slice(freePasses).reduce((s, p) => s + p, 0);
+  return { commissionPence: applyBps(chargeable, commissionBps), freePasses, chargedPasses: prices.length - freePasses };
 }
 
 function assertBps(v: number, label: string) {

@@ -197,6 +197,20 @@ describe("card checkout (M4)", () => {
     expect(stripe.last("createCheckoutSession")).toMatchObject({ applicationFeePence: 72 + 23 + 20 });
   });
 
+  it("adds a card processing fee to the customer's total when the customer bears it", async () => {
+    await activateMerchant();
+    await asUser("admin-1", () => setCardFeeSettings(orgId, { payer: "customer", bps: 150, fixedPence: 20 }));
+    try {
+      const order = await asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }] }, new Date(), { requireCardPayments: true }));
+      // £15.62 + 45p, grossed up so Stripe's fee on £16.07 (44p) is covered.
+      expect(order).toMatchObject({ cardFeePence: 45, totalPence: 1562 + 45, applicationFeePence: 72 });
+      await asCustomer(() => startCardCheckout(String(order._id), urls));
+      expect(stripe.last("createCheckoutSession")).toMatchObject({ totalPence: 1607, applicationFeePence: 72 + 45 });
+    } finally {
+      await asUser("admin-1", () => setCardFeeSettings(orgId, { payer: "platform", bps: 150, fixedPence: 20 }));
+    }
+  });
+
   it("issues passes on checkout.session.completed, once, however many times Stripe sends it", async () => {
     const order = await paidCardOrder(2);
     expect(order).toMatchObject({ status: "paid", stripe: { paymentIntentId: "pi_test_1" } });
@@ -241,12 +255,15 @@ describe("card checkout (M4)", () => {
 });
 
 describe("refunds (owner only, before the event, ticket price only)", () => {
-  it("only the organiser owner can refund", async () => {
+  it("only the organiser owner or a super admin can refund", async () => {
     const order = await paidCardOrder(2);
-    const tickets = (await Ticket.find({ orderId: order._id }).lean()).map((t) => String(t._id));
-    for (const user of [manager(), superAdmin]) {
-      await expect(asUser(user.id, () => refundTickets({ user, organizerId: orgId, publicId: order.publicId, ticketIds: tickets, reason: "Can't come" }))).rejects.toBeInstanceOf(ForbiddenError);
-    }
+    const tickets = (await Ticket.find({ orderId: order._id }).sort({ _id: 1 }).lean()).map((t) => String(t._id));
+    const user = manager();
+    await expect(asUser(user.id, () => refundTickets({ user, organizerId: orgId, publicId: order.publicId, ticketIds: tickets, reason: "Can't come" }))).rejects.toBeInstanceOf(ForbiddenError);
+    const sold = (await TicketType.findById(passId).lean())!.sold;
+    const r = await asUser(superAdmin.id, () => refundTickets({ user: superAdmin, organizerId: orgId, publicId: order.publicId, ticketIds: tickets, reason: "Event page error" }));
+    expect(r).toMatchObject({ amountPence: 2400, status: "refunded" });
+    expect(await TicketType.findById(passId).lean()).toMatchObject({ sold: sold - 2 });
   });
 
   it("refunds only the ticket price through Stripe (Indinite keeps its fee), returns seats, and emails the customer", async () => {
@@ -267,8 +284,8 @@ describe("refunds (owner only, before the event, ticket price only)", () => {
     const final = (await Order.findById(order._id).lean())!;
     expect(final.refundedPence).toBe(2400); // never the fee (144), venue fee (60) or tax
     expect(final.refundedPence).toBeLessThan(final.totalPence);
-    expect(await Job.countDocuments({ queue: "send-refund-email", "data.kind": "refund" })).toBe(2);
-    expect(await AuditLog.countDocuments({ action: "ticket.refunded" })).toBe(2);
+    expect(await Job.countDocuments({ queue: "send-refund-email", "data.kind": "refund", "data.orderId": String(order._id) })).toBe(2);
+    expect(await AuditLog.countDocuments({ action: "ticket.refunded", "entity.id": { $in: [t1, t2] } })).toBe(2);
   });
 
   it("won't refund twice, after the event has started, or a pass already used at the gate", async () => {

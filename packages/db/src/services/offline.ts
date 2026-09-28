@@ -1,5 +1,5 @@
 
-import { generatePublicId, offlineIssueSchema, paymentLinkBookingSchema, priceOrder, type LineItem, type OfflineIssueInput, type PaymentLinkBookingInput } from "@indinite/core";
+import { DEFAULT_FREE_COMPLIMENTARY_PASSES, generatePublicId, offlineIssueSchema, paymentLinkBookingSchema, priceOrder, type LineItem, type OfflineIssueInput, type PaymentLinkBookingInput } from "@indinite/core";
 import { audited } from "../audit";
 import { enqueueSendTickets } from "../jobs";
 import { CommissionLedger } from "../models/commission-ledger";
@@ -23,7 +23,8 @@ export const OFFLINE_METHOD_LABELS = { cash: "Cash", bank_transfer: "Organiser's
  * - Sales windows and the online per-order limit don't apply: box office also sells on the door.
  * - Priced like online (SPEC §4.7): the customer pays tickets + platform fee + charges + tax to the organiser,
  *   and the organiser owes Indinite the platform fee (commission), recorded in the ledger.
- * - Complimentary: £0 to the customer, but commission is owed on the passes' normal price.
+ * - Complimentary: £0 to the customer. Each event has a commission-free allowance (default 5 passes, set by the
+ *   super admin); beyond it, commission is owed on the passes' normal price.
  * Caller must have checked `order.issueOffline` and wrapped this in a request context (actor = user).
  */
 export async function issueOfflineOrder(organizerId: string, issuedBy: string, rawInput: OfflineIssueInput) {
@@ -53,7 +54,8 @@ export async function issueOfflineOrder(organizerId: string, issuedBy: string, r
     }
   }
   const settings = pricingFor(event, organizer);
-  const price = priceOrder({ items, ...settings, complimentary, discount: coupon?.rule });
+  const basePrice = priceOrder({ items, ...settings, complimentary, discount: coupon?.rule });
+  const compQty = complimentary ? items.reduce((n, i) => n + i.qty, 0) : 0;
   const privateKey = qrPrivateKey();
 
   for (let attempt = 0; ; attempt++) {
@@ -67,6 +69,21 @@ export async function issueOfflineOrder(organizerId: string, issuedBy: string, r
             if (e instanceof SoldOutError) throw new CheckoutError(`There aren't enough ${item.name} passes left.`, 409);
             throw e;
           }
+        }
+        // Complimentary allowance (SPEC §4.7): count these passes atomically, then charge commission only on
+        // those beyond the event's free allowance. Aborting the transaction gives the count back.
+        let price = basePrice;
+        let freeComplimentary = 0;
+        if (complimentary) {
+          const counted = await Event.findOneAndUpdate(
+            { _id: event._id },
+            { $inc: { complimentaryIssued: compQty } },
+            { session, new: true, projection: { complimentaryIssued: 1, freeComplimentaryPasses: 1 } },
+          ).lean();
+          const allowance = counted!.freeComplimentaryPasses ?? DEFAULT_FREE_COMPLIMENTARY_PASSES;
+          const freeLeft = Math.max(0, allowance - (counted!.complimentaryIssued - compQty));
+          price = priceOrder({ items, ...settings, complimentary, complimentaryFreeLeft: freeLeft });
+          freeComplimentary = Math.min(freeLeft, compQty);
         }
         const now = new Date();
         const [order] = await Order.create(
@@ -96,7 +113,7 @@ export async function issueOfflineOrder(organizerId: string, issuedBy: string, r
         const tickets = await issueTickets(order!, session, privateKey);
         if (price.commissionPence > 0) {
           await CommissionLedger.create(
-            [{ organizerId: organizer._id, eventId: event._id, orderId: order!._id, amountPence: price.commissionPence, kind: "offline_sale_owed", note: `${OFFLINE_METHOD_LABELS[input.method]} ${publicId}` }],
+            [{ organizerId: organizer._id, eventId: event._id, orderId: order!._id, amountPence: price.commissionPence, kind: "offline_sale_owed", note: complimentary ? `${OFFLINE_METHOD_LABELS[input.method]} ${publicId}: ${compQty - freeComplimentary} of ${compQty} passes over the free allowance` : `${OFFLINE_METHOD_LABELS[input.method]} ${publicId}` }],
             { session },
           );
         }
@@ -106,7 +123,7 @@ export async function issueOfflineOrder(organizerId: string, issuedBy: string, r
           after: order!.toObject(),
           reason: input.note,
           organizerId: organizer._id,
-          metadata: { method: input.method, tickets: tickets.length, commissionOwedPence: price.commissionPence },
+          metadata: { method: input.method, tickets: tickets.length, commissionOwedPence: price.commissionPence, ...(complimentary ? { freeComplimentaryPasses: freeComplimentary } : {}) },
         });
         await enqueueSendTickets({ orderId: String(order!._id), reason: "offline_issued" }, { session });
         return { order: order!.toObject(), ticketsIssued: tickets.length };

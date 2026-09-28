@@ -1,3 +1,4 @@
+import { DEFAULT_FREE_COMPLIMENTARY_PASSES } from "@indinite/core";
 
 import { z } from "zod";
 import { audited } from "../audit";
@@ -31,17 +32,18 @@ export async function setOrganizerCommission(organizerId: string, commissionBps:
   });
 }
 
-/** Admin: event commission override (null = use the organiser's rate) and tax rate. */
-export async function setEventPricing(eventId: string, input: { commissionBps: number | null; taxBps: number }) {
-  const data = z.object({ commissionBps: bps.nullable(), taxBps: bps }).parse(input);
+/** Admin: event commission override (null = use the organiser's rate), tax rate and free complimentary passes. */
+export async function setEventPricing(eventId: string, input: { commissionBps: number | null; taxBps: number; freeComplimentaryPasses?: number }) {
+  const data = z.object({ commissionBps: bps.nullable(), taxBps: bps, freeComplimentaryPasses: z.number().int().min(0).max(10000).optional() }).parse(input);
+  if (data.freeComplimentaryPasses === undefined) delete data.freeComplimentaryPasses;
   return withTransaction(async (session) => {
-    const before = await Event.findById(eventId, { commissionBps: 1, taxBps: 1, organizerId: 1 }, { session }).lean();
+    const before = await Event.findById(eventId, { commissionBps: 1, taxBps: 1, freeComplimentaryPasses: 1, organizerId: 1 }, { session }).lean();
     if (!before) throw new SettingsError("Event not found.", 404);
     await Event.updateOne({ _id: eventId }, { $set: data }, { session });
     await audited(session, {
       action: "event.pricing_changed",
       entity: { type: "event", id: eventId },
-      before: { commissionBps: before.commissionBps ?? null, taxBps: before.taxBps ?? 0 },
+      before: { commissionBps: before.commissionBps ?? null, taxBps: before.taxBps ?? 0, freeComplimentaryPasses: before.freeComplimentaryPasses ?? DEFAULT_FREE_COMPLIMENTARY_PASSES },
       after: data,
       organizerId: before.organizerId,
     });

@@ -64,12 +64,13 @@ describe("offline bookings", () => {
     expect(await Job.countDocuments({ jobId: `${order._id}:offline_issued:once` })).toBe(1);
   });
 
-  it("issues complimentary passes at £0, with commission owed on the normal price", async () => {
+  it("issues complimentary passes at £0, free of commission inside the event's allowance", async () => {
     const { order } = await asUser(() =>
       issueOfflineOrder(orgId, "u-box", { eventId, customer, items: [{ ticketTypeId: seasonId, qty: 1 }], method: "complimentary", note: "Sponsor guest" }),
     );
-    expect(order).toMatchObject({ totalPence: 0, applicationFeePence: 360 });
-    expect(await CommissionLedger.findOne({ orderId: order._id }).lean()).toMatchObject({ amountPence: 360, eventId: new mongoose.Types.ObjectId(eventId) });
+    expect(order).toMatchObject({ totalPence: 0, applicationFeePence: 0 });
+    expect(await CommissionLedger.findOne({ orderId: order._id }).lean()).toBeNull();
+    expect(await Event.findById(eventId, { complimentaryIssued: 1 }).lean()).toMatchObject({ complimentaryIssued: 1 });
   });
 
   it("never oversells and rolls back fully", async () => {
@@ -86,5 +87,50 @@ describe("offline bookings", () => {
     await expect(
       asUser(() => issueOfflineOrder(orgId, "u-box", { eventId, customer, items: [{ ticketTypeId: seasonId, qty: 1 }], method: "cash", note: "" })),
     ).rejects.toThrow();
+  });
+});
+
+describe("complimentary allowance (SPEC §4.7)", () => {
+  const makeEvent = async (slug: string, freeComplimentaryPasses?: number) => {
+    const event = await Event.create({
+      organizerId: new mongoose.Types.ObjectId(orgId),
+      slug,
+      title: `Comps ${slug}`,
+      venue: { name: "Hall", address: "1 Road", postcode: "E1 1AA" },
+      sessions: [{ label: "Night 1", startsAt: new Date(Date.now() + 86_400_000), endsAt: new Date(Date.now() + 90_000_000) }],
+      status: "published",
+      ...(freeComplimentaryPasses === undefined ? {} : { freeComplimentaryPasses }),
+    });
+    const tt = await TicketType.create({ eventId: event._id, name: "Season", pricePence: 4500, quota: 50, validSessionIds: [event.sessions[0]!._id] });
+    return { eventId: String(event._id), typeId: String(tt._id) };
+  };
+  const comp = (e: { eventId: string; typeId: string }, qty: number) =>
+    asUser(() => issueOfflineOrder(orgId, "u-box", { eventId: e.eventId, customer, items: [{ ticketTypeId: e.typeId, qty }], method: "complimentary", note: "Guest list" }));
+
+  it("gives 5 free passes by default, then charges commission on each extra pass", async () => {
+    const e = await makeEvent("comps-default");
+    const first = await comp(e, 3);
+    expect(first.order.applicationFeePence).toBe(0);
+    const second = await comp(e, 3); // 2 free, 1 over the allowance: 8% of £45
+    expect(second.order.applicationFeePence).toBe(360);
+    expect(await CommissionLedger.findOne({ orderId: second.order._id }).lean()).toMatchObject({ amountPence: 360, kind: "offline_sale_owed" });
+    expect(await AuditLog.findOne({ action: "order.issued_offline", "entity.id": String(second.order._id) }).lean()).toMatchObject({ metadata: { freeComplimentaryPasses: 2, commissionOwedPence: 360 } });
+    const third = await comp(e, 2);
+    expect(third.order.applicationFeePence).toBe(720);
+  });
+
+  it("uses the admin's allowance for the event", async () => {
+    const e = await makeEvent("comps-zero", 0);
+    expect((await comp(e, 1)).order.applicationFeePence).toBe(360);
+  });
+
+  it("never gives away more free passes than the allowance under concurrent bookings", async () => {
+    const e = await makeEvent("comps-race", 2);
+    const results = await Promise.all(Array.from({ length: 6 }, () => comp(e, 1)));
+    const free = results.filter((r) => r.order.applicationFeePence === 0).length;
+    expect(free).toBe(2);
+    expect(await Event.findById(e.eventId, { complimentaryIssued: 1 }).lean()).toMatchObject({ complimentaryIssued: 6 });
+    const owed = await CommissionLedger.find({ eventId: new mongoose.Types.ObjectId(e.eventId) }).lean();
+    expect(owed.reduce((n, l) => n + l.amountPence, 0)).toBe(4 * 360);
   });
 });

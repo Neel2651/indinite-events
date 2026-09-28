@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Types } from "mongoose";
-import { available, cardFeeOf } from "@indinite/core";
+import { available, cardFeeOf, DEFAULT_FREE_COMPLIMENTARY_PASSES } from "@indinite/core";
 import { Event, Organizer, pricingFor, TicketType } from "@indinite/db";
 import { OfflineBookingForm, type BookableEvent } from "@/components/staff/offline-booking-form";
 import { PageHeader } from "@/components/staff/shell";
@@ -24,6 +24,8 @@ export default async function NewBookingPage({ params }: { params: Promise<{ slu
     title: e.title,
     ...pricingFor(e, org ?? {}),
     cardFee: cardFeeOf(org ?? {}),
+    freeComplimentaryPasses: e.freeComplimentaryPasses ?? DEFAULT_FREE_COMPLIMENTARY_PASSES,
+    freeComplimentaryLeft: Math.max(0, (e.freeComplimentaryPasses ?? DEFAULT_FREE_COMPLIMENTARY_PASSES) - (e.complimentaryIssued ?? 0)),
     ticketTypes: types
       .filter((t) => String(t.eventId) === String(e._id))
       .map((t) => ({

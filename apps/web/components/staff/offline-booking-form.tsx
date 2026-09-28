@@ -20,6 +20,9 @@ export interface BookableEvent {
   charges: OrderCharge[];
   /** Applies to payment links only (card payments). */
   cardFee: CardFeeSettings;
+  /** Complimentary passes free of commission for this event, and how many are left. */
+  freeComplimentaryPasses: number;
+  freeComplimentaryLeft: number;
   ticketTypes: { id: string; name: string; pricePence: number; available: number; nightsLabel: string }[];
 }
 
@@ -65,6 +68,7 @@ export function OfflineBookingForm({ slug, events, canPaymentLink, canOffline }:
           charges: event.charges,
           discount: complimentary ? undefined : coupon?.rule,
           complimentary,
+          complimentaryFreeLeft: complimentary ? event.freeComplimentaryLeft : undefined,
           cardFee: method === "payment_link" ? event.cardFee : undefined,
         })
       : null;
@@ -265,6 +269,12 @@ export function OfflineBookingForm({ slug, events, canPaymentLink, canOffline }:
             {coupon && <p className="mt-1 text-xs text-success">{coupon.code} applied</p>}
             {couponMsg && <p className="mt-1 text-xs text-destructive">{couponMsg}</p>}
           </div>
+        )}
+
+        {complimentary && event && (
+          <p className="rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">
+            {event.freeComplimentaryLeft} of {event.freeComplimentaryPasses} free complimentary passes left for this event. Extra passes owe Indinite the platform fee on their normal price.
+          </p>
         )}
 
         {method === "payment_link" ? (

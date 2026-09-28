@@ -28,9 +28,11 @@ export async function eventPricingAction(eventId: string, _: State, form: FormDa
   const override = String(form.get("commission") ?? "").trim();
   const commissionBps = override === "" ? null : bps(override);
   const taxBps = bps(form.get("tax") || "0");
+  const freeComplimentaryPasses = Number(form.get("freeComps") ?? "");
+  if (!Number.isInteger(freeComplimentaryPasses) || freeComplimentaryPasses < 0 || freeComplimentaryPasses > 10000) return { error: "Free complimentary passes must be a whole number, 0 or more." };
   if ((commissionBps !== null && !(commissionBps >= 0 && commissionBps <= 10000)) || !(taxBps >= 0 && taxBps <= 10000)) return { error: "Percentages must be between 0 and 100." };
   try {
-    await asStaff(user, () => setEventPricing(eventId, { commissionBps, taxBps }));
+    await asStaff(user, () => setEventPricing(eventId, { commissionBps, taxBps, freeComplimentaryPasses }));
   } catch (e) {
     return { error: e instanceof SettingsError ? e.message : "Couldn't save." };
   }
