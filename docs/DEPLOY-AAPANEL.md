@@ -1,6 +1,6 @@
 # Deploying on aaPanel with PM2 (staging / demo server)
 
-Two PM2 processes run from one checkout: **indinite-web** (Next.js on `127.0.0.1:3000`) and **indinite-worker**
+Two PM2 processes run from one checkout: **indinite-web** (Next.js on `127.0.0.1:3005`) and **indinite-worker**
 (emails, expiring holds). aaPanel's Nginx serves HTTPS and proxies to the web app. The database is MongoDB Atlas.
 
 Files: `ecosystem.config.cjs` (PM2), `scripts/deploy.sh` (deploy/update), `deploy/env.staging.example`
@@ -57,7 +57,7 @@ cd /www/wwwroot/indinite-events
 bash scripts/deploy.sh --seed    # --seed loads the demo events + staff accounts (staging only)
 ```
 It installs, builds, syncs database indexes, starts both PM2 processes, saves the PM2 list and checks
-`http://127.0.0.1:3000/api/health`. Make PM2 start on reboot (once): `pm2 startup` (run the command it prints),
+`http://127.0.0.1:3005/api/health`. Make PM2 start on reboot (once): `pm2 startup` (run the command it prints),
 then `pm2 save`. (aaPanel's PM2 Manager does this for you if you use it.)
 
 ## 5. Website, SSL and reverse proxy in aaPanel
@@ -67,7 +67,7 @@ then `pm2 save`. (aaPanel's PM2 Manager does this for you if you use it.)
 3. Site → **Config**: replace the default `location /` part with the contents of `deploy/nginx-aapanel.conf`
    (keep aaPanel's `listen`, `server_name` and SSL lines). Save; aaPanel reloads Nginx.
    - Don't use aaPanel's built-in "Reverse proxy" tab *and* this config at the same time.
-   - Keep port 3000 **closed** in aaPanel → Security (the app only listens on 127.0.0.1 anyway).
+   - Keep port 3005 **closed** in aaPanel → Security (the app only listens on 127.0.0.1 anyway).
 4. Open `https://events.neelshah.co` — you should see the yellow "Demo site" bar.
 
 ## 6. Updating
@@ -82,7 +82,7 @@ Zero-downtime reload for the web app; the worker restarts after finishing in-fli
 | Status | `pm2 status` |
 | Logs | `pm2 logs indinite-web` / `pm2 logs indinite-worker` (files in `logs/`) |
 | Restart | `pm2 restart indinite-web indinite-worker` |
-| Health | `curl -s http://127.0.0.1:3000/api/health` |
+| Health | `curl -s http://127.0.0.1:3005/api/health` |
 | Retry failed emails | `pnpm --filter @indinite/db requeue-failed-jobs` |
 | Set a staff password | `pnpm --filter @indinite/auth set-password someone@example.com` (asks for it; signs them out everywhere) |
 | Reset demo accounts | `pnpm --filter @indinite/auth set-password --seed-accounts` (all demo accounts → `SEED_PASSWORD`) |
@@ -124,6 +124,9 @@ Zero-downtime reload for the web app; the worker restarts after finishing in-fli
 ## Notes
 - **Live server later:** same steps with `DEPLOY_ENV` removed (or `live`) and `PAYMENTS_MODE=stripe`; demo
   payments are refused on a live server by design. Online card checkout needs the Stripe milestones first.
-- If port 3000 is taken on the server, set `PORT=3001` in `.env.local` **and** change `proxy_pass` in the
-  Nginx config to match.
+- The app listens on port **3005** (default in `ecosystem.config.cjs`, `scripts/deploy.sh` and
+  `deploy/nginx-aapanel.conf`). If you change it, set `PORT` in `.env.local` **and** change every `proxy_pass` in the
+  site's Nginx config to match. **Servers set up before 28 Sep 2026 used 3000:** update the aaPanel site's
+  `proxy_pass` lines to `3005` (or set `PORT=3000` in the server's `.env.local`) before the next deploy, or the site
+  will return 502.
 - Nginx sets `X-Forwarded-For` to the real client IP (not appended), which the rate limits rely on. Keep it that way.

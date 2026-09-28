@@ -17,7 +17,7 @@ fi
 envval() { { grep -E "^$1=" .env.local || true; } | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"; }
 [[ -n "$(envval MONGODB_URI)" ]] || { echo "✗ MONGODB_URI is not set in .env.local" >&2; exit 1; }
 APP_URL="$(envval APP_URL)"; [[ -n "$APP_URL" ]] || { echo "✗ APP_URL is not set in .env.local" >&2; exit 1; }
-PORT="$(envval PORT)"; PORT="${PORT:-3000}"
+PORT="$(envval PORT)"; PORT="${PORT:-3005}"
 DEPLOY_ENV="$(envval DEPLOY_ENV)"
 MEDIA_DIR="$(envval MEDIA_DIR)"
 for v in EMAIL_FROM RESEND_API_KEY MONGODB_URI APP_URL BETTER_AUTH_URL; do
