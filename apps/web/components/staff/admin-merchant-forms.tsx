@@ -1,7 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
-import { cardFeeAction, salesPausedAction, type ActionState } from "@/app/admin/organisers/actions";
+import { useActionState, useState, useTransition } from "react";
+import {
+  adminOpenDashboardAction,
+  adminSendSetupEmailAction,
+  adminStartOnboardingAction,
+  cardFeeAction,
+  salesPausedAction,
+  type ActionState,
+} from "@/app/admin/organisers/actions";
 import { FormError, inputClass } from "./ui";
 
 function Ok({ state }: { state: ActionState }) {
@@ -68,5 +75,44 @@ export function CardFeeForm({ organizerId, payer, percent, fixed }: { organizerI
         {pending ? "Saving…" : "Save card fees"}
       </button>
     </form>
+  );
+}
+
+/**
+ * Super admin: fill in the organiser's bank and business details on Stripe's form, open their Stripe dashboard,
+ * or email the owner to finish it themselves.
+ */
+export function AdminOnboardingActions({ organizerId, status, stripeReady }: { organizerId: string; status: string; stripeReady: boolean }) {
+  const [pending, start] = useTransition();
+  const [state, setState] = useState<ActionState>(null);
+  if (!stripeReady) return <p className="text-sm text-muted-foreground">Stripe isn&apos;t configured on this server yet (STRIPE_SECRET_KEY).</p>;
+  const run = (fn: () => Promise<ActionState>) => start(async () => setState((await fn()) ?? null));
+  const primary =
+    status === "not_started" ? "Fill in bank and business details" : status === "in_progress" ? "Continue bank and business details" : status === "restricted" ? "Give Stripe the missing details" : null;
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-3">
+        {primary && (
+          <button type="button" disabled={pending} onClick={() => run(() => adminStartOnboardingAction(organizerId))} className="btn-cta disabled:opacity-60">
+            {pending ? "Opening Stripe…" : primary}
+          </button>
+        )}
+        {status !== "not_started" && status !== "in_progress" && (
+          <button type="button" disabled={pending} onClick={() => run(() => adminOpenDashboardAction(organizerId))} className="rounded-full border border-border bg-card px-5 py-2.5 font-semibold disabled:opacity-60">
+            Update bank details
+          </button>
+        )}
+        {status !== "active" && (
+          <button type="button" disabled={pending} onClick={() => run(() => adminSendSetupEmailAction(organizerId))} className="rounded-full border border-border bg-card px-5 py-2.5 font-semibold disabled:opacity-60">
+            Email the setup link to the owner
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Bank details are entered on Stripe&apos;s secure form, never stored by Indinite. Stripe may text a code to the organiser&apos;s phone and ask for their photo ID, so have them on hand, or let the owner finish it later.
+      </p>
+      <FormError message={state?.error} />
+      <Ok state={state} />
+    </div>
   );
 }

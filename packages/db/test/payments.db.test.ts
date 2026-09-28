@@ -154,6 +154,12 @@ describe("merchant onboarding", () => {
     expect(await AuditLog.countDocuments({ action: "merchant.account_created" })).toBe(1);
   });
 
+  it("lets a super admin fill in the same account's details and come back to the admin page", async () => {
+    await asUser("admin-1", () => startMerchantOnboarding(orgId, APP, { returnPath: `/admin/organisers/${orgId}` }));
+    expect(stripe.count("createExpressAccount")).toBe(1);
+    expect(stripe.last("createOnboardingLink")).toMatchObject({ returnUrl: `${APP}/admin/organisers/${orgId}?stripe=return`, refreshUrl: `${APP}/admin/organisers/${orgId}?stripe=refresh` });
+  });
+
   it("becomes active automatically when Stripe approves, and emails the owner", async () => {
     await activateMerchant();
     expect(await Organizer.findById(orgId).lean()).toMatchObject({ chargesEnabled: true, payoutsEnabled: true });

@@ -5,7 +5,7 @@ import { Organizer, refreshMerchantAccount, stripeConfigured } from "@indinite/d
 import { PaymentsActions } from "@/components/staff/payments-actions";
 import { PageHeader } from "@/components/staff/shell";
 import { formatDayTime } from "@/lib/format";
-import { requireOrg } from "@/lib/staff";
+import { asStaff, requireOrg } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Payments" };
 
@@ -31,10 +31,12 @@ type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ stripe
 export default async function PaymentsPage({ params, searchParams }: Props) {
   const { slug } = await params;
   const { stripe } = await searchParams;
-  const { organizer, can } = await requireOrg(slug);
+  const { user, organizer, can } = await requireOrg(slug);
   const configured = stripeConfigured();
   // Back from Stripe's form: check now rather than waiting for the webhook.
-  if (stripe === "return" && configured) await refreshMerchantAccount(organizer.id, appUrl()).catch(() => null);
+  if (stripe === "return" && configured) {
+    await asStaff(user, () => refreshMerchantAccount(organizer.id, appUrl()), organizer.id).catch((e) => console.error("[payments] refresh failed", e instanceof Error ? e.message : e));
+  }
   const org = (await Organizer.findById(organizer.id).lean())!;
   const status = merchantStatus(org);
   const demo = resolvePaymentsMode(process.env) === "demo";

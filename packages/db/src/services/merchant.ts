@@ -49,8 +49,9 @@ export async function saveMerchantPrefill(organizerId: string, prefill: Merchant
 /**
  * Create the organiser's Stripe Express account if it doesn't exist yet (idempotent per organiser), then
  * return a fresh onboarding link. Stripe hosts the form: bank details and ID never touch Indinite.
+ * The owner (Payments page) or a super admin (admin organiser page, `returnPath`) can fill it in.
  */
-export async function startMerchantOnboarding(organizerId: string, appUrl: string): Promise<{ url: string; created: boolean }> {
+export async function startMerchantOnboarding(organizerId: string, appUrl: string, opts: { returnPath?: string } = {}): Promise<{ url: string; created: boolean }> {
   const gw = requireStripe();
   const org = await Organizer.findById(organizerId).lean();
   if (!org) throw new MerchantError("Organiser not found.", 404);
@@ -76,7 +77,7 @@ export async function startMerchantOnboarding(organizerId: string, appUrl: strin
     });
     accountId = (await Organizer.findById(org._id, { stripeAccountId: 1 }).lean())!.stripeAccountId!;
   }
-  const page = paymentsPageUrl(appUrl, org.slug);
+  const page = opts.returnPath ? `${appUrl.replace(/\/+$/, "")}${opts.returnPath}` : paymentsPageUrl(appUrl, org.slug);
   const url = await gw.createOnboardingLink(accountId, `${page}?stripe=refresh`, `${page}?stripe=return`);
   return { url, created };
 }

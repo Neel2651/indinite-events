@@ -2,17 +2,28 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Types } from "mongoose";
+import { appUrl } from "@indinite/auth";
 import { merchantStatus, MERCHANT_STATUS_LABELS } from "@indinite/core";
-import { Organizer } from "@indinite/db";
-import { CardFeeForm, SalesPausedForm } from "@/components/staff/admin-merchant-forms";
+import { Organizer, refreshMerchantAccount, stripeConfigured } from "@indinite/db";
+import { AdminOnboardingActions, CardFeeForm, SalesPausedForm } from "@/components/staff/admin-merchant-forms";
 import { PageHeader } from "@/components/staff/shell";
 import { formatDayTime } from "@/lib/format";
+import { asStaff, requireSuperAdmin } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Organiser" };
 
-export default async function AdminOrganiserPage({ params }: { params: Promise<{ id: string }> }) {
+type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ stripe?: string }> };
+
+export default async function AdminOrganiserPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const { stripe } = await searchParams;
   if (!Types.ObjectId.isValid(id)) notFound();
+  const configured = stripeConfigured();
+  // Back from Stripe's form: check now rather than waiting for the webhook.
+  if (stripe === "return" && configured) {
+    const user = await requireSuperAdmin();
+    await asStaff(user, () => refreshMerchantAccount(id, appUrl()), id).catch((e) => console.error("[admin payments] refresh failed", e instanceof Error ? e.message : e));
+  }
   const org = await Organizer.findById(id).lean();
   if (!org) notFound();
   const status = merchantStatus(org);
@@ -53,10 +64,9 @@ export default async function AdminOrganiserPage({ params }: { params: Promise<{
               </>
             )}
           </dl>
-          <p className="text-sm text-muted-foreground">
-            Start or resend setup from the <Link href={`/org/${org.slug}/payments`} className="font-semibold text-brand-orange-strong hover:underline">Payments page</Link>.
-            The owner completes bank details and ID on Stripe.
-          </p>
+          {stripe === "refresh" && <p className="rounded-md bg-muted px-3 py-2 text-sm">That Stripe link expired. Use the button below to open a new one.</p>}
+          {stripe === "return" && <p className="rounded-md bg-muted px-3 py-2 text-sm">Back from Stripe. The status above is up to date.</p>}
+          <AdminOnboardingActions organizerId={id} status={status} stripeReady={configured} />
         </section>
         <section className="space-y-6 rounded-lg border border-border bg-card p-6">
           <div>

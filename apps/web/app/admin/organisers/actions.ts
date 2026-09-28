@@ -1,10 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createOrganizer, createOrganizerSchema, inviteMember, MembershipError } from "@indinite/auth";
 import { appUrl } from "@indinite/auth";
 import { CARD_FEE_PAYERS } from "@indinite/core";
-import { MerchantError, saveMerchantPrefill, sendMerchantSetupEmail, setCardFeeSettings, setOnlineSalesPaused, setOrganizerCommission, SettingsError } from "@indinite/db";
+import { MerchantError, merchantDashboardLink, saveMerchantPrefill, sendMerchantSetupEmail, setCardFeeSettings, startMerchantOnboarding, StripeNotConfiguredError, setOnlineSalesPaused, setOrganizerCommission, SettingsError } from "@indinite/db";
 import { auth } from "@/lib/auth";
 import { asStaff, requireSuperAdmin } from "@/lib/staff";
 
@@ -90,4 +91,43 @@ export async function cardFeeAction(organizerId: string, _: ActionState, form: F
   }
   revalidatePath(`/admin/organisers/${organizerId}`);
   return { ok: "Card fee settings saved. They apply to new card payments." };
+}
+
+const stripeMessage = (e: unknown) =>
+  e instanceof MerchantError || e instanceof StripeNotConfiguredError ? e.message : "Something went wrong talking to Stripe. Please try again.";
+
+/** Super admin: create the Stripe account if needed and fill in the organiser's bank and business details on Stripe. */
+export async function adminStartOnboardingAction(organizerId: string): Promise<ActionState> {
+  const user = await requireSuperAdmin();
+  let url: string;
+  try {
+    url = (await asStaff(user, () => startMerchantOnboarding(organizerId, appUrl(), { returnPath: `/admin/organisers/${organizerId}` }), organizerId)).url;
+  } catch (e) {
+    console.error("[admin payments] onboarding failed", e instanceof Error ? e.message : e);
+    return { error: stripeMessage(e) };
+  }
+  redirect(url);
+}
+
+/** Super admin: open the organiser's Stripe Express dashboard (bank details, payouts). */
+export async function adminOpenDashboardAction(organizerId: string): Promise<ActionState> {
+  await requireSuperAdmin();
+  let url: string;
+  try {
+    url = await merchantDashboardLink(organizerId);
+  } catch (e) {
+    return { error: stripeMessage(e) };
+  }
+  redirect(url);
+}
+
+/** Super admin: email the owner(s) a link to finish Stripe setup themselves. */
+export async function adminSendSetupEmailAction(organizerId: string): Promise<ActionState> {
+  const user = await requireSuperAdmin();
+  try {
+    const { recipients } = await asStaff(user, () => sendMerchantSetupEmail(organizerId, appUrl()), organizerId);
+    return { ok: `Setup email sent to ${recipients} ${recipients === 1 ? "person" : "people"}.` };
+  } catch (e) {
+    return { error: stripeMessage(e) };
+  }
 }
