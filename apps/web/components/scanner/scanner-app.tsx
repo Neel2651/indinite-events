@@ -122,8 +122,11 @@ function SetupScreen({ events, userName, error, onStart }: { events: ScanEvent[]
   return (
     <div className="flex min-h-dvh flex-col bg-brand-navy px-5 py-8 text-white">
       <div className="flex items-center justify-between">
-        <p className="font-display text-lg font-bold text-brand-orange">
-          INDINITE <span className="font-sans font-normal text-on-dark-muted">scanner</span>
+        <p className="flex items-center gap-2 font-display text-lg font-bold text-brand-orange">
+          <img src="/brand/indinite-mark.png" alt="" width={32} height={28} className="h-7 w-auto" />
+          <span>
+            INDINITE <span className="font-sans font-normal text-on-dark-muted">scanner</span>
+          </span>
         </p>
         <button
           type="button"

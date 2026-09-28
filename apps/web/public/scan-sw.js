@@ -1,7 +1,7 @@
 // Indinite scanner service worker: keep /scan and its assets usable offline.
 // Only the scanner is cached; the rest of the site always goes to the network.
-const CACHE = "indinite-scanner-v1";
-const SHELL = ["/scan", "/scan.webmanifest", "/scanner-icon-192.png", "/scanner-icon-512.png"];
+const CACHE = "indinite-scanner-v2";
+const SHELL = ["/scan", "/scan.webmanifest", "/scanner-icon-192.png", "/scanner-icon-512.png", "/brand/indinite-mark.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -12,8 +12,11 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       )}
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
-          <Link href="/" className="font-display text-xl font-bold tracking-tight text-brand-orange">
-            INDINITE <span className="font-sans font-normal text-muted-foreground">events</span>
+          <Link href="/" className="flex items-center gap-2.5 font-display text-xl font-bold tracking-tight text-brand-orange" aria-label="Indinite events, home">
+            <img src="/brand/indinite-mark.png" alt="" width={37} height={32} className="h-8 w-auto" />
+            <span aria-hidden>
+              INDINITE <span className="font-sans font-normal text-muted-foreground">events</span>
+            </span>
           </Link>
           <Link href="/orders/lookup" className="text-sm font-semibold text-brand-orange-strong hover:underline">
             Find my tickets

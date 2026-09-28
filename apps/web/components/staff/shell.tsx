@@ -19,7 +19,8 @@ export function StaffShell({ area, areaHref, nav, user, links = [], children }: 
       <header className="dark bg-background text-foreground print:hidden">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 pt-4">
           <div className="flex items-center gap-3">
-            <Link href="/" className="font-display text-lg font-bold tracking-tight text-brand-orange" title="Public site">
+            <Link href="/" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight text-brand-orange" title="Public site">
+              <img src="/brand/indinite-mark.png" alt="" width={32} height={28} className="h-7 w-auto" />
               INDINITE
             </Link>
             <span className="text-on-dark-muted" aria-hidden>
