@@ -33,7 +33,7 @@ Platform role: `super_admin` (Indinite staff). Organizer roles (per organization
 | ticketType.manage (price, quota) | ✓ | | | | | |
 | organizer.manage (create org, commission) | ✓ | | | | | |
 | org.members.manage (invite, change role) | ✓ | ✓ | | | | |
-| stripe.onboard | | ✓ | | | | |
+| stripe.onboard | ✓ | ✓ | | | | |
 | order.read | ✓ | ✓ | ✓ | ✓ | | ✓ |
 | order.createPaymentLink | ✓ | ✓ | ✓ | ✓ | | |
 | order.applyDiscount | ✓ | ✓ | ✓ | | | |
@@ -46,6 +46,7 @@ Platform role: `super_admin` (Indinite staff). Organizer roles (per organization
 | audit.read (own org) | ✓ | ✓ | | | | |
 | audit.read (global) | ✓ | | | | | |
 
+Refunds: organiser owner and super admin only (confirmed 28 Sep 2026).
 Discount limit for `box_office`: none (cannot apply). `manager`: max percent configurable per org (default 50%).
 
 ## 3. Data model (MongoDB, all money in pence)
@@ -125,8 +126,11 @@ result (strictly once per pass per night). Offline (or no server answer within 2
 **5 scans**; the 6th is refused ("Reconnect to keep scanning") until it's back online and those scans have synced.
 
 ### 4.6 Refund
-Owner/super-admin: full or per-ticket refund → Stripe refund with refund_application_fee + reverse_transfer →
-tickets cancelled → quota returned (configurable) → audit → email customer.
+Owner/super-admin: full or per-ticket refund, before the event starts, passes not yet scanned. Only the ticket
+price actually paid (after coupon) is refunded; platform fee, organiser charges, tax and card processing fee are
+kept. Card orders: Stripe refund with `reverse_transfer` (Indinite keeps its fee: `refund_application_fee: false`);
+the late-payment-sold-out path refunds everything including fees. Cash / account orders are recorded and repaid by
+the organiser. → tickets refunded → **quota always returned to sale** (agreed 28 Sep 2026) → audit → email customer.
 
 ### 4.7 Pricing, charges, coupons and commission (agreed 27 Sep 2026)
 Per order: **tickets − coupon → + platform fee → + organiser charges → + tax on all of that = total.**
@@ -143,8 +147,10 @@ Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 
   the rest (tickets, charges, tax). *Assumption to confirm: all tax goes to the organiser.*
 - **Organiser bookings** (`/org/.../bookings/new`), four options: **Cash**, **Organiser's account** (bank transfer),
   **Complimentary**, **Generate payment link**. Cash/account: customer pays the full total to the organiser; the
-  organiser owes Indinite the platform fee. Complimentary: £0 to the customer; organiser owes commission on the
-  passes' normal price. Payment link: pending booking held 1–24 h, customer emailed a link to `/pay/<ref>`
+  organiser owes Indinite the platform fee. Complimentary: £0 to the customer. Each event has a
+  commission-free allowance (default **5** passes, set per event by the admin); beyond it the organiser owes the
+  platform fee on each extra pass's normal price. The allowance covers the highest-priced passes first, is counted
+  atomically, and isn't given back when a complimentary pass is refunded (agreed 28 Sep 2026). Payment link: pending booking held 1–24 h, customer emailed a link to `/pay/<ref>`
   (demo mode approves instantly; Stripe Checkout once connected). Box office bookings ignore public sales windows
   and per-order limits but never exceed quota.
 - **Admin finance** (`/admin/finance`), per event: total sales; organiser direct (cash / account) and commission
@@ -153,6 +159,27 @@ Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 
 - **Ticket history**: every ticket has its own audit entry when generated; the order page shows per-pass
   timelines (generated, emailed, each scan with time, night, gate and scanner name, overrides) and order history
   (how it was sold, by whom, payment method and note).
+
+### 4.8 Merchant onboarding and card fees (agreed 28 Sep 2026)
+- Indinite's Stripe platform account is held by a UK-registered entity. Organisers are **Express** connected
+  accounts (GB, GBP).
+- The super admin creates the organiser (optionally with legal name, business type and website to prefill Stripe).
+  Bank and business details are then entered on **Stripe's hosted onboarding form**, either by the super admin from
+  `/admin/organisers/[id]` ("Fill in bank and business details") or by the organiser owner from `/org/[slug]/payments`
+  (or the emailed setup link). Both open the same account; either can finish. Stripe may send a code to the
+  organiser's phone and ask for photo ID. Bank details are never stored by Indinite.
+- Merchant status (not started, in progress, waiting for Stripe, active, action needed) is synced from
+  `account.updated` and refreshed on return from Stripe. Card checkout and payment links need an active, un-paused
+  organiser. The super admin can pause online sales (cash / account / comp bookings still work).
+- **Stripe card fee** (default 1.5% + 20p), set per organiser by the super admin, paid by one of:
+  - **Indinite**: comes out of the platform fee.
+  - **Organiser**: added to the application fee, so it's deducted from their payout.
+  - **Customer**: added to card bookings (online and payment links, not cash / account / comp) as a
+    **"Card processing fee"** line after tax, not taxed, grossed up so it covers Stripe's fee on the whole charge:
+    `ceil((base × bps + fixed × 10000) / (10000 − bps))`. It's fixed on the order when priced, recovered in the
+    application fee, and never refunded. *Note: UK rules restrict surcharging consumers for card payments; the
+    business chose this label. Worth confirming with an adviser.*
+- Finance shows recovered card fees separately; they're not Indinite income.
 
 ## 5. Routes (indicative)
 
@@ -176,8 +203,10 @@ NEXT_PUBLIC_QR_PUBLIC_KEY, MEDIA_DIR, PAYMENTS_MODE, LINK_SIGNING_SECRET, APP_UR
 - Backups: Atlas continuous backup; restore tested before 10 Oct.
 
 ## 8. Open decisions (confirm before the relevant milestone)
-1. Who pays Stripe fees — absorbed in commission or passed on as a booking fee?
-2. Quota returned to sale on refund — yes/no per event?
-3. Commission on complimentary tickets — none by default?
+1. ~~Who pays Stripe fees?~~ Resolved 28 Sep 2026: super admin chooses per organiser: Indinite, organiser or
+   customer (§4.8).
+2. ~~Quota returned to sale on refund?~~ Resolved 28 Sep 2026: always.
+3. ~~Commission on complimentary tickets?~~ Resolved 28 Sep 2026: free up to a per-event allowance (default 5),
+   platform fee on the rest (§4.7).
 4. Are sessions (nights) needed for daily passes, or season passes only for v1?
-5. Is Indinite's Stripe platform account held by a UK-registered entity?
+5. ~~Is Indinite's Stripe platform account held by a UK-registered entity?~~ Resolved 28 Sep 2026: yes.

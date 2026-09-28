@@ -1,18 +1,24 @@
 # Claude Code — milestone prompts
 
-## Status
-- M1 auth ✅ done (Better Auth, invitation-only, roles, /admin + /org shells, seed users via `pnpm seed`).
-- M6 🟡 partly: "Issue as already paid" (cash / bank transfer / complimentary) and Team page done. Remaining: orders
-  table, order detail + history, "Send payment link", resend tickets, org audit log view.
+## Status (28 Sep 2026)
+- M0 ✅ done (monorepo, web, worker, core, db, theme, health route, public listing + event page shells).
+- M1 ✅ done (data layer, audit, quota, permissions, Better Auth invitation-only, roles, /admin + /org shells, seed).
+  ESLint still not configured.
+- M2 🟡 partly: organisers, public listing + event pages, pricing, charges and coupons done; media is served from
+  MEDIA_DIR. **Missing: super-admin CRUD for events, nights and ticket types, and image upload.** Events currently
+  come only from the seed script.
+- M3 ✅ done: Stripe Connect Express onboarding (owner from /org/[slug]/payments, or super admin from
+  /admin/organisers/[id]), account.updated sync, pause online sales, card fee payer (SPEC §4.8).
+- M4 ✅ done: Stripe checkout and payment links (destination charges), idempotent webhook, holds, late-payment refund,
+  demo payment mode. Customer-paid "Card processing fee" option.
+- M5 ✅ done (QR PNG + PDF passes, React Email via Resend, signed 30-min ticket page, lookup with rate limits).
+- M6 🟡 partly: new booking (cash / account / complimentary with per-event free allowance / payment link), Team page,
+  orders table, order detail + history, resend tickets. Remaining: org audit log view, dashboard check against the prompt.
 - M7 🟡 mostly: /scan PWA, offline decision + sync, manual code, manual admit with reason, Check-ins dashboard.
   Remaining: test on two real phones offline.
-- M5 ✅ done (QR PNG + PDF passes, React Email via Resend, signed 30-min ticket page, lookup with rate limits).
-  Demo checkout (M4 demo mode) also done; Stripe checkout + webhooks still to do.
-- M0 ✅ done (monorepo, web, worker, core, db, theme, health route, public listing + event page shells).
-- M1 🟡 partly done: all models + indexes, `withTransaction`, `audited()` + request context, `quota.*`,
-  permission matrix with tests, seed script. **Remaining:** Better Auth + organization plugin, super_admin
-  flag, session → `AuthUser` mapping for `can()`, seeding auth users, ESLint.
-
+- M8 🟡 partly: refunds (owner or super admin, per pass, quota returned), admin finance. Remaining: CSV exports,
+  super-admin global audit log with filters.
+- M9 ⬜ not started.
 
 Paste one prompt per session, in order. Start each in plan mode (Shift+Tab), review the plan, then let it
 build. Commit and review at the end of every milestone before moving on.
