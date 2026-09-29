@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
-  transpilePackages: ["@indinite/core", "@indinite/db"],
-  serverExternalPackages: ["mongoose"],
+  transpilePackages: ["@indinite/core", "@indinite/db", "@indinite/emails"],
+  // @react-pdf/renderer (pass PDFs) runs as plain Node on the server, not through the bundler.
+  serverExternalPackages: ["mongoose", "@react-pdf/renderer"],
   poweredByHeader: false,
   // Event image uploads (5 MB max, checked in addEventImage) go through server actions.
   experimental: { serverActions: { bodySizeLimit: "6mb" } },

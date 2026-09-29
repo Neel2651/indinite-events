@@ -1,20 +1,8 @@
-import QRCode from "qrcode";
 import { linkSecret, signOrderLink } from "@indinite/core/links";
-import { passCode, receiptLines, resolvePaymentsMode } from "@indinite/core";
+import { resolvePaymentsMode } from "@indinite/core";
 import { audited, Event, Order, Ticket, withTransaction, type SendTicketsJob } from "@indinite/db";
-import { renderPassesPdf, renderTicketsEmail, type PassData } from "@indinite/emails";
+import { buildPassesData, renderPassesPdf, renderTicketsEmail } from "@indinite/emails";
 import { appUrl, sendEmail } from "../mailer";
-
-const dayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short", day: "numeric", month: "short" });
-
-/** "All 9 nights" or "Fri 16 Oct, Sat 17 Oct". */
-export function nightsLabel(validSessionIds: unknown[], sessions: { _id: unknown; startsAt: Date }[]) {
-  const valid = new Set(validSessionIds.map(String));
-  const nights = sessions.filter((s) => valid.has(String(s._id)));
-  if (nights.length === sessions.length && sessions.length > 1) return `All ${sessions.length} nights`;
-  return nights.map((s) => dayFmt.format(s.startsAt)).join(", ");
-}
-
 
 /** Only labels the email; a misconfigured PAYMENTS_MODE must never stop passes being sent. */
 function isDemoPayments() {
@@ -50,39 +38,15 @@ export async function sendTickets(job: SendTicketsJob, jobId: string) {
   const tickets = await Ticket.find({ orderId: order._id, status: "valid" }).sort({ _id: 1 }).lean();
   if (tickets.length === 0) throw new Error(`Order ${order.publicId} is paid but has no valid tickets`);
 
-  const passes: PassData[] = await Promise.all(
-    tickets.map(async (t, i) => ({
-      ticketId: String(t._id),
-      ticketTypeName: t.ticketTypeName,
-      nightsLabel: nightsLabel(t.validSessionIds, event.sessions),
-      qrContentId: `pass-${i + 1}-${String(t._id)}`,
-      qrPng: await QRCode.toBuffer(t.qrToken, { errorCorrectionLevel: "M", margin: 1, width: 480 }),
-      shortCode: passCode(t.qrToken),
-    })),
-  );
-
-  const data = {
-    publicId: order.publicId,
-    customerName: order.customer.name,
-    event: { title: event.title, startsAt: event.startsAt, endsAt: event.endsAt, venue: event.venue },
-    lines: receiptLines({
-      items: order.items,
-      discountPence: order.discount?.amountPence,
-      discountLabel: order.discount?.reason,
-      complimentary: order.offline?.method === "complimentary",
-      platformFeePence: order.platformFeePence,
-      commissionBps: order.commissionBps,
-      charges: order.charges,
-      taxPence: order.taxPence,
-      taxBps: order.taxBps,
-      cardFeePence: order.cardFeePence,
-    }),
-    totalPence: order.totalPence,
-    tickets: passes,
+  const data = await buildPassesData({
+    order,
+    event,
+    tickets,
     viewUrl: viewUrl(order.publicId),
     demo: isDemoPayments() && order.source !== "offline" && !order.stripe?.paymentIntentId,
     reason: job.reason,
-  };
+  });
+  const passes = data.tickets;
 
   const [email, pdf] = await Promise.all([renderTicketsEmail(data), renderPassesPdf(data)]);
   const emailId = await sendEmail({

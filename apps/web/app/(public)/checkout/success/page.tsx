@@ -100,9 +100,14 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
 
             <div className="flex flex-wrap items-center gap-4">
               {hasPasses && canView && (
-                <Link href={`/orders/${encodeURIComponent(order.publicId)}?t=${encodeURIComponent(t!)}`} className="btn-cta inline-block">
-                  View my passes
-                </Link>
+                <>
+                  <Link href={`/orders/${encodeURIComponent(order.publicId)}?t=${encodeURIComponent(t!)}`} className="btn-cta inline-block">
+                    View my passes
+                  </Link>
+                  <a href={`/orders/${encodeURIComponent(order.publicId)}/pdf?t=${encodeURIComponent(t!)}`} download className="rounded-full border border-border bg-card px-6 py-3 font-display font-bold">
+                    Download passes (PDF)
+                  </a>
+                </>
               )}
               {hasPasses && !canView && (
                 <Link href="/orders/lookup" className="btn-cta inline-block">

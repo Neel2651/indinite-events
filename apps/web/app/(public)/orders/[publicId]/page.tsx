@@ -85,12 +85,17 @@ export default async function OrderTicketsPage({ params, searchParams }: Props) 
             </div>
           ) : (
             <>
-              <div>
-                <h2 className="text-xl">Your passes</h2>
-                <p className="mt-2 mb-6 text-muted-foreground">
-                  Show one QR code per person at the gate, with your screen brightness turned up. For your security this page
-                  closes at {formatDayTime(link.expiresAt)}. Use Find my tickets to open it again.
-                </p>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="max-w-prose">
+                  <h2 className="text-xl">Your passes</h2>
+                  <p className="mt-2 mb-6 text-muted-foreground">
+                    Show one QR code per person at the gate, with your screen brightness turned up. For your security this page
+                    closes at {formatDayTime(link.expiresAt)}. Use Find my tickets to open it again.
+                  </p>
+                </div>
+                <a href={`/orders/${encodeURIComponent(view.publicId)}/pdf?t=${encodeURIComponent(token)}`} download className="btn-cta shrink-0">
+                  Download passes (PDF)
+                </a>
               </div>
               <ul className="grid gap-6 sm:grid-cols-2">
                 {view.tickets.map((t, i) => (

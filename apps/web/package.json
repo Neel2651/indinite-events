@@ -15,6 +15,7 @@
     "@indinite/auth": "workspace:^",
     "@indinite/core": "workspace:*",
     "@indinite/db": "workspace:*",
+    "@indinite/emails": "workspace:^",
     "better-auth": "^1.7.6",
     "dexie": "^4.4.6",
     "mongoose": "^8.7.0",
