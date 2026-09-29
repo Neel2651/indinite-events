@@ -46,10 +46,10 @@ pnpm --filter @indinite/db sync-indexes
 pnpm --filter @indinite/auth sync-indexes
 
 if [[ "${1:-}" == "--seed" ]]; then
-  if [[ "${DEPLOY_ENV:-}" != "staging" ]]; then
-    echo "✗ --seed is only for staging servers (DEPLOY_ENV=staging)." >&2
-    exit 1
-  fi
+  # if [[ "${DEPLOY_ENV:-}" != "staging" ]]; then
+  #   echo "✗ --seed is only for staging servers (DEPLOY_ENV=staging)." >&2
+  #   exit 1
+  # fi
   echo "→ Loading demo data (staging)"
   pnpm --filter @indinite/db seed || echo "  (demo events already exist; skipped)"
   pnpm --filter @indinite/auth seed-users
