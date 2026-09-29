@@ -25,6 +25,12 @@ export interface MerchantPrefill {
 
 const paymentsPageUrl = (appUrl: string, slug: string) => `${appUrl.replace(/\/+$/, "")}/org/${slug}/payments`;
 
+/**
+ * Shareable setup link for an organiser's owner: their Payments page, which asks them to sign in first and then
+ * opens a fresh Stripe form (Stripe's own links are single-use and expire in minutes, so they can't be shared).
+ */
+export const merchantSetupUrl = (appUrl: string, slug: string) => `${paymentsPageUrl(appUrl, slug)}?setup=1`;
+
 /** Owners' emails for an organiser (Better Auth collections), falling back to the contact email. */
 async function ownerEmails(authOrgId: string, fallback: string): Promise<string[]> {
   const db = mongoose.connection.db!;
@@ -97,7 +103,7 @@ export async function sendMerchantSetupEmail(organizerId: string, appUrl: string
   if (!org) throw new MerchantError("Organiser not found.", 404);
   const to = recipients?.length ? recipients : await ownerEmails(org.authOrgId, org.contactEmail);
   for (const email of to) {
-    await enqueueSendAuthEmail({ kind: "merchant-setup", to: email, url: paymentsPageUrl(appUrl, org.slug), organizationName: org.name });
+    await enqueueSendAuthEmail({ kind: "merchant-setup", to: email, url: merchantSetupUrl(appUrl, org.slug), organizationName: org.name });
   }
   await withTransaction((session) =>
     audited(session, { action: "merchant.setup_email_sent", entity: { type: "organizer", id: org._id }, metadata: { recipients: to.length }, organizerId: org._id }),

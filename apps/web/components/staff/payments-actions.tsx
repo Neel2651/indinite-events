@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { CopyLinkButton } from "./copy-link-button";
 import { openDashboardAction, sendSetupEmailAction, startOnboardingAction, type State } from "@/app/org/[slug]/payments/actions";
 
-export function PaymentsActions({ slug, status, canManage }: { slug: string; status: string; canManage: boolean }) {
+export function PaymentsActions({ slug, status, canManage, setupUrl }: { slug: string; status: string; canManage: boolean; setupUrl: string }) {
   const [pending, start] = useTransition();
   const [state, setState] = useState<State>(null);
   if (!canManage) return <p className="text-sm text-muted-foreground">Only the organiser&apos;s owner can set up or change payments.</p>;
@@ -28,6 +29,7 @@ export function PaymentsActions({ slug, status, canManage }: { slug: string; sta
             Email the setup link to the owner
           </button>
         )}
+        {status !== "active" && <CopyLinkButton url={setupUrl} />}
       </div>
       {state?.error && <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.error}</p>}
       {state?.ok && <p role="status" className="rounded-md bg-success/10 px-3 py-2 text-sm text-success">{state.ok}</p>}

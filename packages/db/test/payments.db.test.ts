@@ -31,6 +31,8 @@ import {
   startMerchantOnboarding,
   syncMerchantAccount,
   cancelOrder,
+  merchantSetupUrl,
+  sendMerchantSetupEmail,
   CommissionLedger,
   eventFinance,
   reconcileStripe,
@@ -182,6 +184,12 @@ describe("merchant onboarding", () => {
     expect(stripe.last("createExpressAccount")).toMatchObject({ organizerId: orgId, email: "owner@example.com", businessType: "company", businessName: "Demo Garba Ltd", website: "https://demo.example" });
     expect(stripe.last("createOnboardingLink")).toMatchObject({ returnUrl: `${APP}/org/demo/payments?stripe=return`, refreshUrl: `${APP}/org/demo/payments?stripe=refresh` });
     expect(await AuditLog.countDocuments({ action: "merchant.account_created" })).toBe(1);
+  });
+
+  it("setup email and copied link both open the owner's Payments page (sign-in required), never a Stripe link", async () => {
+    expect(merchantSetupUrl(APP, "demo")).toBe(`${APP}/org/demo/payments?setup=1`);
+    await asUser("admin-1", () => sendMerchantSetupEmail(orgId, APP, ["owner@example.com"]));
+    expect(await Job.findOne({ queue: "send-auth-email", "data.kind": "merchant-setup" }).lean()).toMatchObject({ data: { url: `${APP}/org/demo/payments?setup=1` } });
   });
 
   it("lets a super admin fill in the same account's details and come back to the admin page", async () => {

@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Types } from "mongoose";
 import { appUrl } from "@indinite/auth";
 import { merchantStatus, MERCHANT_STATUS_LABELS } from "@indinite/core";
-import { Organizer, refreshMerchantAccount, stripeConfigured } from "@indinite/db";
+import { merchantSetupUrl, Organizer, refreshMerchantAccount, stripeConfigured } from "@indinite/db";
 import { AdminOnboardingActions, CardFeeForm, OrganizerDetailsForm, SalesPausedForm } from "@/components/staff/admin-merchant-forms";
 import { PageHeader } from "@/components/staff/shell";
 import { formatDayTime } from "@/lib/format";
@@ -66,7 +66,7 @@ export default async function AdminOrganiserPage({ params, searchParams }: Props
           </dl>
           {stripe === "refresh" && <p className="rounded-md bg-muted px-3 py-2 text-sm">That Stripe link expired. Use the button below to open a new one.</p>}
           {stripe === "return" && <p className="rounded-md bg-muted px-3 py-2 text-sm">Back from Stripe. The status above is up to date.</p>}
-          <AdminOnboardingActions organizerId={id} status={status} stripeReady={configured} />
+          <AdminOnboardingActions organizerId={id} status={status} stripeReady={configured} setupUrl={merchantSetupUrl(appUrl(), org.slug)} />
         </section>
         <section className="space-y-6 rounded-lg border border-border bg-card p-6">
           <div>

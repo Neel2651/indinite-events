@@ -10,6 +10,7 @@ import {
   updateOrganizerAction,
   type ActionState,
 } from "@/app/admin/organisers/actions";
+import { CopyLinkButton } from "./copy-link-button";
 import { FormError, inputClass } from "./ui";
 
 function Ok({ state }: { state: ActionState }) {
@@ -83,7 +84,7 @@ export function CardFeeForm({ organizerId, payer, percent, fixed }: { organizerI
  * Super admin: fill in the organiser's bank and business details on Stripe's form, open their Stripe dashboard,
  * or email the owner to finish it themselves.
  */
-export function AdminOnboardingActions({ organizerId, status, stripeReady }: { organizerId: string; status: string; stripeReady: boolean }) {
+export function AdminOnboardingActions({ organizerId, status, stripeReady, setupUrl }: { organizerId: string; status: string; stripeReady: boolean; setupUrl: string }) {
   const [pending, start] = useTransition();
   const [state, setState] = useState<ActionState>(null);
   if (!stripeReady) return <p className="text-sm text-muted-foreground">Stripe isn&apos;t configured on this server yet (STRIPE_SECRET_KEY).</p>;
@@ -108,7 +109,9 @@ export function AdminOnboardingActions({ organizerId, status, stripeReady }: { o
             Email the setup link to the owner
           </button>
         )}
+        {status !== "active" && <CopyLinkButton url={setupUrl} label="Copy setup link for the owner" className="rounded-full border border-border bg-card px-5 py-2.5 font-semibold" />}
       </div>
+      {status !== "active" && <p className="text-xs text-muted-foreground">The copied link opens the organiser&apos;s Payments page. The owner signs in, then continues on Stripe; nobody else can use it.</p>}
       <p className="text-xs text-muted-foreground">
         Bank details are entered on Stripe&apos;s secure form, never stored by Indinite. Stripe may text a code to the organiser&apos;s phone and ask for their photo ID, so have them on hand, or let the owner finish it later.
       </p>

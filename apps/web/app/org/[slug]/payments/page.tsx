@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { merchantStatus, MERCHANT_STATUS_LABELS, resolvePaymentsMode } from "@indinite/core";
 import { appUrl } from "@indinite/auth";
-import { Organizer, refreshMerchantAccount, stripeConfigured } from "@indinite/db";
+import { merchantSetupUrl, Organizer, refreshMerchantAccount, stripeConfigured } from "@indinite/db";
 import { PaymentsActions } from "@/components/staff/payments-actions";
 import { PageHeader } from "@/components/staff/shell";
 import { formatDayTime } from "@/lib/format";
-import { asStaff, requireOrg } from "@/lib/staff";
+import { asStaff, requireOrg, requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Payments" };
 
@@ -26,11 +26,13 @@ const REQUIREMENT: Record<string, string> = {
 };
 const niceRequirement = (r: string) => REQUIREMENT[r] ?? (r.includes("verification.document") ? "Photo ID" : r.includes("address") ? "Address" : r.includes("dob") ? "Date of birth" : r.replace(/[._]/g, " "));
 
-type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ stripe?: string }> };
+type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ stripe?: string; setup?: string }> };
 
 export default async function PaymentsPage({ params, searchParams }: Props) {
   const { slug } = await params;
-  const { stripe } = await searchParams;
+  const { stripe, setup } = await searchParams;
+  // Signed-out owners opening a shared setup link come back here (not the dashboard) after signing in.
+  await requireStaff(`/org/${slug}/payments${setup ? "?setup=1" : ""}`);
   const { user, organizer, can } = await requireOrg(slug);
   const configured = stripeConfigured();
   // Back from Stripe's form: check now rather than waiting for the webhook.
@@ -57,6 +59,14 @@ export default async function PaymentsPage({ params, searchParams }: Props) {
             {org.onlineSalesPaused && <span className="rounded-full bg-warning/15 px-3 py-1 text-xs font-semibold tracking-widest text-warning">ONLINE SALES PAUSED BY INDINITE</span>}
           </div>
           <p className="text-muted-foreground">{EXPLAIN[status]}</p>
+          {setup && status !== "active" && can("stripe.onboard") && (
+            <p className="rounded-md border border-brand-orange/40 bg-brand-orange/10 px-3 py-2 text-sm">
+              You&apos;ve been asked to set up payments for {organizer.name}. Use the button below to continue on Stripe&apos;s secure form. It takes about 10 minutes; have your bank details and photo ID ready.
+            </p>
+          )}
+          {setup && !can("stripe.onboard") && (
+            <p className="rounded-md bg-muted px-3 py-2 text-sm">Only the organiser&apos;s owner can set up payments. Ask them to open this link.</p>
+          )}
           {stripe === "refresh" && <p className="rounded-md bg-muted px-3 py-2 text-sm">That Stripe link expired. Use the button below to open a new one.</p>}
           {status === "restricted" && (org.stripeCurrentlyDue?.length ?? 0) > 0 && (
             <div>
@@ -71,7 +81,7 @@ export default async function PaymentsPage({ params, searchParams }: Props) {
           {!configured ? (
             <p className="rounded-md bg-muted px-3 py-2 text-sm">Stripe isn&apos;t set up on this server yet{demo ? " (demo mode: card payments are simulated)" : ""}.</p>
           ) : (
-            <PaymentsActions slug={slug} status={status} canManage={can("stripe.onboard")} />
+            <PaymentsActions slug={slug} status={status} canManage={can("stripe.onboard")} setupUrl={merchantSetupUrl(appUrl(), slug)} />
           )}
           <p className="text-xs text-muted-foreground">Bank details and ID are entered on Stripe&apos;s secure pages. Indinite never sees them.</p>
         </section>
