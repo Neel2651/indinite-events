@@ -60,17 +60,17 @@ interface SeedOrganizer {
     slug: string;
     title: string;
     description: string;
-    venue: { name: string; address: string; postcode: string; mapUrl?: string };
+    venue: { name: string; address: string; postcode: string; mapUrl?: string; lat?: number; lng?: number };
     sessions: ReturnType<typeof night>[];
   };
   ticketTypes: SeedTicketType[];
-  /** One pass per night (day pass group); `price(weekend)` in pence. */
-  dayPass?: { name: string; description: string; maxPerOrder: number; quota: number; price: (weekend: boolean) => number };
+  /** One pass per night (day pass group); `price(nightIndex, weekday)` in pence, weekday "Mon"…"Sun". */
+  dayPass?: { name: string; description: string; maxPerOrder: number; quota: number; price: (night: number, weekday: string) => number };
   /** Unset = on sale now. Applied to every ticket type. */
   salesStartAt?: Date;
   palette: Palette;
   images: { file: string; alt: string; art: (p: Palette, seed: number) => string }[];
-  discount: { code: string; kind: "percent" | "fixed"; value: number; maxUses: number };
+  discount?: { code: string; kind: "percent" | "fixed"; value: number; maxUses: number };
 }
 
 const all = (n: number) => Array.from({ length: n }, (_, i) => i);
@@ -101,7 +101,7 @@ const DATA: SeedOrganizer[] = [
       { name: "Weekend pass — adult", description: "Fri 16 and Sat 17 October.", pricePence: 1800, quota: 300, nights: [5, 6] },
     ],
     // One pass per night, each with its own price and quota; customers pick any nights (30 Sep 2026).
-    dayPass: { name: "Day pass — adult", description: "Entry for the night you choose.", maxPerOrder: 6, quota: 150, price: (weekend: boolean) => (weekend ? 1500 : 1000) },
+    dayPass: { name: "Day pass — adult", description: "Entry for the night you choose.", maxPerOrder: 6, quota: 150, price: (_n: number, weekday: string) => (weekday === "Fri" || weekday === "Sat" ? 1500 : 1000) },
     pricing: { taxBps: 2000, charges: [{ name: "Venue fee", kind: "fixed", value: 30 }] },
     palette: PALETTES.saffron,
     images: [
@@ -139,6 +139,39 @@ const DATA: SeedOrganizer[] = [
       { file: "diyas.svg", alt: "Illustration of lit diya lamps", art: diyaArt },
     ],
     discount: { code: "EARLY5", kind: "fixed", value: 500, maxUses: 50 },
+  },
+  {
+    // OMB Events (30 Sep 2026): ten nights, day passes only, 500 per night, 10% platform fee, on sale now.
+    organizer: {
+      name: "OMB Events",
+      slug: "omb-events",
+      contactEmail: "hello@omb-events.example",
+      commissionBps: 1000,
+      orderPrefix: "OMB",
+    },
+    event: {
+      slug: "omb-navratri-2k26",
+      title: "OMB Navratri 2k26",
+      description: "Ten nights of garba and dandiya in London. Book the nights you want: each day pass is for one night.",
+      // Venue details to be confirmed; coordinates are central London for now.
+      venue: { name: "OMB Navratri 2k26", address: "London", postcode: "London", lat: 51.5072, lng: -0.1276 },
+      sessions: Array.from({ length: 10 }, (_, i) => night(`Day ${i + 1}`, 9 + i)),
+    },
+    ticketTypes: [],
+    dayPass: {
+      name: "Day pass",
+      description: "Entry for the night you choose.",
+      maxPerOrder: 10,
+      quota: 500,
+      // Day 1–3 (9–11 Oct) £25, Day 4–7 (12–15 Oct) £20, Day 8–10 (16–18 Oct) £30.
+      price: (n: number) => (n <= 2 ? 2500 : n <= 6 ? 2000 : 3000),
+    },
+    palette: PALETTES.saffron,
+    images: [
+      { file: "cover.svg", alt: "Illustration of garba dancers beneath a glowing mandala", art: coverArt },
+      { file: "diyas.svg", alt: "Illustration of lit diya lamps", art: diyaArt },
+      { file: "mandala.svg", alt: "Illustration of an orange and yellow mandala", art: mandalaArt },
+    ],
   },
 ];
 
@@ -195,7 +228,7 @@ async function seedOne(session: ClientSession, d: SeedOrganizer, media: Awaited<
           eventId: event!._id,
           name: dayPassMemberName(dp.name, s.startsAt),
           description: dp.description,
-          pricePence: dp.price(weekday === "Fri" || weekday === "Sat"),
+          pricePence: dp.price(i, weekday),
           quota: dp.quota,
           maxPerOrder: dp.maxPerOrder,
           validSessionIds: [s._id],
@@ -209,13 +242,14 @@ async function seedOne(session: ClientSession, d: SeedOrganizer, media: Awaited<
     for (const t of members) await audit("ticketType.created", "ticketType", t._id, t.toObject());
   }
 
-  const [discount] = await Discount.create(
-    [{ ...d.discount, organizerId: orgId, eventId: event!._id, createdBy: "seed" }],
-    { session },
-  );
-  await audit("discount.created", "discount", discount!._id, discount!.toObject());
+  let discountCode: string | null = null;
+  if (d.discount) {
+    const [discount] = await Discount.create([{ ...d.discount, organizerId: orgId, eventId: event!._id, createdBy: "seed" }], { session });
+    await audit("discount.created", "discount", discount!._id, discount!.toObject());
+    discountCode = discount!.code ?? null;
+  }
 
-  return { organizer: organizer!.slug, event: event!.slug, ticketTypes: types.length, discount: discount!.code, images: media.length };
+  return { organizer: organizer!.slug, event: event!.slug, ticketTypes: await TicketType.countDocuments({ eventId: event!._id }).session(session), discount: discountCode, images: media.length };
 }
 
 /** Delete everything belonging to the demo organisers. Audit logs are append-only and stay. */
@@ -251,7 +285,7 @@ await runWithContext({ actor: systemActor, requestId: "seed" }, () =>
     for (const d of DATA) {
       const r = await seedOne(session, d, mediaByEvent.get(d.event.slug)!);
       const sales = d.salesStartAt ? `bookings open ${d.salesStartAt.toISOString()}` : "bookings open now";
-      console.log(`Seeded ${r.organizer}: event ${r.event} (published, ${sales}), ${r.ticketTypes} ticket types, ${r.images} images, discount ${r.discount}`);
+      console.log(`Seeded ${r.organizer}: event ${r.event} (published, ${sales}), ${r.ticketTypes} pass types, ${r.images} images${r.discount ? `, discount ${r.discount}` : ""}`);
     }
   }),
 );

@@ -26,7 +26,7 @@ export interface PublicEvent {
   slug: string;
   title: string;
   description: string;
-  venue: { name: string; address: string; postcode: string; mapUrl?: string | null };
+  venue: { name: string; address: string; postcode: string; mapUrl?: string | null; lat?: number | null; lng?: number | null };
   startsAt: Date;
   endsAt: Date;
   sessions: { id: string; label: string; startsAt: Date; endsAt: Date }[];

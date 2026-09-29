@@ -37,6 +37,14 @@ function failure(e: unknown, fallback: string): ActionState {
 
 type NightInput = { id?: string; label: string; start: string; end: string };
 
+/** Optional coordinate field: empty = not set; otherwise a decimal number. */
+function coord(v: string, key: "lat" | "lng") {
+  if (!v) return {};
+  const n = Number(v);
+  if (!Number.isFinite(n)) throw new EventAdminError(`Enter the ${key === "lat" ? "latitude" : "longitude"} as a number, e.g. ${key === "lat" ? "51.5072" : "-0.1276"}.`);
+  return { [key]: n };
+}
+
 /** Nights arrive as JSON from the event form, with London wall-clock times. */
 function parseNights(form: FormData) {
   let raw: NightInput[];
@@ -58,7 +66,14 @@ function eventFields(form: FormData) {
     title: text(form, "title"),
     slug: text(form, "slug"),
     description: text(form, "description"),
-    venue: { name: text(form, "venueName"), address: text(form, "venueAddress"), postcode: text(form, "postcode"), mapUrl: text(form, "mapUrl") },
+    venue: {
+      name: text(form, "venueName"),
+      address: text(form, "venueAddress"),
+      postcode: text(form, "postcode"),
+      mapUrl: text(form, "mapUrl"),
+      ...coord(text(form, "lat"), "lat"),
+      ...coord(text(form, "lng"), "lng"),
+    },
     sessions: parseNights(form),
   };
 }

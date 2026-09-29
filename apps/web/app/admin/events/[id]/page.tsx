@@ -102,6 +102,8 @@ export default async function AdminEventPage({ params, searchParams }: Props) {
                 venueAddress: event.venue.address,
                 postcode: event.venue.postcode,
                 mapUrl: event.venue.mapUrl ?? "",
+                lat: event.venue.lat != null ? String(event.venue.lat) : "",
+                lng: event.venue.lng != null ? String(event.venue.lng) : "",
                 nights: event.sessions.map((s) => ({ id: String(s._id), label: s.label, start: utcToLondonLocal(s.startsAt), end: utcToLondonLocal(s.endsAt), locked: usedNights.has(String(s._id)) })),
               }}
             />

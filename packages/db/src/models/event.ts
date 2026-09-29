@@ -14,6 +14,9 @@ const venueSchema = new Schema(
     address: { type: String, required: true },
     postcode: { type: String, required: true },
     mapUrl: String,
+    /** Venue location for directions (WGS84 decimal degrees). */
+    lat: { type: Number, min: -90, max: 90 },
+    lng: { type: Number, min: -180, max: 180 },
   },
   { _id: false },
 );

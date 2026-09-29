@@ -22,6 +22,8 @@ export interface EventFormValues {
   venueAddress: string;
   postcode: string;
   mapUrl: string;
+  lat: string;
+  lng: string;
   nights: NightRow[];
 }
 
@@ -132,6 +134,15 @@ export function EventForm({ eventId, organisers, initial }: { eventId?: string; 
         <label className="block text-sm sm:col-span-2">
           Map link (optional)
           <input name="mapUrl" type="url" defaultValue={initial?.mapUrl} className={inputClass} placeholder="https://maps.google.com/…" />
+        </label>
+        <label className="block text-sm">
+          Latitude (optional)
+          <input name="lat" inputMode="decimal" defaultValue={initial?.lat} className={inputClass} placeholder="51.5072" />
+        </label>
+        <label className="block text-sm">
+          Longitude (optional)
+          <input name="lng" inputMode="decimal" defaultValue={initial?.lng} className={inputClass} placeholder="-0.1276" />
+          <span className="mt-1 block text-xs text-muted-foreground">Used for the &ldquo;Get directions&rdquo; link on the event page.</span>
         </label>
       </fieldset>
 

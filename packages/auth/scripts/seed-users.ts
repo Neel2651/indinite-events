@@ -29,6 +29,7 @@ const MEMBERS: Record<string, { email: string; name: string; role: OrgRole }[]> 
     { email: "scanner@demo-garba.test", name: "Sam Scanner", role: "scanner" },
   ],
   "sample-dandiya": [{ email: "owner@sample-dandiya.test", name: "Dev Owner", role: "owner" }],
+  "omb-events": [{ email: "owner@omb-events.test", name: "OMB Owner", role: "owner" }],
 };
 
 await connectDb();

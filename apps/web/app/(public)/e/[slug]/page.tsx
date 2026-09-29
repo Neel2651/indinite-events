@@ -45,6 +45,16 @@ export default async function EventPage({ params }: Props) {
           <p className="mt-4 text-lg text-muted-foreground">
             {formatDateRange(event.startsAt, event.endsAt)} · {event.venue.name}, {event.venue.address}
           </p>
+          {(event.venue.lat != null && event.venue.lng != null) || event.venue.mapUrl ? (
+            <a
+              href={event.venue.lat != null && event.venue.lng != null ? `https://www.google.com/maps/dir/?api=1&destination=${event.venue.lat},${event.venue.lng}` : event.venue.mapUrl!}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-outline-pill mt-5 inline-block"
+            >
+              Get directions<span className="sr-only"> (opens Google Maps)</span>
+            </a>
+          ) : null}
         </div>
       </section>
 

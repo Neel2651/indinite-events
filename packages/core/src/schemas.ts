@@ -66,7 +66,10 @@ export const venueSchema = z.object({
   address: z.string().trim().min(1, "Enter the venue address").max(300),
   postcode: z.string().trim().min(2, "Enter the postcode").max(10).transform((p) => p.toUpperCase()),
   mapUrl: z.union([z.url("Enter a full map link, starting https://"), z.literal("")]).optional().transform((u) => u || undefined),
-});
+  /** Coordinates for "Get directions" (decimal degrees, e.g. 51.5072, -0.1276). Both or neither. */
+  lat: z.number().min(-90, "Latitude must be between -90 and 90").max(90, "Latitude must be between -90 and 90").optional(),
+  lng: z.number().min(-180, "Longitude must be between -180 and 180").max(180, "Longitude must be between -180 and 180").optional(),
+}).refine((v) => (v.lat === undefined) === (v.lng === undefined), { message: "Enter both latitude and longitude, or neither", path: ["lat"] });
 
 export const eventUpsertSchema = z
   .object({
