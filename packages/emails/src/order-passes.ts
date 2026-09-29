@@ -8,6 +8,43 @@ import type { PassData, TicketsEmailData } from "./types";
  * Callers load the records (this package has no database access) and decide who may see them.
  */
 const dayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short", day: "numeric", month: "short" });
+const timeFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit" });
+
+/** Where a pass goes when passes are split by night (one PDF per night, SPEC §4.4, 30 Sep 2026). */
+export function passNight(validSessionIds: unknown[], sessions: { _id: unknown; startsAt: Date }[]) {
+  const valid = new Set(validSessionIds.map(String));
+  const nights = sessions.filter((s) => valid.has(String(s._id))).sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const first = nights[0];
+  if (nights.length === 1 && first) {
+    return { nightKey: String(first._id), nightDate: `${dayFmt.format(first.startsAt)} · ${timeFmt.format(first.startsAt)}`.toUpperCase(), nightSort: first.startsAt.getTime() };
+  }
+  return { nightKey: "multi", nightDate: "", nightSort: first?.startsAt.getTime() ?? 0 };
+}
+
+export interface PassGroup {
+  /** Session id, or "multi". */
+  key: string;
+  /** "Sun 11 Oct" or "All nights" (season and multi-night passes). */
+  title: string;
+  /** For file names: "Sun-11-Oct", "All-nights". */
+  fileLabel: string;
+  tickets: PassData[];
+}
+
+/** One group per night for one-night passes (in night order), then one "All nights" group for the rest. */
+export function groupPassesByNight(tickets: PassData[]): PassGroup[] {
+  const groups = new Map<string, PassGroup & { sort: number }>();
+  for (const t of tickets) {
+    let g = groups.get(t.nightKey);
+    if (!g) {
+      const title = t.nightKey === "multi" ? "All nights" : dayFmt.format(new Date(t.nightSort));
+      g = { key: t.nightKey, title, fileLabel: title.replace(/[^A-Za-z0-9]+/g, "-"), tickets: [], sort: t.nightKey === "multi" ? Number.MAX_SAFE_INTEGER : t.nightSort };
+      groups.set(t.nightKey, g);
+    }
+    g.tickets.push(t);
+  }
+  return [...groups.values()].sort((a, b) => a.sort - b.sort).map(({ sort: _s, ...g }) => g);
+}
 
 /** "All 9 nights" or "Fri 16 Oct, Sat 17 Oct". */
 export function nightsLabel(validSessionIds: unknown[], sessions: { _id: unknown; startsAt: Date }[]) {
@@ -64,8 +101,11 @@ export async function buildPassesData(input: {
       qrContentId: `pass-${i + 1}-${String(t._id)}`,
       qrPng: await QRCode.toBuffer(t.qrToken, { errorCorrectionLevel: "M", margin: 1, width: 480 }),
       shortCode: passCode(t.qrToken),
+      ...passNight(t.validSessionIds, event.sessions),
     })),
   );
+  // Night order, so emails and PDFs read Night 1, Night 2, … then season passes.
+  passes.sort((a, b) => (a.nightKey === "multi" ? 1 : 0) - (b.nightKey === "multi" ? 1 : 0) || a.nightSort - b.nightSort);
   return {
     publicId: order.publicId,
     customerName: order.customer.name,

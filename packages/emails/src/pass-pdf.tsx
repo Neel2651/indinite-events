@@ -27,6 +27,7 @@ const s = StyleSheet.create({
   body: { padding: 18, alignItems: "center" },
   typeName: { fontSize: 18, fontFamily: "Helvetica-Bold", color: brand.ink },
   nights: { marginTop: 4, fontSize: 11, color: brand.body },
+  nightDate: { marginTop: 8, fontSize: 16, fontFamily: "Helvetica-Bold", letterSpacing: 1, color: brand.orangeStrong },
   qrPanel: { marginTop: 12, padding: 10, borderWidth: 1, borderColor: brand.border, borderRadius: 12 },
   code: { marginTop: 10, fontSize: 10, letterSpacing: 1, color: brand.body },
   meta: { flexDirection: "row", justifyContent: "space-between", borderTopWidth: 1, borderColor: brand.border, paddingVertical: 12, paddingHorizontal: 18 },
@@ -50,11 +51,11 @@ function PassPage({ d, t, n }: { d: TicketsEmailData; t: PassData; n: number }) 
         </View>
         <View style={s.body}>
           <Text style={s.typeName}>{t.ticketTypeName}</Text>
-          <Text style={s.nights}>{t.nightsLabel}</Text>
+          {t.nightDate ? <Text style={s.nightDate}>{t.nightDate}</Text> : <Text style={s.nights}>{t.nightsLabel}</Text>}
           <View style={s.qrPanel}>
             <Image src={{ data: t.qrPng, format: "png" }} style={{ width: 170, height: 170 }} />
           </View>
-          <Text style={s.code}>{t.shortCode}</Text>
+          <Text style={s.code}>{t.nightDate ? `${t.shortCode} · ${t.nightDate}` : t.shortCode}</Text>
         </View>
         <View style={s.meta}>
           <View>
@@ -75,9 +76,10 @@ function PassPage({ d, t, n }: { d: TicketsEmailData; t: PassData; n: number }) 
 }
 
 /** One A5 page per ticket. */
-export async function renderPassesPdf(d: TicketsEmailData): Promise<Buffer> {
+/** PDF of `d.tickets` (pass a night's passes for a per-night PDF; `title` names it, e.g. "Sun 11 Oct"). */
+export async function renderPassesPdf(d: TicketsEmailData, title?: string): Promise<Buffer> {
   return renderToBuffer(
-    <Document title={`${d.event.title} — ${d.publicId}`} author="Indinite Events">
+    <Document title={`${d.event.title} — ${d.publicId}${title ? ` — ${title}` : ""}`} author="Indinite Events">
       {d.tickets.map((t, i) => (
         <PassPage key={t.ticketId} d={d} t={t} n={i + 1} />
       ))}

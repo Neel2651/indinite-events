@@ -7,14 +7,18 @@ import { londonLocalToUtc } from "@indinite/core";
 import {
   addEventImage,
   addEventVideo,
+  createDayPass,
   createEvent,
   createTicketType,
+  deleteDayPass,
   deleteEvent,
   deleteTicketType,
   EventAdminError,
   removeEventMedia,
   reorderEventMedia,
+  setBookingsClosed,
   setEventStatus,
+  updateDayPass,
   updateEvent,
   updateTicketType,
 } from "@indinite/db";
@@ -217,4 +221,83 @@ export async function deleteTicketTypeAction(eventId: string, ticketTypeId: stri
   } catch (e) {
     return failure(e, "Couldn't delete the pass type.");
   }
+}
+
+// ─── Day passes (30 Sep 2026) ───
+
+function dayPassFields(form: FormData, sessionIds: string[]) {
+  const pounds = (v: string, label: string) => {
+    const n = Number(v.replace(/[£,\s]/g, ""));
+    if (!v || !Number.isFinite(n) || n < 0) throw new EventAdminError(`Enter a price in pounds for ${label}, e.g. 12.50`);
+    return Math.round(n * 100);
+  };
+  const localOrUndefined = (key: string) => {
+    const v = text(form, key);
+    if (!v) return undefined;
+    const d = londonLocalToUtc(v);
+    if (!d) throw new EventAdminError("Enter a valid sales date and time.");
+    return d;
+  };
+  const nights = sessionIds
+    .filter((id) => form.get(`night_${id}`) === "on")
+    .map((id) => ({
+      sessionId: id,
+      pricePence: pounds(text(form, `price_${id}`), text(form, `label_${id}`) || "each night"),
+      quota: Number(text(form, `quota_${id}`)),
+      active: form.get(`active_${id}`) !== "off",
+    }));
+  return {
+    name: text(form, "name"),
+    description: text(form, "description"),
+    maxPerOrder: Number(text(form, "maxPerOrder") || 10),
+    salesStartAt: localOrUndefined("salesStartAt"),
+    salesEndAt: localOrUndefined("salesEndAt"),
+    sortOrder: Number(text(form, "sortOrder") || 0),
+    nights,
+  };
+}
+
+export async function createDayPassAction(eventId: string, sessionIds: string[], _: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireSuperAdmin();
+  try {
+    await asStaff(user, () => createDayPass(eventId, dayPassFields(form, sessionIds)));
+  } catch (e) {
+    return failure(e, "Couldn't add the day pass.");
+  }
+  revalidatePath(`/admin/events/${eventId}`);
+  return { ok: "Day pass added: one pass per night, each with its own price and quota." };
+}
+
+export async function updateDayPassAction(eventId: string, groupId: string, sessionIds: string[], _: ActionState, form: FormData): Promise<ActionState> {
+  const user = await requireSuperAdmin();
+  try {
+    await asStaff(user, () => updateDayPass(groupId, dayPassFields(form, sessionIds)));
+  } catch (e) {
+    return failure(e, "Couldn't save the day pass.");
+  }
+  revalidatePath(`/admin/events/${eventId}`);
+  return { ok: "Day pass saved. New bookings use these prices; existing bookings keep theirs." };
+}
+
+export async function deleteDayPassAction(eventId: string, groupId: string): Promise<ActionState> {
+  const user = await requireSuperAdmin();
+  try {
+    const r = await asStaff(user, () => deleteDayPass(groupId));
+    revalidatePath(`/admin/events/${eventId}`);
+    return { ok: r.deactivated ? `Deleted ${r.deleted} night(s); ${r.deactivated} with bookings were switched off instead.` : "Day pass deleted." };
+  } catch (e) {
+    return failure(e, "Couldn't delete the day pass.");
+  }
+}
+
+export async function adminSetBookingsClosedAction(eventId: string, sessionId: string | null, closed: boolean, reason: string): Promise<ActionState> {
+  const user = await requireSuperAdmin();
+  try {
+    await asStaff(user, () => setBookingsClosed(eventId, { sessionId, closed, reason, by: user.id }));
+  } catch (e) {
+    return failure(e, "Couldn't change bookings.");
+  }
+  revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/");
+  return { ok: closed ? "Bookings closed. Box office can still issue passes." : "Bookings reopened." };
 }

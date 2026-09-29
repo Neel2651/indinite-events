@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, rm, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Types } from "mongoose";
-import { embedUrlFor, eventUpsertSchema, ticketTypeUpsertSchema, type EventUpsertRaw, type TicketTypeUpsertInput, type TicketTypeUpsertRaw } from "@indinite/core";
+import { dayPassMemberName, dayPassUpsertSchema, embedUrlFor, eventUpsertSchema, ticketTypeUpsertSchema, type BookableEventState, type DayPassRaw, type EventUpsertRaw, type TicketTypeUpsertInput, type TicketTypeUpsertRaw } from "@indinite/core";
 import { audited } from "../audit";
 import { MEDIA_URL_PREFIX, mediaDir, mediaUrl, resolveMediaPath } from "../media";
 import { Event } from "../models/event";
@@ -102,6 +102,14 @@ export async function updateEvent(eventId: string, raw: Omit<EventUpsertRaw, "or
       }
       const set = { title: input.title, slug: input.slug, description: input.description, venue: input.venue, sessions, ...span(sessions) };
       await Event.updateOne({ _id: before._id, deletedAt: null }, { $set: set }, { session, runValidators: true });
+      // Day passes carry their night's date in the name: keep it right if a night moved.
+      const members = await TicketType.find({ eventId: before._id, "dayPass.groupId": { $exists: true } }, { name: 1, dayPass: 1, validSessionIds: 1 }, { session }).lean();
+      for (const m of members) {
+        const night = sessions.find((x) => String(x._id) === String(m.validSessionIds[0]));
+        if (!night || !m.dayPass?.name) continue;
+        const name = dayPassMemberName(m.dayPass.name, night.startsAt);
+        if (name !== m.name) await TicketType.updateOne({ _id: m._id }, { $set: { name } }, { session });
+      }
       await audited(session, {
         action: "event.updated",
         entity: { type: "event", id: before._id },
@@ -335,4 +343,162 @@ export async function deleteTicketType(ticketTypeId: string): Promise<{ mode: "d
     });
   });
   return { mode };
+}
+
+// ─── Booking state (sold out / time / closed by hand) ──────────────────────────────────────────────────────
+
+/** An event's state for `bookability()` in @indinite/core. */
+export function eventBookingState(e: { sessions: { _id: unknown; startsAt: Date; endsAt: Date }[]; bookingsClosed?: { closed?: boolean | null } | null; closedNights?: { sessionId: unknown }[] | null }): BookableEventState {
+  return {
+    sessions: e.sessions.map((s) => ({ id: String(s._id), startsAt: s.startsAt, endsAt: s.endsAt })),
+    bookingsClosed: Boolean(e.bookingsClosed?.closed),
+    closedSessionIds: (e.closedNights ?? []).map((n) => String(n.sessionId)),
+  };
+}
+
+/**
+ * Close or reopen bookings for the whole event (no `sessionId`) or one night. Stops online sales and new payment
+ * links; box office can still issue passes. Callers check `event.manageSales` (owner or super admin) first.
+ */
+export async function setBookingsClosed(eventId: string, input: { sessionId?: string | null; closed: boolean; reason: string; by: string; organizerId?: string }) {
+  const event = await loadEvent(eventId);
+  if (input.organizerId && String(event.organizerId) !== input.organizerId) throw new EventAdminError("Event not found.", 404);
+  const reason = input.reason.trim();
+  if (input.closed && reason.length < 3) throw new EventAdminError("Add a reason (it's recorded in the audit log).");
+  const night = input.sessionId ? event.sessions.find((s) => String(s._id) === input.sessionId) : null;
+  if (input.sessionId && !night) throw new EventAdminError("That night isn't on this event.", 404);
+  const at = new Date();
+  await withTransaction(async (session) => {
+    if (!night) {
+      await Event.updateOne({ _id: event._id }, { $set: { bookingsClosed: input.closed ? { closed: true, reason, at, by: input.by } : { closed: false } } }, { session });
+    } else if (input.closed) {
+      await Event.updateOne({ _id: event._id, "closedNights.sessionId": { $ne: night._id } }, { $push: { closedNights: { sessionId: night._id, reason, at, by: input.by } } }, { session });
+    } else {
+      await Event.updateOne({ _id: event._id }, { $pull: { closedNights: { sessionId: night._id } } }, { session });
+    }
+    await audited(session, {
+      action: input.closed ? "event.bookings_closed" : "event.bookings_reopened",
+      entity: { type: "event", id: event._id },
+      reason: reason || undefined,
+      organizerId: event.organizerId,
+      metadata: { night: night ? night.label : "whole event", sessionId: night ? String(night._id) : null },
+    });
+  });
+}
+
+// ─── Day passes: one one-night pass type per night, grouped ─────────────────────────────────────────────────
+
+/** Create a day pass: one pass type per chosen night, each with its own price and quota. */
+export async function createDayPass(eventId: string, raw: DayPassRaw) {
+  const input = dayPassUpsertSchema.parse(raw);
+  const event = await loadEvent(eventId);
+  const nightBy = new Map(event.sessions.map((s) => [String(s._id), s]));
+  for (const n of input.nights) if (!nightBy.has(n.sessionId)) throw new EventAdminError("Choose nights from this event.");
+  const groupId = new Types.ObjectId();
+  return withTransaction(async (session) => {
+    const docs = input.nights
+      .map((n) => ({ n, night: nightBy.get(n.sessionId)! }))
+      .sort((a, b) => a.night.startsAt.getTime() - b.night.startsAt.getTime())
+      .map(({ n, night }, i) => ({
+        eventId: event._id,
+        name: dayPassMemberName(input.name, night.startsAt),
+        description: input.description,
+        pricePence: n.pricePence,
+        validSessionIds: [night._id],
+        quota: n.quota,
+        sold: 0,
+        held: 0,
+        maxPerOrder: input.maxPerOrder,
+        salesStartAt: input.salesStartAt,
+        salesEndAt: input.salesEndAt,
+        sortOrder: input.sortOrder * 100 + i,
+        active: n.active,
+        dayPass: { groupId, name: input.name },
+      }));
+    const created = await TicketType.create(docs, { session, ordered: true });
+    await audited(session, {
+      action: "ticketType.day_pass_created",
+      entity: { type: "ticketType", id: groupId },
+      after: { name: input.name, nights: docs.map((d) => ({ name: d.name, pricePence: d.pricePence, quota: d.quota })) },
+      organizerId: event.organizerId,
+      metadata: { eventId: String(event._id), passTypes: created.map((c) => String(c._id)) },
+    });
+    return { groupId: String(groupId), passTypes: created.map((c) => c.toObject()) };
+  });
+}
+
+/**
+ * Update a day pass: name and shared settings for every night, and per night its price, quota (atomic, never below
+ * sold + held) and whether it's on sale. Nights can be added; a night left out is deleted if unused, otherwise
+ * switched off (bookings keep their passes).
+ */
+export async function updateDayPass(groupId: string, raw: DayPassRaw) {
+  if (!Types.ObjectId.isValid(groupId)) throw new EventAdminError("Day pass not found.", 404);
+  const input = dayPassUpsertSchema.parse(raw);
+  const members = await TicketType.find({ "dayPass.groupId": new Types.ObjectId(groupId) }).lean();
+  if (!members.length) throw new EventAdminError("Day pass not found.", 404);
+  const event = await loadEvent(String(members[0]!.eventId));
+  const nightBy = new Map(event.sessions.map((s) => [String(s._id), s]));
+  for (const n of input.nights) if (!nightBy.has(n.sessionId)) throw new EventAdminError("Choose nights from this event.");
+  const memberByNight = new Map(members.map((m) => [String(m.validSessionIds[0]), m]));
+  const wanted = new Set(input.nights.map((n) => n.sessionId));
+
+  try {
+    await withTransaction(async (session) => {
+      const ordered = [...input.nights].sort((a, b) => nightBy.get(a.sessionId)!.startsAt.getTime() - nightBy.get(b.sessionId)!.startsAt.getTime());
+      for (const [i, n] of ordered.entries()) {
+        const night = nightBy.get(n.sessionId)!;
+        const shared = {
+          name: dayPassMemberName(input.name, night.startsAt),
+          description: input.description,
+          pricePence: n.pricePence,
+          maxPerOrder: input.maxPerOrder,
+          sortOrder: input.sortOrder * 100 + i,
+          active: n.active,
+          dayPass: { groupId: new Types.ObjectId(groupId), name: input.name },
+        };
+        const existing = memberByNight.get(n.sessionId);
+        if (existing) {
+          const set = { ...shared, ...(input.salesStartAt ? { salesStartAt: input.salesStartAt } : {}), ...(input.salesEndAt ? { salesEndAt: input.salesEndAt } : {}) };
+          const unset = { ...(input.salesStartAt ? {} : { salesStartAt: 1 }), ...(input.salesEndAt ? {} : { salesEndAt: 1 }) };
+          await TicketType.updateOne({ _id: existing._id }, { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) }, { session });
+          if (n.quota !== existing.quota) await quota.set(existing._id, n.quota, session);
+        } else {
+          await TicketType.create([{ ...shared, eventId: event._id, validSessionIds: [night._id], quota: n.quota, sold: 0, held: 0, salesStartAt: input.salesStartAt, salesEndAt: input.salesEndAt }], { session });
+        }
+      }
+      // Nights no longer wanted: delete if never used, otherwise switch off.
+      for (const m of members) {
+        if (wanted.has(String(m.validSessionIds[0]))) continue;
+        const used = (await Ticket.exists({ ticketTypeId: m._id }).session(session)) || (await Order.exists({ "items.ticketTypeId": m._id }).session(session));
+        const res = used ? { deletedCount: 0 } : await TicketType.deleteOne({ _id: m._id, sold: 0, held: 0 }, { session });
+        if (res.deletedCount !== 1) await TicketType.updateOne({ _id: m._id }, { $set: { active: false } }, { session });
+      }
+      await audited(session, {
+        action: "ticketType.day_pass_updated",
+        entity: { type: "ticketType", id: groupId },
+        before: { name: members[0]!.dayPass?.name, nights: members.map((m) => ({ night: String(m.validSessionIds[0]), pricePence: m.pricePence, quota: m.quota, active: m.active })) },
+        after: { name: input.name, nights: input.nights.map((n) => ({ night: n.sessionId, pricePence: n.pricePence, quota: n.quota, active: n.active })) },
+        organizerId: event.organizerId,
+        metadata: { eventId: String(event._id) },
+      });
+    });
+  } catch (e) {
+    if (e instanceof QuotaTooLowError) {
+      const m = members.find((x) => String(x._id) === e.ticketTypeId);
+      const now = m ? await TicketType.findById(m._id, { sold: 1, held: 1, name: 1 }).lean() : null;
+      throw new EventAdminError(`${now?.name ?? "That night"}: the quota can't be lower than ${(now?.sold ?? 0) + (now?.held ?? 0)} (passes already sold or being paid for).`, 409);
+    }
+    throw e;
+  }
+}
+
+/** Delete a day pass: each night is deleted if never used, otherwise switched off. */
+export async function deleteDayPass(groupId: string) {
+  if (!Types.ObjectId.isValid(groupId)) throw new EventAdminError("Day pass not found.", 404);
+  const members = await TicketType.find({ "dayPass.groupId": new Types.ObjectId(groupId) }, { _id: 1 }).lean();
+  if (!members.length) throw new EventAdminError("Day pass not found.", 404);
+  const results = [];
+  for (const m of members) results.push(await deleteTicketType(String(m._id)));
+  return { deleted: results.filter((r) => r.mode === "deleted").length, deactivated: results.filter((r) => r.mode === "deactivated").length };
 }

@@ -6,7 +6,7 @@ import type { TicketsEmailData } from "./types";
 
 export type { PassData, TicketsEmailData } from "./types";
 export { renderPassesPdf } from "./pass-pdf";
-export { buildPassesData, nightsLabel, type EventForPasses, type OrderForPasses, type TicketForPasses } from "./order-passes";
+export { buildPassesData, groupPassesByNight, nightsLabel, passNight, type PassGroup, type EventForPasses, type OrderForPasses, type TicketForPasses } from "./order-passes";
 export type { InvitationEmailData, PaymentLinkEmailData, RefundEmailData, ResetPasswordEmailData } from "./staff-emails";
 
 export interface RenderedEmail {

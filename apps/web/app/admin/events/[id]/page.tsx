@@ -9,7 +9,10 @@ import { EventForm } from "@/components/staff/event-form";
 import { MediaManager } from "@/components/staff/media-manager";
 import { PageHeader } from "@/components/staff/shell";
 import { TicketTypeForm } from "@/components/staff/ticket-type-form";
-import { formatDayTime, price } from "@/lib/format";
+import { adminSetBookingsClosedAction } from "@/app/admin/events/actions";
+import { BookingsControl } from "@/components/staff/bookings-control";
+import { DayPassForm, type DayPassNightRow } from "@/components/staff/day-pass-form";
+import { formatDay, formatDayTime, formatTime, price } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Event" };
 
@@ -31,6 +34,30 @@ export default async function AdminEventPage({ params, searchParams }: Props) {
   const nights = event.sessions.map((s) => ({ id: String(s._id), label: s.label }));
   const media = [...(event.media ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((m) => ({ type: m.type as "image" | "video", url: m.url, alt: m.alt ?? "" }));
   const status = event.status ?? "draft";
+  // Day passes: one pass type per night, shown and edited as one group.
+  const singles = types.filter((t) => !t.dayPass?.groupId);
+  const groups = [...new Map(types.filter((t) => t.dayPass?.groupId).map((t) => [String(t.dayPass!.groupId), t.dayPass!.name ?? t.name])).entries()].map(([groupId, name]) => ({
+    groupId,
+    name,
+    members: types.filter((t) => String(t.dayPass?.groupId) === groupId),
+  }));
+  const when = (d: Date) => `${formatDay(d)} · ${formatTime(d)}`;
+  const nightRows = (members: typeof types = []): DayPassNightRow[] =>
+    event.sessions.map((s) => {
+      const m = members.find((x) => String(x.validSessionIds[0]) === String(s._id));
+      return {
+        sessionId: String(s._id),
+        label: s.label,
+        when: when(s.startsAt),
+        selected: members.length ? Boolean(m) : true,
+        price: m ? (m.pricePence / 100).toFixed(2) : "",
+        quota: m?.quota ?? 0,
+        active: m ? (m.active ?? true) : true,
+        committed: m ? (m.sold ?? 0) + (m.held ?? 0) : 0,
+        sold: m?.sold ?? 0,
+      };
+    });
+  const closedNights = new Map((event.closedNights ?? []).map((n) => [String(n.sessionId), n]));
 
   return (
     <>
@@ -83,9 +110,47 @@ export default async function AdminEventPage({ params, searchParams }: Props) {
           <section className="rounded-lg border border-border bg-card p-6">
             <h2 className="mb-1 text-lg">Pass types</h2>
             <p className="mb-4 text-sm text-muted-foreground">Price changes apply to new bookings only. The quota can&apos;t go below what&apos;s already sold or being paid for.</p>
-            {types.length > 0 && (
+            {groups.length > 0 && (
               <ul className="mb-6 divide-y divide-border rounded-md border border-border">
-                {types.map((t) => (
+                {groups.map((g) => (
+                  <li key={g.groupId}>
+                    <details>
+                      <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3">
+                        <span>
+                          <span className="font-semibold">{g.name}</span>
+                          <span className="ml-2 rounded-full bg-brand-yellow px-2 py-0.5 text-xs font-semibold text-brand-navy">Day pass</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {g.members.length} night{g.members.length === 1 ? "" : "s"} · {g.members.reduce((n, m) => n + (m.sold ?? 0), 0)} sold
+                          </span>
+                        </span>
+                        <span className="text-sm">
+                          {price(Math.min(...g.members.map((m) => m.pricePence)))}
+                          {new Set(g.members.map((m) => m.pricePence)).size > 1 ? ` – ${price(Math.max(...g.members.map((m) => m.pricePence)))}` : ""}
+                        </span>
+                      </summary>
+                      <div className="border-t border-border bg-muted/30 p-4">
+                        <DayPassForm
+                          eventId={id}
+                          initial={{
+                            groupId: g.groupId,
+                            name: g.name,
+                            description: g.members[0]?.description ?? "",
+                            maxPerOrder: g.members[0]?.maxPerOrder ?? 10,
+                            salesStartAt: g.members[0]?.salesStartAt ? utcToLondonLocal(g.members[0].salesStartAt) : "",
+                            salesEndAt: g.members[0]?.salesEndAt ? utcToLondonLocal(g.members[0].salesEndAt) : "",
+                            sortOrder: Math.floor((g.members[0]?.sortOrder ?? 0) / 100),
+                            nights: nightRows(g.members),
+                          }}
+                        />
+                      </div>
+                    </details>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {singles.length > 0 && (
+              <ul className="mb-6 divide-y divide-border rounded-md border border-border">
+                {singles.map((t) => (
                   <li key={String(t._id)}>
                     <details>
                       <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3">
@@ -126,8 +191,18 @@ export default async function AdminEventPage({ params, searchParams }: Props) {
                 ))}
               </ul>
             )}
-            <h3 className="mb-3 font-display font-semibold">Add a pass type</h3>
-            <TicketTypeForm eventId={id} nights={nights} />
+            <details className="mb-4 rounded-md border border-border">
+              <summary className="cursor-pointer px-4 py-3 font-display font-semibold">Add a day pass (customers pick nights, price and quota per night)</summary>
+              <div className="border-t border-border p-4">
+                <DayPassForm key={`new-${groups.length}`} eventId={id} initial={{ name: "", description: "", maxPerOrder: 10, salesStartAt: "", salesEndAt: "", sortOrder: 0, nights: nightRows() }} />
+              </div>
+            </details>
+            <details className="rounded-md border border-border">
+              <summary className="cursor-pointer px-4 py-3 font-display font-semibold">Add a pass for one or more set nights (e.g. season or weekend pass)</summary>
+              <div className="border-t border-border p-4">
+                <TicketTypeForm eventId={id} nights={nights} />
+              </div>
+            </details>
           </section>
 
           <section className="rounded-lg border border-border bg-card p-6">
@@ -140,6 +215,15 @@ export default async function AdminEventPage({ params, searchParams }: Props) {
           <section className="rounded-lg border border-border bg-card p-6">
             <h2 className="mb-3 text-lg">Publishing</h2>
             <EventStatusActions eventId={id} status={status} />
+          </section>
+          <section className="rounded-lg border border-border bg-card p-6">
+            <h2 className="mb-3 text-lg">Bookings</h2>
+            <BookingsControl
+              eventClosed={Boolean(event.bookingsClosed?.closed)}
+              eventReason={event.bookingsClosed?.reason}
+              nights={event.sessions.map((s) => ({ id: String(s._id), label: s.label, dayLabel: formatDay(s.startsAt), closed: closedNights.has(String(s._id)), reason: closedNights.get(String(s._id))?.reason }))}
+              onSet={adminSetBookingsClosedAction.bind(null, id)}
+            />
           </section>
           <section className="rounded-lg border border-destructive/40 bg-card p-6">
             <h2 className="mb-3 text-lg">Delete event</h2>

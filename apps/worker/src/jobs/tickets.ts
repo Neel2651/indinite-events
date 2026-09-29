@@ -1,7 +1,7 @@
 import { linkSecret, signOrderLink } from "@indinite/core/links";
 import { resolvePaymentsMode } from "@indinite/core";
 import { audited, Event, Order, Ticket, withTransaction, type SendTicketsJob } from "@indinite/db";
-import { buildPassesData, renderPassesPdf, renderTicketsEmail } from "@indinite/emails";
+import { buildPassesData, groupPassesByNight, renderPassesPdf, renderTicketsEmail } from "@indinite/emails";
 import { appUrl, sendEmail } from "../mailer";
 
 /** Only labels the email; a misconfigured PAYMENTS_MODE must never stop passes being sent. */
@@ -48,7 +48,9 @@ export async function sendTickets(job: SendTicketsJob, jobId: string) {
   });
   const passes = data.tickets;
 
-  const [email, pdf] = await Promise.all([renderTicketsEmail(data), renderPassesPdf(data)]);
+  // One PDF per night (plus "All nights" for season / weekend passes), SPEC §4.4, 30 Sep 2026.
+  const groups = groupPassesByNight(passes);
+  const [email, ...pdfs] = await Promise.all([renderTicketsEmail(data), ...groups.map((g) => renderPassesPdf({ ...data, tickets: g.tickets }, g.title))]);
   const emailId = await sendEmail({
     to: order.customer.email,
     subject: email.subject,
@@ -58,7 +60,7 @@ export async function sendTickets(job: SendTicketsJob, jobId: string) {
     tags: [{ name: "type", value: "tickets" }],
     attachments: [
       ...passes.map((p) => ({ filename: `qr-${p.shortCode}.png`, content: p.qrPng, contentType: "image/png", contentId: p.qrContentId })),
-      { filename: `passes-${order.publicId}.pdf`, content: pdf, contentType: "application/pdf" },
+      ...groups.map((g, i) => ({ filename: `passes-${order.publicId}-${g.fileLabel}.pdf`, content: pdfs[i]!, contentType: "application/pdf" })),
     ],
   });
 

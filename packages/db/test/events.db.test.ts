@@ -5,12 +5,19 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MongoMemoryReplSet } from "mongodb-memory-server";
 import mongoose from "mongoose";
-import { generateQrKeyPair } from "@indinite/core";
+import { generateQrKeyPair, type AuthUser } from "@indinite/core";
 import { runWithContext } from "@indinite/core/context";
 import {
   addEventImage,
   addEventVideo,
   AuditLog,
+  createCheckoutOrder,
+  createDayPass,
+  createPaymentLinkOrder,
+  fulfilOrder,
+  setBookingsClosed,
+  Ticket,
+  updateDayPass,
   createEvent,
   createTicketType,
   deleteEvent,
@@ -190,5 +197,109 @@ describe("media", () => {
     await asAdmin(() => reorderEventMedia(String(e._id), [vid.url, img.url]));
     const media = (await Event.findById(e._id).lean())!.media;
     expect(media.map((m) => [m.type, m.order])).toEqual([["video", 0], ["image", 1]]);
+  });
+});
+
+describe("day passes (30 Sep 2026)", () => {
+  const four = [
+    { label: "Night 1", startsAt: day(11, 15), endsAt: day(11, 19) },
+    { label: "Night 2", startsAt: day(12, 15), endsAt: day(12, 19) },
+    { label: "Night 3", startsAt: day(13, 15), endsAt: day(13, 19) },
+    { label: "Night 4", startsAt: day(14, 15), endsAt: day(14, 19) },
+  ];
+  const mkEvent = () => asAdmin(() => createEvent({ organizerId: orgId, title: "Four nights", slug: `four-${++slugN}`, description: "", venue, sessions: four, status: "draft" }));
+  const customer = { name: "Asha", email: "asha@example.com" };
+
+  it("books several nights with different quantities in one order, each night's quota separate", async () => {
+    const e = await mkEvent();
+    const [n1, n2, , n4] = e.sessions.map((s) => String(s._id));
+    const { groupId, passTypes } = await asAdmin(() =>
+      createDayPass(String(e._id), { name: "Day pass — adult", nights: [{ sessionId: n1!, pricePence: 1000, quota: 2 }, { sessionId: n2!, pricePence: 1200, quota: 50 }, { sessionId: n4!, pricePence: 1500, quota: 50 }] }),
+    );
+    expect(passTypes.map((t) => [t.name, t.pricePence, t.quota])).toEqual([
+      ["Day pass — adult · Sun 11 Oct", 1000, 2],
+      ["Day pass — adult · Mon 12 Oct", 1200, 50],
+      ["Day pass — adult · Wed 14 Oct", 1500, 50],
+    ]);
+    await asAdmin(() => setEventStatus(String(e._id), "published"));
+    const [p1, p2, p4] = passTypes.map((t) => String(t._id));
+    const order = await runWithContext({ actor: { type: "customer", id: "c" } }, () => createCheckoutOrder({ eventId: String(e._id), customer, items: [{ ticketTypeId: p1!, qty: 2 }, { ticketTypeId: p2!, qty: 1 }, { ticketTypeId: p4!, qty: 2 }] }));
+    expect(order.subtotalPence).toBe(2 * 1000 + 1200 + 2 * 1500);
+    expect(order.items.map((i) => i.name)).toEqual(["Day pass — adult · Sun 11 Oct", "Day pass — adult · Mon 12 Oct", "Day pass — adult · Wed 14 Oct"]);
+    await runWithContext({ actor: { type: "system", id: "system" } }, () => fulfilOrder(order._id, { mode: "demo" }));
+    const tickets = await Ticket.find({ orderId: order._id }).lean();
+    expect(tickets.map((t) => [t.ticketTypeName, t.validSessionIds.map(String)])).toEqual([
+      ["Day pass — adult · Sun 11 Oct", [n1]],
+      ["Day pass — adult · Sun 11 Oct", [n1]],
+      ["Day pass — adult · Mon 12 Oct", [n2]],
+      ["Day pass — adult · Wed 14 Oct", [n4]],
+      ["Day pass — adult · Wed 14 Oct", [n4]],
+    ]);
+    // Night 1 is now sold out on its own; other nights still sell.
+    await expect(runWithContext({ actor: { type: "customer", id: "c" } }, () => createCheckoutOrder({ eventId: String(e._id), customer, items: [{ ticketTypeId: p1!, qty: 1 }] }))).rejects.toThrow("Day pass — adult · Sun 11 Oct has sold out.");
+    await runWithContext({ actor: { type: "customer", id: "c" } }, () => createCheckoutOrder({ eventId: String(e._id), customer, items: [{ ticketTypeId: p2!, qty: 1 }] }));
+    expect(await AuditLog.findOne({ action: "ticketType.day_pass_created", "entity.id": groupId }).lean()).toBeTruthy();
+  });
+
+  it("renames every night, adds and drops nights, keeps quota above sold + held, follows a moved night", async () => {
+    const e = await mkEvent();
+    const [n1, n2, n3] = e.sessions.map((s) => String(s._id));
+    const { groupId, passTypes } = await asAdmin(() => createDayPass(String(e._id), { name: "Day pass", nights: [{ sessionId: n1!, pricePence: 1000, quota: 10 }, { sessionId: n2!, pricePence: 1000, quota: 10 }] }));
+    await quota.sellDirect(passTypes[0]!._id, 4);
+    await expect(asAdmin(() => updateDayPass(groupId, { name: "Day pass", nights: [{ sessionId: n1!, pricePence: 1000, quota: 3 }, { sessionId: n2!, pricePence: 1000, quota: 10 }] }))).rejects.toThrow(/Sun 11 Oct: the quota can't be lower than 4/);
+    await asAdmin(() => updateDayPass(groupId, { name: "Night pass", nights: [{ sessionId: n1!, pricePence: 1100, quota: 8 }, { sessionId: n3!, pricePence: 1300, quota: 20 }] }));
+    const members = await TicketType.find({ "dayPass.groupId": new mongoose.Types.ObjectId(groupId) }).sort({ sortOrder: 1 }).lean();
+    expect(members.map((m) => [m.name, m.pricePence, m.quota])).toEqual([
+      ["Night pass · Sun 11 Oct", 1100, 8],
+      ["Night pass · Tue 13 Oct", 1300, 20],
+    ]); // unused Night 2 member deleted
+    // Move Night 1 to the 10th: its pass name follows.
+    await asAdmin(() => updateEvent(String(e._id), { title: e.title, slug: e.slug, description: "", venue, sessions: e.sessions.map((s, i) => ({ id: String(s._id), label: s.label, startsAt: i === 0 ? day(10, 15) : s.startsAt, endsAt: i === 0 ? day(10, 19) : s.endsAt })) }));
+    expect((await TicketType.findById(members[0]!._id).lean())!.name).toBe("Night pass · Sat 10 Oct");
+  });
+});
+
+describe("bookings close when sold out, started or closed by hand (30 Sep 2026)", () => {
+  const customer = { name: "Asha", email: "asha@example.com" };
+  const online = (eventId: string, ticketTypeId: string) => runWithContext({ actor: { type: "customer", id: "c" } }, () => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId, qty: 1 }] }));
+  const boxOffice = (eventId: string, ticketTypeId: string) => asAdmin(() => issueOfflineOrder(orgId, "admin-1", { eventId, customer, items: [{ ticketTypeId, qty: 1 }], method: "cash", note: "Paid at the door" }));
+
+  it("stops a night selling online once it starts; box office sells until it ends; season passes carry on", async () => {
+    const now = Date.now();
+    const e = await asAdmin(() =>
+      createEvent({ organizerId: orgId, title: "Started", slug: `started-${++slugN}`, description: "", venue, sessions: [{ label: "Tonight", startsAt: new Date(now - 3_600_000), endsAt: new Date(now + 3 * 3_600_000) }, { label: "Tomorrow", startsAt: new Date(now + 86_400_000), endsAt: new Date(now + 90_000_000) }], status: "draft" }),
+    );
+    const [tonight, tomorrow] = e.sessions.map((s) => String(s._id));
+    const { passTypes } = await asAdmin(() => createDayPass(String(e._id), { name: "Day pass", nights: [{ sessionId: tonight!, pricePence: 1000, quota: 10 }, { sessionId: tomorrow!, pricePence: 1000, quota: 10 }] }));
+    const season = await asAdmin(() => createTicketType({ eventId: String(e._id), name: "Season", description: "", pricePence: 3000, validSessionIds: [tonight!, tomorrow!], quota: 10, maxPerOrder: 5, sortOrder: 9, active: true }));
+    await asAdmin(() => setEventStatus(String(e._id), "published"));
+    await expect(online(String(e._id), String(passTypes[0]!._id))).rejects.toThrow(/no longer on sale: the night has started/);
+    await boxOffice(String(e._id), String(passTypes[0]!._id));
+    await online(String(e._id), String(season._id));
+    await online(String(e._id), String(passTypes[1]!._id));
+  });
+
+  it("closing by hand stops online sales and payment links for the event or a night; box office carries on; audited", async () => {
+    const e = await newEvent();
+    const [n1, n2] = e.sessions.map((s) => String(s._id));
+    const { passTypes } = await asAdmin(() => createDayPass(String(e._id), { name: "Day pass", nights: [{ sessionId: n1!, pricePence: 1000, quota: 10 }, { sessionId: n2!, pricePence: 1000, quota: 10 }] }));
+    await asAdmin(() => setEventStatus(String(e._id), "published"));
+    const [p1, p2] = passTypes.map((t) => String(t._id));
+
+    await asAdmin(() => setBookingsClosed(String(e._id), { sessionId: n1, closed: true, reason: "Venue at capacity", by: "admin-1" }));
+    await expect(online(String(e._id), p1!)).rejects.toThrow("Bookings for Day pass · Sun 11 Oct are closed.");
+    await online(String(e._id), p2!);
+    await boxOffice(String(e._id), p1!);
+
+    await asAdmin(() => setBookingsClosed(String(e._id), { closed: true, reason: "Sold at the door only now", by: "admin-1" }));
+    await expect(online(String(e._id), p2!)).rejects.toThrow("Bookings for this event are closed.");
+    const owner: AuthUser = { id: "owner-1", isSuperAdmin: false, memberships: [{ organizerId: orgId, role: "owner" }] };
+    await expect(asAdmin(() => createPaymentLinkOrder(orgId, "owner-1", { eventId: String(e._id), customer, items: [{ ticketTypeId: p2!, qty: 1 }], validForHours: 2 }, { user: owner }))).rejects.toThrow("Bookings for this event are closed.");
+    expect(await AuditLog.countDocuments({ action: "event.bookings_closed", "entity.id": String(e._id) })).toBe(2);
+
+    await asAdmin(() => setBookingsClosed(String(e._id), { closed: false, reason: "", by: "admin-1" }));
+    await asAdmin(() => setBookingsClosed(String(e._id), { sessionId: n1, closed: false, reason: "", by: "admin-1" }));
+    await online(String(e._id), p1!);
+    expect(await AuditLog.countDocuments({ action: "event.bookings_reopened", "entity.id": String(e._id) })).toBe(2);
   });
 });

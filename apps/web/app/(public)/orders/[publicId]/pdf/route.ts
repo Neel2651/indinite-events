@@ -2,7 +2,7 @@ import { normalisePublicId, PUBLIC_ID_RE, resolvePaymentsMode } from "@indinite/
 import { linkSecret, signOrderLink, verifyOrderLink } from "@indinite/core/links";
 import { appUrl } from "@indinite/auth";
 import { connectDb, Event, Order, Ticket } from "@indinite/db";
-import { buildPassesData, renderPassesPdf } from "@indinite/emails";
+import { buildPassesData, groupPassesByNight, renderPassesPdf } from "@indinite/emails";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,11 +42,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ publicId
     demo,
     reason: "resend",
   });
-  const pdf = await renderPassesPdf(data);
+  // ?night=<sessionId> or ?night=multi: just that night's passes (one PDF per night, 30 Sep 2026).
+  const night = new URL(req.url).searchParams.get("night");
+  const group = night ? groupPassesByNight(data.tickets).find((g) => g.key === night) : null;
+  if (night && !group) return problem("There are no passes for that night on this booking.", 404);
+  const pdf = await renderPassesPdf(group ? { ...data, tickets: group.tickets } : data, group?.title);
   return new Response(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="passes-${publicId}.pdf"`,
+      "Content-Disposition": `attachment; filename="passes-${publicId}${group ? `-${group.fileLabel}` : ""}.pdf"`,
       "Cache-Control": "private, no-store",
       "X-Robots-Tag": "noindex",
     },

@@ -8,7 +8,8 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { ClientSession, Types } from "mongoose";
+import mongoose, { type ClientSession, type Types } from "mongoose";
+import { dayPassMemberName } from "@indinite/core";
 import { runWithContext, systemActor } from "@indinite/core/context";
 import {
   audited,
@@ -63,6 +64,8 @@ interface SeedOrganizer {
     sessions: ReturnType<typeof night>[];
   };
   ticketTypes: SeedTicketType[];
+  /** One pass per night (day pass group); `price(weekend)` in pence. */
+  dayPass?: { name: string; description: string; maxPerOrder: number; quota: number; price: (weekend: boolean) => number };
   /** Unset = on sale now. Applied to every ticket type. */
   salesStartAt?: Date;
   palette: Palette;
@@ -96,8 +99,9 @@ const DATA: SeedOrganizer[] = [
       { name: "Season pass — adult", description: "Entry to all nine nights.", pricePence: 4500, quota: 500, nights: all(9) },
       { name: "Season pass — child (5–12)", description: "Entry to all nine nights. Under 5s go free.", pricePence: 2000, quota: 200, nights: all(9) },
       { name: "Weekend pass — adult", description: "Fri 16 and Sat 17 October.", pricePence: 1800, quota: 300, nights: [5, 6] },
-      { name: "Single night — adult", description: "Opening night, Sun 11 October.", pricePence: 1000, quota: 150, maxPerOrder: 6, nights: [0] },
     ],
+    // One pass per night, each with its own price and quota; customers pick any nights (30 Sep 2026).
+    dayPass: { name: "Day pass — adult", description: "Entry for the night you choose.", maxPerOrder: 6, quota: 150, price: (weekend: boolean) => (weekend ? 1500 : 1000) },
     pricing: { taxBps: 2000, charges: [{ name: "Venue fee", kind: "fixed", value: 30 }] },
     palette: PALETTES.saffron,
     images: [
@@ -124,10 +128,8 @@ const DATA: SeedOrganizer[] = [
     },
     ticketTypes: [
       { name: "All three nights", description: "Fri, Sat and Sun.", pricePence: 3000, quota: 400, nights: all(3) },
-      { name: "Friday only", pricePence: 1200, quota: 150, nights: [0] },
-      { name: "Saturday only", pricePence: 1200, quota: 150, nights: [1] },
-      { name: "Sunday only", pricePence: 1200, quota: 150, nights: [2] },
     ],
+    dayPass: { name: "Day pass", description: "Entry for the night you choose.", maxPerOrder: 8, quota: 150, price: () => 1200 },
     // Sun 4 Oct 2026, 10:00 London time (BST, UTC+1).
     salesStartAt: new Date(Date.UTC(2026, 9, 4, 9, 0)),
     palette: PALETTES.twilight,
@@ -182,6 +184,30 @@ async function seedOne(session: ClientSession, d: SeedOrganizer, media: Awaited<
     { session, ordered: true },
   );
   for (const t of types) await audit("ticketType.created", "ticketType", t._id, t.toObject());
+
+  if (d.dayPass) {
+    const groupId = new mongoose.Types.ObjectId();
+    const dp = d.dayPass;
+    const members = await TicketType.create(
+      event!.sessions.map((s, i) => {
+        const weekday = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" }).format(s.startsAt);
+        return {
+          eventId: event!._id,
+          name: dayPassMemberName(dp.name, s.startsAt),
+          description: dp.description,
+          pricePence: dp.price(weekday === "Fri" || weekday === "Sat"),
+          quota: dp.quota,
+          maxPerOrder: dp.maxPerOrder,
+          validSessionIds: [s._id],
+          salesStartAt: d.salesStartAt,
+          sortOrder: 100 + i,
+          dayPass: { groupId, name: dp.name },
+        };
+      }),
+      { session, ordered: true },
+    );
+    for (const t of members) await audit("ticketType.created", "ticketType", t._id, t.toObject());
+  }
 
   const [discount] = await Discount.create(
     [{ ...d.discount, organizerId: orgId, eventId: event!._id, createdBy: "seed" }],

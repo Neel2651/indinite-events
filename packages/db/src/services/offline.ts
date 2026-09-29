@@ -1,5 +1,5 @@
 
-import { DEFAULT_FREE_COMPLIMENTARY_PASSES, generatePublicId, type AuthUser, offlineIssueSchema, paymentLinkBookingSchema, priceOrder, type LineItem, type OfflineIssueInput, type PaymentLinkBookingInput } from "@indinite/core";
+import { available, bookability, DEFAULT_FREE_COMPLIMENTARY_PASSES, generatePublicId, type AuthUser, offlineIssueSchema, paymentLinkBookingSchema, priceOrder, type LineItem, type OfflineIssueInput, type PaymentLinkBookingInput } from "@indinite/core";
 import { audited } from "../audit";
 import { enqueueSendTickets } from "../jobs";
 import { CommissionLedger } from "../models/commission-ledger";
@@ -10,6 +10,7 @@ import { TicketType } from "../models/ticket-type";
 import { quota, SoldOutError } from "../quota";
 import { withTransaction } from "../transaction";
 import { CheckoutError, createPendingOrder, issueTickets, orderPricingFields, qrPrivateKey } from "./checkout";
+import { eventBookingState } from "./events";
 import { CouponError, findCoupon, pricingFor, redeemCoupon } from "./pricing";
 
 const isDuplicateKey = (e: unknown) => typeof e === "object" && e !== null && "code" in e && e.code === 11000;
@@ -39,6 +40,12 @@ export async function issueOfflineOrder(organizerId: string, issuedBy: string, r
   for (const item of input.items) qtyByType.set(item.ticketTypeId, (qtyByType.get(item.ticketTypeId) ?? 0) + item.qty);
   const types = await TicketType.find({ _id: { $in: [...qtyByType.keys()] }, eventId: event._id, active: true }).lean();
   if (types.length !== qtyByType.size) throw new CheckoutError("One of those passes isn't available.", 409);
+  // Box office: can sell until the pass's last night ends, even when online sales are closed (30 Sep 2026).
+  const now = new Date();
+  for (const t of types) {
+    const b = bookability({ ...t, validSessionIds: t.validSessionIds.map(String), available: available(t) }, eventBookingState(event), now, "staff");
+    if (!b.ok) throw new CheckoutError(b.message, 409);
+  }
 
   const complimentary = input.method === "complimentary";
   const items: LineItem[] = types

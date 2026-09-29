@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Types } from "mongoose";
 import { Event, gateStats, Order, Ticket } from "@indinite/db";
+import { setBookingsClosedAction } from "@/app/org/[slug]/events/actions";
+import { BookingsControl } from "@/components/staff/bookings-control";
 import { InstallAppCard } from "@/components/staff/install-app-card";
 import { PageHeader, StatCard } from "@/components/staff/shell";
 import { formatDateRange, formatDay, price } from "@/lib/format";
@@ -77,14 +79,32 @@ export default async function OrgDashboard({ params }: { params: Promise<{ slug:
         ) : (
           <ul className="mt-4 divide-y divide-border">
             {events.map((e) => (
-              <li key={String(e._id)} className="flex flex-wrap items-center justify-between gap-2 py-3">
-                <span>
-                  <span className="font-semibold">{e.title}</span>
-                  <span className="block text-sm text-muted-foreground">
-                    {formatDateRange(e.startsAt, e.endsAt)} · {e.sessions.length} nights
+              <li key={String(e._id)} className="py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    <span className="font-semibold">{e.title}</span>
+                    <span className="block text-sm text-muted-foreground">
+                      {formatDateRange(e.startsAt, e.endsAt)} · {e.sessions.length} nights
+                    </span>
                   </span>
-                </span>
-                <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold capitalize">{e.status}</span>
+                  <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold capitalize">{e.bookingsClosed?.closed ? "Bookings closed" : e.status}</span>
+                </div>
+                {can("event.manageSales") && e.status === "published" && e.endsAt > now && (
+                  <details className="mt-3 rounded-md border border-border">
+                    <summary className="cursor-pointer px-4 py-2.5 text-sm font-semibold">Open or close bookings</summary>
+                    <div className="border-t border-border p-4">
+                      <BookingsControl
+                        eventClosed={Boolean(e.bookingsClosed?.closed)}
+                        eventReason={e.bookingsClosed?.reason}
+                        nights={e.sessions.map((s) => {
+                          const c = (e.closedNights ?? []).find((n) => String(n.sessionId) === String(s._id));
+                          return { id: String(s._id), label: s.label, dayLabel: formatDay(s.startsAt), closed: Boolean(c), reason: c?.reason, auto: s.endsAt <= now ? "Ended" : s.startsAt <= now ? "Started: box office only" : null };
+                        })}
+                        onSet={setBookingsClosedAction.bind(null, organizer.slug, String(e._id))}
+                      />
+                    </div>
+                  </details>
+                )}
               </li>
             ))}
           </ul>

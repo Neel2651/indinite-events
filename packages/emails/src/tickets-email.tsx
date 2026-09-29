@@ -2,6 +2,7 @@
 /** @jsxImportSource react */
 import { Body, Button, Column, Container, Head, Heading, Hr, Html, Img, Preview, Row, Section, Text } from "@react-email/components";
 import { bodyFontStack, brand, fontStack, formatDateRange, price } from "./theme";
+import { groupPassesByNight } from "./order-passes";
 import type { TicketsEmailData } from "./types";
 
 const h = { fontFamily: fontStack, color: brand.ink, margin: 0 } as const;
@@ -111,7 +112,15 @@ export function TicketsEmail(d: TicketsEmailData) {
           </Section>
 
           <Section style={{ padding: "8px 32px 16px" }}>
-            {d.tickets.map((t, i) => (
+            {groupPassesByNight(d.tickets).map((g) => (
+              <Section key={g.key}>
+                {/* Heading per night when the booking covers more than one. */}
+                {groupPassesByNight(d.tickets).length > 1 && (
+                  <Text style={{ ...h, fontSize: "18px", margin: "24px 0 0" }}>
+                    {g.title} · {g.tickets.length} {g.tickets.length === 1 ? "pass" : "passes"}
+                  </Text>
+                )}
+            {g.tickets.map((t, i) => (
               <Section
                 key={t.ticketId}
                 style={{
@@ -123,8 +132,8 @@ export function TicketsEmail(d: TicketsEmailData) {
                 }}
               >
                 <Text style={{ ...h, color: brand.white, fontSize: "16px" }}>{t.ticketTypeName}</Text>
-                <Text style={{ ...p, color: brand.onDarkMuted, fontSize: "13px", margin: "2px 0 14px" }}>
-                  {t.nightsLabel} · Pass {i + 1} of {passes}
+                <Text style={{ ...p, color: t.nightDate ? brand.orangeLight : brand.onDarkMuted, fontSize: "13px", fontWeight: t.nightDate ? 700 : 400, margin: "2px 0 14px" }}>
+                  {t.nightDate || t.nightsLabel} · Pass {i + 1} of {g.tickets.length}
                 </Text>
                 <div style={{ backgroundColor: brand.white, borderRadius: "12px", padding: "16px", display: "inline-block" }}>
                   <Img src={`cid:${t.qrContentId}`} width="200" height="200" alt={`QR code for pass ${i + 1}`} />
@@ -132,6 +141,8 @@ export function TicketsEmail(d: TicketsEmailData) {
                 <Text style={{ ...p, color: brand.onDarkMuted, fontSize: "12px", margin: "12px 0 0", letterSpacing: "1px" }}>
                   {t.shortCode}
                 </Text>
+              </Section>
+            ))}
               </Section>
             ))}
           </Section>

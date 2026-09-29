@@ -39,7 +39,7 @@ export default async function EventPage({ params }: Props) {
         <div className="mx-auto max-w-6xl px-5 py-14 sm:py-24">
           <div className="flex flex-wrap items-center gap-3">
             <span className="badge-pill">{event.sessions.length} NIGHTS · {event.venue.postcode}</span>
-            <BookingStatus open={event.bookingsOpen} opensAt={event.bookingsOpenAt} />
+            <BookingStatus open={event.bookingsOpen} opensAt={event.bookingsOpenAt} soldOut={event.closedReason === "sold_out"} />
           </div>
           <h1 className="mt-5 max-w-3xl text-4xl leading-tight sm:text-5xl">{event.title}</h1>
           <p className="mt-4 text-lg text-muted-foreground">
@@ -112,8 +112,9 @@ export default async function EventPage({ params }: Props) {
               paymentsMode={resolvePaymentsMode(process.env)}
               pricing={event.pricing}
               sessions={event.sessions.map((s) => ({ id: s.id, label: s.label, dayLabel: formatDay(s.startsAt), timeLabel: `${formatTime(s.startsAt)}–${formatTime(s.endsAt)}` }))}
+              // Everything that's listed, so sold-out and closed nights still show why.
               ticketTypes={event.ticketTypes
-                .filter((t) => t.onSale)
+                .filter((t) => t.onSale || t.blocked === "Sold out" || t.blocked === "Bookings closed" || t.blocked === "Started")
                 .map((t) => ({
                   id: t.id,
                   name: t.name,
@@ -122,6 +123,8 @@ export default async function EventPage({ params }: Props) {
                   maxPerOrder: t.maxPerOrder,
                   nightsLabel: nightsLabel(t.nights, event.sessions.length),
                   validSessionIds: t.validSessionIds,
+                  dayPassName: t.dayPass?.name ?? null,
+                  blocked: t.blocked,
                 }))}
             />
           ) : (
@@ -132,14 +135,14 @@ export default async function EventPage({ params }: Props) {
                     <p className="font-display font-semibold">{t.name}</p>
                     <p className="text-sm text-muted-foreground">
                       {nightsLabel(t.nights, event.sessions.length)}
-                      {t.salesStartAt ? ` · On sale ${formatDayTime(t.salesStartAt)}` : t.available === 0 ? " · Sold out" : ""}
+                      {t.salesStartAt ? ` · On sale ${formatDayTime(t.salesStartAt)}` : t.blocked ? ` · ${t.blocked}` : ""}
                     </p>
                   </div>
                   <span className="font-display font-bold">{price(t.pricePence)}</span>
                 </div>
               ))}
               <button type="button" className="btn-cta w-full opacity-60" disabled>
-                {event.bookingsOpenAt ? `Bookings open ${formatDayTime(event.bookingsOpenAt)}` : "Bookings closed"}
+                {event.closedReason === "sold_out" ? "Sold out" : event.bookingsOpenAt ? `Bookings open ${formatDayTime(event.bookingsOpenAt)}` : "Bookings closed"}
               </button>
             </>
           )}
@@ -149,7 +152,7 @@ export default async function EventPage({ params }: Props) {
   );
 }
 
-function BookingStatus({ open, opensAt }: { open: boolean; opensAt: Date | null }) {
+function BookingStatus({ open, opensAt, soldOut }: { open: boolean; opensAt: Date | null; soldOut: boolean }) {
   if (open) {
     return (
       <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-1.5 text-xs font-semibold tracking-widest text-brand-navy">
@@ -160,7 +163,7 @@ function BookingStatus({ open, opensAt }: { open: boolean; opensAt: Date | null 
   }
   return (
     <span className="rounded-full bg-secondary px-4 py-1.5 text-xs font-semibold tracking-widest text-secondary-foreground">
-      {opensAt ? `BOOKINGS OPEN ${formatDayTime(opensAt).toUpperCase()}` : "BOOKINGS CLOSED"}
+      {soldOut ? "SOLD OUT" : opensAt ? `BOOKINGS OPEN ${formatDayTime(opensAt).toUpperCase()}` : "BOOKINGS CLOSED"}
     </span>
   );
 }

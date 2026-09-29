@@ -23,7 +23,20 @@ export interface BookableEvent {
   /** Complimentary passes free of commission for this event, and how many are left. */
   freeComplimentaryPasses: number;
   freeComplimentaryLeft: number;
-  ticketTypes: { id: string; name: string; pricePence: number; available: number; nightsLabel: string }[];
+  ticketTypes: {
+    id: string;
+    name: string;
+    pricePence: number;
+    available: number;
+    nightsLabel: string;
+    validSessionIds: string[];
+    dayPassName: string | null;
+    /** Can't be sold at all (sold out, night ended). */
+    blocked: string | null;
+    /** Can't go on a payment link (night started, closed by hand) but can be issued as paid. */
+    onlineBlocked: string | null;
+  }[];
+  nights: { id: string; label: string; dayLabel: string }[];
 }
 
 const METHODS = [
@@ -216,30 +229,55 @@ export function OfflineBookingForm({
 
         <fieldset>
           <legend className="font-display font-semibold">Passes</legend>
-          <ul className="mt-2 divide-y divide-border rounded-md border border-border">
-            {event?.ticketTypes.map((t) => {
+          {(() => {
+            const types = event?.ticketTypes ?? [];
+            const perNight = (event?.nights ?? []).map((night) => ({ night, types: types.filter((t) => t.validSessionIds.length === 1 && t.validSessionIds[0] === night.id) })).filter((g) => g.types.length);
+            const multi = types.filter((t) => t.validSessionIds.length > 1);
+            const row = (t: (typeof types)[number], label: string, sub: string) => {
               const n = qty[t.id] ?? 0;
+              const max = t.blocked ? 0 : t.available;
+              const linkNote = method === "payment_link" && t.onlineBlocked && !t.blocked ? t.onlineBlocked : null;
               return (
                 <li key={t.id} className="flex items-center justify-between gap-4 px-4 py-3">
                   <div>
-                    <p className="font-semibold">{t.name}</p>
+                    <p className="font-semibold">{label}</p>
                     <p className="text-xs text-muted-foreground">
-                      {t.nightsLabel} · {price(t.pricePence)} · {t.available} left
+                      {sub ? `${sub} · ` : ""}
+                      {price(t.pricePence)} · {t.blocked ?? `${t.available} left`}
+                      {linkNote && <span className="font-semibold text-warning"> · no payment links ({linkNote.toLowerCase()})</span>}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button type="button" aria-label={`Remove one ${t.name}`} disabled={n === 0} onClick={() => setFor(t.id, n - 1, t.available)} className="size-11 rounded-full border border-border text-lg font-bold disabled:opacity-40 sm:size-9 sm:text-base">
+                    <button type="button" aria-label={`Remove one ${t.name}`} disabled={n === 0} onClick={() => setFor(t.id, n - 1, max)} className="size-11 rounded-full border border-border text-lg font-bold disabled:opacity-40 sm:size-9 sm:text-base">
                       −
                     </button>
                     <span className="w-6 text-center font-display font-semibold tabular-nums">{n}</span>
-                    <button type="button" aria-label={`Add one ${t.name}`} disabled={n >= t.available} onClick={() => setFor(t.id, n + 1, t.available)} className="size-11 rounded-full border border-border text-lg font-bold disabled:opacity-40 sm:size-9 sm:text-base">
+                    <button type="button" aria-label={`Add one ${t.name}`} disabled={n >= max} onClick={() => setFor(t.id, n + 1, max)} className="size-11 rounded-full border border-border text-lg font-bold disabled:opacity-40 sm:size-9 sm:text-base">
                       +
                     </button>
                   </div>
                 </li>
               );
-            })}
-          </ul>
+            };
+            return (
+              <div className="mt-2 space-y-3">
+                {perNight.map(({ night, types: ts }) => (
+                  <div key={night.id} className="rounded-md border border-border">
+                    <p className="border-b border-border bg-muted/40 px-4 py-2 text-sm">
+                      <span className="font-semibold">{night.label}</span> <span className="text-muted-foreground">· {night.dayLabel}</span>
+                    </p>
+                    <ul className="divide-y divide-border">{ts.map((t) => row(t, t.dayPassName ?? t.name, ""))}</ul>
+                  </div>
+                ))}
+                {multi.length > 0 && (
+                  <div className="rounded-md border border-border">
+                    {perNight.length > 0 && <p className="border-b border-border bg-muted/40 px-4 py-2 text-sm font-semibold">Passes for more than one night</p>}
+                    <ul className="divide-y divide-border">{multi.map((t) => row(t, t.name, t.nightsLabel))}</ul>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </fieldset>
 
         <fieldset className="grid gap-4 sm:grid-cols-2">

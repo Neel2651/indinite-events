@@ -105,8 +105,19 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
                     View my passes
                   </Link>
                   <a href={`/orders/${encodeURIComponent(order.publicId)}/pdf?t=${encodeURIComponent(t!)}`} download className="rounded-full border border-border bg-card px-6 py-3 font-display font-bold">
-                    Download passes (PDF)
+                    {order.nightGroups.length > 1 ? "All passes (PDF)" : "Download passes (PDF)"}
                   </a>
+                  {order.nightGroups.length > 1 &&
+                    order.nightGroups.map((g) => (
+                      <a
+                        key={g.key}
+                        href={`/orders/${encodeURIComponent(order.publicId)}/pdf?t=${encodeURIComponent(t!)}&night=${encodeURIComponent(g.key)}`}
+                        download
+                        className="rounded-full border border-border bg-card px-5 py-2.5 text-sm font-semibold"
+                      >
+                        {g.title} · {g.count} {g.count === 1 ? "pass" : "passes"}
+                      </a>
+                    ))}
                 </>
               )}
               {hasPasses && !canView && (

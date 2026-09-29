@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Types } from "mongoose";
-import { available, cardFeeOf, DEFAULT_FREE_COMPLIMENTARY_PASSES, maxDiscountBps } from "@indinite/core";
-import { Event, Organizer, pricingFor, TicketType } from "@indinite/db";
+import { available, bookability, cardFeeOf, DEFAULT_FREE_COMPLIMENTARY_PASSES, maxDiscountBps, UNBOOKABLE_LABEL } from "@indinite/core";
+import { Event, eventBookingState, Organizer, pricingFor, TicketType } from "@indinite/db";
 import { OfflineBookingForm, type BookableEvent } from "@/components/staff/offline-booking-form";
 import { PageHeader } from "@/components/staff/shell";
+import { formatDay } from "@/lib/format";
 import { requireOrg } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "New booking" };
@@ -20,6 +21,7 @@ export default async function NewBookingPage({ params }: { params: Promise<{ slu
     .sort({ startsAt: 1 })
     .lean();
   const types = await TicketType.find({ eventId: { $in: events.map((e) => e._id) }, active: true }).sort({ sortOrder: 1 }).lean();
+  const now = new Date();
   const bookable: BookableEvent[] = events.map((e) => ({
     id: String(e._id),
     title: e.title,
@@ -29,13 +31,24 @@ export default async function NewBookingPage({ params }: { params: Promise<{ slu
     freeComplimentaryLeft: Math.max(0, (e.freeComplimentaryPasses ?? DEFAULT_FREE_COMPLIMENTARY_PASSES) - (e.complimentaryIssued ?? 0)),
     ticketTypes: types
       .filter((t) => String(t.eventId) === String(e._id))
-      .map((t) => ({
-        id: String(t._id),
-        name: t.name,
-        pricePence: t.pricePence,
-        available: available({ quota: t.quota, sold: t.sold ?? 0, held: t.held ?? 0 }),
-        nightsLabel: t.validSessionIds.length === e.sessions.length && e.sessions.length > 1 ? "All nights" : `${t.validSessionIds.length} night${t.validSessionIds.length > 1 ? "s" : ""}`,
-      })),
+      .map((t) => {
+        const left = available({ quota: t.quota, sold: t.sold ?? 0, held: t.held ?? 0 });
+        // Box office rules (sell until the night ends); online-only closures are shown as a note.
+        const staff = bookability({ ...t, validSessionIds: t.validSessionIds.map(String), available: left }, eventBookingState(e), now, "staff");
+        const online = bookability({ ...t, validSessionIds: t.validSessionIds.map(String), available: left }, eventBookingState(e), now, "payment_link");
+        return {
+          id: String(t._id),
+          name: t.name,
+          pricePence: t.pricePence,
+          available: left,
+          nightsLabel: t.validSessionIds.length === e.sessions.length && e.sessions.length > 1 ? "All nights" : `${t.validSessionIds.length} night${t.validSessionIds.length > 1 ? "s" : ""}`,
+          validSessionIds: t.validSessionIds.map(String),
+          dayPassName: t.dayPass?.name ?? null,
+          blocked: staff.ok ? null : UNBOOKABLE_LABEL[staff.reason],
+          onlineBlocked: online.ok ? null : UNBOOKABLE_LABEL[online.reason],
+        };
+      }),
+    nights: e.sessions.map((s) => ({ id: String(s._id), label: s.label, dayLabel: formatDay(s.startsAt) })),
   }));
 
   return (

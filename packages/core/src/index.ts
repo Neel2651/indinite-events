@@ -14,3 +14,5 @@ export * from "./merchant";
 export * from "./video";
 export * from "./london-time";
 export * from "./csv";
+export * from "./bookability";
+export * from "./day-pass";

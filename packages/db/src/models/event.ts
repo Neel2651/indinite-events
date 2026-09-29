@@ -63,6 +63,12 @@ const eventSchema = new Schema(
       ],
       default: [],
     },
+    /** Closed by hand (owner / super admin, 30 Sep 2026): no online sales or new payment links. Box office still works. */
+    bookingsClosed: { closed: { type: Boolean, default: false }, reason: String, at: Date, by: String },
+    closedNights: {
+      type: [new Schema({ sessionId: { type: Schema.Types.ObjectId, required: true }, reason: String, at: Date, by: String }, { _id: false })],
+      default: [],
+    },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true },

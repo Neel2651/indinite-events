@@ -7,6 +7,8 @@ export const PERMISSIONS = [
   "event.update",
   "event.read",
   "event.manageCharges",
+  /** Close or reopen bookings for an event or a single night (owner, super admin). */
+  "event.manageSales",
   "coupon.manage",
   "ticketType.manage",
   "organizer.manage",
@@ -45,6 +47,7 @@ export const ROLE_PERMISSIONS: Record<OrgRole, ReadonlySet<Permission>> = {
   owner: new Set<Permission>([
     "event.read",
     "event.manageCharges",
+    "event.manageSales",
     "coupon.manage",
     "org.members.manage",
     "stripe.onboard",

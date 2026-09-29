@@ -14,9 +14,11 @@ export function EventCard({ event }: { event: PublicEvent }) {
         {event.bookingsOpen && <span className="size-2 rounded-full bg-success" aria-hidden />}
         {event.bookingsOpen
           ? "BOOKINGS OPEN"
-          : event.bookingsOpenAt
-            ? `OPENS ${formatDayTime(event.bookingsOpenAt).toUpperCase()}`
-            : "BOOKINGS CLOSED"}
+          : event.closedReason === "sold_out"
+            ? "SOLD OUT"
+            : event.bookingsOpenAt
+              ? `OPENS ${formatDayTime(event.bookingsOpenAt).toUpperCase()}`
+              : "BOOKINGS CLOSED"}
       </span>
       {cover ? (
          

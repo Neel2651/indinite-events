@@ -30,4 +30,10 @@ export interface PassData {
   qrPng: Buffer;
   /** Short human-readable code for manual lookup at the gate. */
   shortCode: string;
+  /** The night a one-night pass is for (its session id), or "multi" for season / weekend passes. */
+  nightKey: string;
+  /** One-night passes: "SUN 11 OCT · 16:00", printed large on the pass. Empty for multi-night passes. */
+  nightDate: string;
+  /** Sort key: start of the pass's first night (ms). */
+  nightSort: number;
 }

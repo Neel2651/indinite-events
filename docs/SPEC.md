@@ -62,7 +62,10 @@ Discount limit for `box_office`: none (cannot apply). `manager`: max percent con
   startsAt, endsAt (= last session end), status: draft|published|archived, deletedAt (soft delete), timestamps.
   Hard delete only if zero orders.
 - **ticketTypes**: eventId, name ("Season pass – adult"), description, pricePence, validSessionIds[],
-  quota, sold, held, salesStartAt, salesEndAt, maxPerOrder, sortOrder, active.
+  quota, sold, held, salesStartAt, salesEndAt, maxPerOrder, sortOrder, active, dayPass {groupId, name}?.
+  **Day passes (30 Sep 2026):** one pass type per night, grouped by `dayPass.groupId`, each with its own price and
+  quota and named after its night ("Day pass — adult · Sun 11 Oct"), so one order can hold any mix of nights.
+- **events** (addition): bookingsClosed {closed, reason, at, by}, closedNights [{sessionId, reason, at, by}].
 - **discounts**: organizerId, eventId?, code?, kind: percent|fixed, value, maxDiscountPence? (cap, % codes),
   minSubtotalPence? (minimum ticket spend), maxUses, used, validFrom, validTo, createdBy. Ad-hoc discounts on payment
   links are stored inline on the order, not here.
@@ -90,7 +93,15 @@ Discount limit for `box_office`: none (cannot apply). `manager`: max percent con
 ## 4. Key flows
 
 ### 4.1 Public checkout
-1. Customer picks ticket types → POST `/api/checkout`.
+1. Customer picks passes: day passes under each night (any number of nights, any quantity each) and season /
+   weekend passes → POST `/api/checkout`.
+   **Bookability (30 Sep 2026)**, checked in every booking service:
+   - Sold out: sold + held = quota.
+   - Online and payment links: a pass stops selling when its last night starts (a day pass: its night).
+   - Box office: a pass can be sold until its last night ends.
+   - Closed by hand: the owner or super admin can close the whole event or single nights. This stops online sales
+     and new payment links; the box office can still issue passes.
+   - Sales windows apply to public checkout.
 2. Server: validate sales window + maxPerOrder → create order (pending) → reserve quota atomically →
    create hold (expires in 30 min) → create Checkout Session (destination charge, expires_at 30 min,
    metadata.orderId) → redirect.
@@ -120,6 +131,10 @@ quota → sold, create paid order (source offline), tickets, ledger entry for co
 complimentary unless configured), audit `order.issued_offline`. Enqueue `send-tickets`.
 
 ### 4.4 Ticket delivery and viewing
+**PDFs are generated on demand from the pass records and never stored** (refunded or cancelled passes never
+reappear). **One PDF per night** (30 Sep 2026) is attached, e.g. `passes-NAV-7K3F9Q-Sun-11-Oct.pdf`, plus
+`…-All-nights.pdf` for season / multi-night passes. Each pass shows its night's date large on the page and next to
+its code. The ticket and confirmation pages offer the same per-night downloads.
 Email (Resend, React Email): order summary, one PDF pass per ticket attached, inline QR image, "View tickets"
 link (signed, 30 min). Ticket page shows QR only while `now < event.endsAt`; afterwards shows "This event
 has ended". Lookup form ("Find my tickets"): email + order ID → if both match a paid order, go straight to

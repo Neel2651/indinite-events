@@ -1,5 +1,5 @@
 import { Types, type ClientSession } from "mongoose";
-import { can, canTakeCardPayments, cardFeeOf, discountAsBps, formatBpsPercent, generatePublicId, maxDiscountBps, normalisePassCode, passCode, priceOrder, signTicket, type AuthUser, type Discount, type LineItem, type OrderPricing, type PublicCheckoutInput } from "@indinite/core";
+import { available, bookability, can, canTakeCardPayments, cardFeeOf, discountAsBps, formatBpsPercent, generatePublicId, maxDiscountBps, normalisePassCode, passCode, priceOrder, signTicket, type AuthUser, type Discount, type LineItem, type OrderPricing, type PublicCheckoutInput } from "@indinite/core";
 import { audited } from "../audit";
 import { enqueueSendTickets } from "../jobs";
 import { Event } from "../models/event";
@@ -10,6 +10,7 @@ import { Ticket } from "../models/ticket";
 import { TicketType } from "../models/ticket-type";
 import { quota, SoldOutError } from "../quota";
 import { withTransaction } from "../transaction";
+import { eventBookingState } from "./events";
 import { CouponError, findCoupon, pricingFor, redeemCoupon } from "./pricing";
 
 /** Public checkout holds seats for 30 minutes (SPEC §4.1). */
@@ -94,11 +95,11 @@ export async function createPendingOrder(input: PublicCheckoutInput, opts: Pendi
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
     .map((t) => {
       const qty = qtyByType.get(String(t._id))!;
-      if (!opts.staff) {
-        if (t.salesStartAt && t.salesStartAt > now) throw new CheckoutError(`${t.name} isn't on sale yet.`, 409);
-        if (t.salesEndAt && t.salesEndAt <= now) throw new CheckoutError(`Sales for ${t.name} have closed.`, 409);
-        if (qty > (t.maxPerOrder ?? 10)) throw new CheckoutError(`You can book up to ${t.maxPerOrder} × ${t.name} per order.`);
-      }
+      // Sold out, night started, closed by hand, sales window (SPEC §4.1, 30 Sep 2026). The atomic quota reserve
+      // below still has the final word on capacity.
+      const b = bookability({ ...t, validSessionIds: t.validSessionIds.map(String), available: available(t) }, eventBookingState(event), now, opts.source === "payment_link" ? "payment_link" : "online");
+      if (!b.ok) throw new CheckoutError(b.message, 409);
+      if (!opts.staff && qty > (t.maxPerOrder ?? 10)) throw new CheckoutError(`You can book up to ${t.maxPerOrder} × ${t.name} per order.`);
       return { ticketTypeId: String(t._id), name: t.name, unitPricePence: t.pricePence, qty };
     });
 

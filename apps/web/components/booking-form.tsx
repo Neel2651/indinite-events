@@ -13,6 +13,10 @@ export interface BookableTicketType {
   maxPerOrder: number;
   nightsLabel: string;
   validSessionIds: string[];
+  /** Day pass member: shown under its night as the group's name. */
+  dayPassName: string | null;
+  /** "Sold out", "Bookings closed", … when it can't be booked right now. */
+  blocked: string | null;
 }
 
 interface Props {
@@ -26,13 +30,15 @@ interface Props {
 const inputClass =
   "mt-1 w-full rounded-md border border-input bg-background px-3 py-2.5 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2;
 
-/** Advance booking: 1 choose a day → 2 choose passes valid that day → 3 details, coupon and pay. */
+/**
+ * Booking (30 Sep 2026): 1 choose passes (any mix of nights: day passes per night, plus season / weekend passes)
+ * → 2 details, coupon and pay. One order can hold Night 1 ×2, Night 2 ×1, Night 4 ×2 and a season pass.
+ */
 export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsMode }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [couponInput, setCouponInput] = useState("");
   const [coupon, setCoupon] = useState<{ code: string; rule: Discount } | null>(null);
@@ -41,8 +47,12 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const session = sessions.find((s) => s.id === sessionId);
-  const forDay = useMemo(() => ticketTypes.filter((t) => sessionId && t.validSessionIds.includes(sessionId)), [ticketTypes, sessionId]);
+  // One-night passes are listed under their night; passes for several nights once, below.
+  const byNight = useMemo(
+    () => sessions.map((s) => ({ night: s, types: ticketTypes.filter((t) => t.validSessionIds.length === 1 && t.validSessionIds[0] === s.id) })).filter((n) => n.types.length > 0),
+    [sessions, ticketTypes],
+  );
+  const multiNight = useMemo(() => ticketTypes.filter((t) => t.validSessionIds.length > 1), [ticketTypes]);
   const chosen = ticketTypes.filter((t) => (qty[t.id] ?? 0) > 0);
   const count = chosen.reduce((n, t) => n + qty[t.id]!, 0);
 
@@ -67,8 +77,6 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
     };
   }, [chosen, qty, pricing, coupon, count]);
 
-  const limit = (t: BookableTicketType) => Math.min(t.maxPerOrder, t.available);
-  const setFor = (t: BookableTicketType, n: number) => setQty((q) => ({ ...q, [t.id]: Math.max(0, Math.min(limit(t), n)) }));
 
   async function applyCoupon() {
     setChecking(true);
@@ -110,83 +118,87 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
   }
 
 
+  const limit = (t: BookableTicketType) => (t.blocked ? 0 : Math.min(t.maxPerOrder, t.available));
+  const setFor = (t: BookableTicketType, n: number) => setQty((q) => ({ ...q, [t.id]: Math.max(0, Math.min(limit(t), n)) }));
+
+  const row = (t: BookableTicketType, label: string, sub: string) => {
+    const n = qty[t.id] ?? 0;
+    return (
+      <li key={t.id} className="flex items-start justify-between gap-4 py-3">
+        <div>
+          <p className="font-display font-semibold">{label}</p>
+          <p className="text-sm text-muted-foreground">
+            {sub}
+            {sub ? " · " : ""}
+            {price(t.pricePence)}
+            {t.blocked ? <span className="font-semibold text-foreground"> · {t.blocked}</span> : t.available <= 20 ? ` · ${t.available} left` : ""}
+          </p>
+        </div>
+        {!t.blocked && (
+          <div className="flex shrink-0 items-center gap-2" role="group" aria-label={`Number of ${t.name} passes`}>
+            <button type="button" onClick={() => setFor(t, n - 1)} disabled={n === 0} aria-label={`Remove one ${t.name}`} className="size-10 rounded-full border border-border font-bold disabled:opacity-40">
+              −
+            </button>
+            <span className="w-6 text-center font-display font-semibold tabular-nums" aria-live="polite">
+              {n}
+            </span>
+            <button type="button" onClick={() => setFor(t, n + 1)} disabled={n >= limit(t)} aria-label={`Add one ${t.name}`} className="size-10 rounded-full border border-border font-bold disabled:opacity-40">
+              +
+            </button>
+          </div>
+        )}
+      </li>
+    );
+  };
+
   return (
     <form onSubmit={onSubmit} className="space-y-5">
-      {/* 1. Day */}
+      {/* 1. Passes */}
       <section className="space-y-3">
-        <StepHeader step={step} n={1} title="Choose a day" done={session ? `${session.label} · ${session.dayLabel}` : undefined} onEdit={() => setStep(1)} />
+        <StepHeader step={step} n={1} title="Choose passes" done={count ? `${count} ${count === 1 ? "pass" : "passes"}` : undefined} onEdit={() => setStep(1)} />
         {step === 1 && (
-          <ul className="grid grid-cols-2 gap-2">
-            {sessions.map((s) => {
-              const any = ticketTypes.some((t) => t.validSessionIds.includes(s.id) && t.available > 0);
-              return (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    disabled={!any}
-                    onClick={() => {
-                      setSessionId(s.id);
-                      setQty((q) => Object.fromEntries(Object.entries(q).filter(([id]) => ticketTypes.find((t) => t.id === id)?.validSessionIds.includes(s.id))));
-                      setStep(2);
-                    }}
-                    className={`w-full rounded-md border px-3 py-2.5 text-left disabled:opacity-40 ${sessionId === s.id ? "border-brand-orange bg-brand-cream" : "border-border hover:border-brand-orange"}`}
-                  >
-                    <span className="block font-display font-semibold">{s.label}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {s.dayLabel} · {s.timeLabel}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      {/* 2. Passes */}
-      <section className="space-y-3 border-t border-border pt-4">
-        <StepHeader step={step} n={2} title="Choose passes" done={count ? `${count} ${count === 1 ? "pass" : "passes"}` : undefined} onEdit={() => setStep(2)} />
-        {step === 2 && (
           <>
-            <ul className="space-y-3">
-              {forDay.map((t) => {
-                const n = qty[t.id] ?? 0;
-                const soldOut = t.available === 0;
-                return (
-                  <li key={t.id} className="flex items-start justify-between gap-4 border-b border-border pb-3">
-                    <div>
-                      <p className="font-display font-semibold">{t.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {t.nightsLabel} · {price(t.pricePence)}
-                        {soldOut ? " · Sold out" : t.available <= 20 ? ` · ${t.available} left` : ""}
-                      </p>
+            {byNight.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">Pick as many nights as you like. Each pass is for the night shown.</p>
+                {byNight.map(({ night, types }) => {
+                  const closed = types.every((t) => t.blocked);
+                  const picked = types.reduce((n, t) => n + (qty[t.id] ?? 0), 0);
+                  return (
+                    <div key={night.id} className={`rounded-md border px-3 ${picked ? "border-brand-orange" : "border-border"}`}>
+                      <div className="flex items-baseline justify-between gap-3 pt-3">
+                        <p>
+                          <span className="font-display font-semibold">{night.label}</span>
+                          <span className="ml-2 text-sm text-muted-foreground">
+                            {night.dayLabel} · {night.timeLabel}
+                          </span>
+                        </p>
+                        {closed && <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold">{types[0]!.blocked}</span>}
+                      </div>
+                      {!closed && <ul className="divide-y divide-border">{types.map((t) => row(t, t.dayPassName ?? t.name, ""))}</ul>}
+                      {closed && <div className="pb-3" />}
                     </div>
-                    <div className="flex shrink-0 items-center gap-2" aria-label={`Number of ${t.name} passes`}>
-                      <button type="button" onClick={() => setFor(t, n - 1)} disabled={n === 0} aria-label={`Remove one ${t.name}`} className="size-9 rounded-full border border-border font-bold disabled:opacity-40">
-                        −
-                      </button>
-                      <span className="w-6 text-center font-display font-semibold tabular-nums" aria-live="polite">
-                        {n}
-                      </span>
-                      <button type="button" onClick={() => setFor(t, n + 1)} disabled={soldOut || n >= limit(t)} aria-label={`Add one ${t.name}`} className="size-9 rounded-full border border-border font-bold disabled:opacity-40">
-                        +
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-            <button type="button" disabled={count === 0} onClick={() => setStep(3)} className="btn-cta w-full disabled:opacity-60">
-              Continue
+                  );
+                })}
+              </div>
+            )}
+            {multiNight.length > 0 && (
+              <div className="space-y-1 pt-2">
+                {byNight.length > 0 && <p className="font-display font-semibold">Passes for more than one night</p>}
+                <ul className="divide-y divide-border">{multiNight.map((t) => row(t, t.name, t.nightsLabel))}</ul>
+              </div>
+            )}
+            <button type="button" disabled={count === 0} onClick={() => setStep(2)} className="btn-cta w-full disabled:opacity-60">
+              {count ? `Continue with ${count} ${count === 1 ? "pass" : "passes"}` : "Choose at least one pass"}
             </button>
           </>
         )}
       </section>
 
-      {/* 3. Details, coupon, pay */}
+      {/* 2. Details, coupon, pay */}
       <section className="space-y-4 border-t border-border pt-4">
-        <StepHeader step={step} n={3} title="Your details and payment" />
-        {step === 3 && (
+        <StepHeader step={step} n={2} title="Your details and payment" />
+        {step === 2 && (
           <>
             <label className="block text-sm">
               Full name
