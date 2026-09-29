@@ -24,7 +24,7 @@ module.exports = {
       node_args: `--env-file=${envFile}`,
       env: { NODE_ENV: "production" },
       instances: 1,
-      exec_mode: "fork",
+      exec_mode: "cluster",
       max_memory_restart: "1G",
       kill_timeout: 10000,
       time: true,
