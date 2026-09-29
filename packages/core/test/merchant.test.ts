@@ -20,16 +20,16 @@ describe("merchant status", () => {
 });
 
 describe("card fees", () => {
-  it("defaults to 1.5% + 20p, borne by Indinite", () => {
-    expect(DEFAULT_CARD_FEE).toEqual({ payer: "platform", bps: 150, fixedPence: 20 });
+  it("defaults to 1.5% + 20p, borne by the organiser", () => {
+    expect(DEFAULT_CARD_FEE).toEqual({ payer: "organizer", bps: 150, fixedPence: 20 });
     expect(cardFeePence(1562, DEFAULT_CARD_FEE)).toBe(23 + 20);
     expect(cardFeePence(0, DEFAULT_CARD_FEE)).toBe(0);
   });
 
   it("application fee is the platform fee, plus the card fee when the organiser pays it", () => {
     const order = { totalPence: 1562, platformFeePence: 72 };
-    expect(applicationFeeFor(order, DEFAULT_CARD_FEE)).toBe(72);
-    expect(applicationFeeFor(order, { ...DEFAULT_CARD_FEE, payer: "organizer" })).toBe(72 + 43);
+    expect(applicationFeeFor(order, { ...DEFAULT_CARD_FEE, payer: "platform" })).toBe(72);
+    expect(applicationFeeFor(order, DEFAULT_CARD_FEE)).toBe(72 + 43);
     expect(applicationFeeFor({ totalPence: 10, platformFeePence: 5 }, { payer: "organizer", bps: 150, fixedPence: 20 })).toBe(10);
   });
 
@@ -39,7 +39,7 @@ describe("card fees", () => {
     expect(customerCardFeePence(0, fee)).toBe(0);
     expect(applicationFeeFor({ totalPence: 1607, platformFeePence: 72, cardFeePence: 45 }, fee)).toBe(72 + 45);
     // Priced while the customer paid; the setting changed later: the order's fee still applies.
-    expect(applicationFeeFor({ totalPence: 1607, platformFeePence: 72, cardFeePence: 45 }, DEFAULT_CARD_FEE)).toBe(72 + 45);
+    expect(applicationFeeFor({ totalPence: 1607, platformFeePence: 72, cardFeePence: 45 }, { ...DEFAULT_CARD_FEE, payer: "platform" })).toBe(72 + 45);
     // Priced before the customer paid; no fee on the order, so nothing extra.
     expect(applicationFeeFor({ totalPence: 1562, platformFeePence: 72, cardFeePence: 0 }, fee)).toBe(72);
   });

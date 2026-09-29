@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { merchantStatus, MERCHANT_STATUS_LABELS, resolvePaymentsMode } from "@indinite/core";
+import { cardFeeOf, merchantStatus, MERCHANT_STATUS_LABELS, resolvePaymentsMode } from "@indinite/core";
 import { appUrl } from "@indinite/auth";
 import { merchantSetupUrl, Organizer, refreshMerchantAccount, stripeConfigured } from "@indinite/db";
 import { PaymentsActions } from "@/components/staff/payments-actions";
@@ -13,7 +13,7 @@ const EXPLAIN: Record<string, string> = {
   not_started: "Connect your business to Stripe, our payment provider, to take card payments online and through payment links. Ticket money is paid into your bank account by Stripe.",
   in_progress: "You've started setting up with Stripe but haven't finished. Continue where you left off.",
   pending_verification: "Stripe is checking your details. This usually takes a few minutes, occasionally a day or two. We'll email you when you can take card payments.",
-  active: "You can take card payments. Stripe pays ticket money (minus Indinite's platform fee) into your bank account.",
+  active: "You can take card payments. Stripe pays ticket money into your bank account.",
   restricted: "Stripe needs more information before you can keep taking card payments.",
 };
 
@@ -42,6 +42,8 @@ export default async function PaymentsPage({ params, searchParams }: Props) {
   const org = (await Organizer.findById(organizer.id).lean())!;
   const status = merchantStatus(org);
   const demo = resolvePaymentsMode(process.env) === "demo";
+  const fee = cardFeeOf(org);
+  const feeRate = `${fee.bps / 100}%${fee.fixedPence ? ` + ${fee.fixedPence}p` : ""}`;
 
   return (
     <>
@@ -59,6 +61,13 @@ export default async function PaymentsPage({ params, searchParams }: Props) {
             {org.onlineSalesPaused && <span className="rounded-full bg-warning/15 px-3 py-1 text-xs font-semibold tracking-widest text-warning">ONLINE SALES PAUSED BY INDINITE</span>}
           </div>
           <p className="text-muted-foreground">{EXPLAIN[status]}</p>
+          <p className="text-sm text-muted-foreground">
+            {fee.payer === "organizer"
+              ? `Stripe's card fee (${feeRate} per card payment) is deducted from your payout. Customers pay Indinite's platform fee on top of the ticket price.`
+              : fee.payer === "customer"
+                ? "Customers pay Stripe's card fee (as a \u201cCard processing fee\u201d) and Indinite's platform fee on top of the ticket price."
+                : "Indinite pays Stripe's card fee. Customers pay Indinite's platform fee on top of the ticket price."}
+          </p>
           {setup && status !== "active" && can("stripe.onboard") && (
             <p className="rounded-md border border-brand-orange/40 bg-brand-orange/10 px-3 py-2 text-sm">
               You&apos;ve been asked to set up payments for {organizer.name}. Use the button below to continue on Stripe&apos;s secure form. It takes about 10 minutes; have your bank details and photo ID ready.

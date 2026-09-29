@@ -43,7 +43,7 @@ export type CardFeePayer = "platform" | "organizer" | "customer";
 
 export const CARD_FEE_PAYERS: readonly CardFeePayer[] = ["platform", "organizer", "customer"];
 
-/** Stripe's card processing fee as configured by the super admin (default 1.5% + 20p, UK cards). */
+/** Stripe's card processing fee as configured by the super admin (default 1.5% + 20p, UK cards, paid by the organiser). */
 export interface CardFeeSettings {
   /**
    * Who bears Stripe's fee: Indinite (out of the platform fee), the organiser (deducted from their payout) or the
@@ -54,7 +54,7 @@ export interface CardFeeSettings {
   fixedPence: Pence;
 }
 
-export const DEFAULT_CARD_FEE: CardFeeSettings = { payer: "platform", bps: 150, fixedPence: 20 };
+export const DEFAULT_CARD_FEE: CardFeeSettings = { payer: "organizer", bps: 150, fixedPence: 20 };
 
 /** An organiser's stored card fee settings, with defaults. */
 export function cardFeeOf(org: { cardFee?: { payer?: string | null; bps?: number | null; fixedPence?: number | null } | null }): CardFeeSettings {

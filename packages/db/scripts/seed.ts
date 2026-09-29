@@ -14,7 +14,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import mongoose, { type ClientSession, type Types } from "mongoose";
-import { dayPassMemberName } from "@indinite/core";
+import { cardFeeOf, dayPassMemberName, DEFAULT_CARD_FEE } from "@indinite/core";
 import { runWithContext, systemActor } from "@indinite/core/context";
 import {
   audited,
@@ -30,6 +30,7 @@ import {
   mediaUrl,
   Order,
   Organizer,
+  setCardFeeSettings,
   setEventCharges,
   setEventPricing,
   setEventStatus,
@@ -295,6 +296,11 @@ async function updateOne(d: SeedOrganizer, media: Media): Promise<string[]> {
   if (org.commissionBps !== d.organizer.commissionBps) {
     await setOrganizerCommission(orgId, d.organizer.commissionBps);
     changes.push(`set commission to ${d.organizer.commissionBps / 100}%`);
+  }
+  // Stripe's card fee: paid by the organiser (deducted from their payout), the default since 1 Oct 2026.
+  if (!same(cardFeeOf(org), DEFAULT_CARD_FEE)) {
+    await setCardFeeSettings(orgId, DEFAULT_CARD_FEE);
+    changes.push("organiser now pays Stripe's card fee");
   }
 
   const existing = await Event.findOne({ slug: d.event.slug, organizerId: org._id, deletedAt: null }).lean();

@@ -219,26 +219,27 @@ describe("card checkout (M4)", () => {
     await expect(asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }] }, new Date(), { requireCardPayments: true }))).rejects.toBeInstanceOf(CheckoutError);
   });
 
-  it("sends a destination charge with Indinite's fee, holds seats ≥ 30 min, and reuses an open session", async () => {
+  it("sends a destination charge with Indinite's fee plus the card fee (organiser pays it by default), holds seats ≥ 30 min, and reuses an open session", async () => {
     await activateMerchant();
     const order = await asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }] }, new Date(), { requireCardPayments: true }));
     const a = await asCustomer(() => startCardCheckout(String(order._id), urls));
     const b = await asCustomer(() => startCardCheckout(String(order._id), urls));
     expect(a.url).toBe(b.url);
     const s = stripe.last("createCheckoutSession")!;
-    expect(s).toMatchObject({ totalPence: 1562, applicationFeePence: 72, customerEmail: "asha@example.com" });
+    // Platform fee 72p + Stripe's card fee on £15.62 (1.5% + 20p = 43p), deducted from the organiser's payout.
+    expect(s).toMatchObject({ totalPence: 1562, applicationFeePence: 72 + 23 + 20, customerEmail: "asha@example.com" });
     expect((s.destinationAccountId as string).startsWith("acct_test_")).toBe(true);
     expect((s.expiresAt as Date).getTime()).toBeGreaterThanOrEqual(Date.now() + 30 * 60_000);
     const hold = await Hold.findOne({ orderId: order._id }).lean();
     expect(hold!.expiresAt.getTime()).toBeGreaterThanOrEqual(Date.now() + 30 * 60_000);
   });
 
-  it("adds Stripe's card fee to the application fee when the organiser bears it", async () => {
+  it("takes only the platform fee when Indinite bears Stripe's card fee", async () => {
     await activateMerchant();
-    await asUser("admin-1", () => setCardFeeSettings(orgId, { payer: "organizer", bps: 150, fixedPence: 20 }));
+    await asUser("admin-1", () => setCardFeeSettings(orgId, { payer: "platform", bps: 150, fixedPence: 20 }));
     const order = await asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }] }, new Date(), { requireCardPayments: true }));
     await asCustomer(() => startCardCheckout(String(order._id), urls));
-    expect(stripe.last("createCheckoutSession")).toMatchObject({ applicationFeePence: 72 + 23 + 20 });
+    expect(stripe.last("createCheckoutSession")).toMatchObject({ applicationFeePence: 72 });
   });
 
   it("adds a card processing fee to the customer's total when the customer bears it", async () => {

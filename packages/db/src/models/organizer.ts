@@ -24,9 +24,9 @@ const organizerSchema = new Schema(
     },
     /** Super admin switch: stop card checkout and payment links (cash/comp bookings still work). */
     onlineSalesPaused: { type: Boolean, default: false },
-    /** Who bears Stripe's card fee and at what rate (super admin, SPEC §4.8). */
+    /** Who bears Stripe's card fee and at what rate (super admin, SPEC §4.8). Default: the organiser. */
     cardFee: {
-      payer: { type: String, enum: ["platform", "organizer", "customer"], default: "platform" },
+      payer: { type: String, enum: ["platform", "organizer", "customer"], default: "organizer" },
       bps: { type: Number, min: 0, max: 1000, default: 150 },
       fixedPence: { type: Number, min: 0, max: 500, default: 20 },
     },

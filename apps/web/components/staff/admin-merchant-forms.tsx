@@ -42,15 +42,15 @@ export function CardFeeForm({ organizerId, payer, percent, fixed }: { organizerI
       <fieldset className="space-y-2">
         <legend className="text-sm font-semibold">Who pays Stripe&apos;s card fee?</legend>
         <label className="flex items-start gap-2 text-sm">
-          <input type="radio" name="payer" value="platform" defaultChecked={payer !== "organizer" && payer !== "customer"} className="mt-1 accent-[var(--brand-orange)]" />
+          <input type="radio" name="payer" value="platform" defaultChecked={payer === "platform"} className="mt-1 accent-[var(--brand-orange)]" />
           <span>
             <strong>Indinite</strong>: comes out of the platform fee
           </span>
         </label>
         <label className="flex items-start gap-2 text-sm">
-          <input type="radio" name="payer" value="organizer" defaultChecked={payer === "organizer"} className="mt-1 accent-[var(--brand-orange)]" />
+          <input type="radio" name="payer" value="organizer" defaultChecked={payer !== "platform" && payer !== "customer"} className="mt-1 accent-[var(--brand-orange)]" />
           <span>
-            <strong>Organiser</strong>: deducted from their payout
+            <strong>Organiser</strong> (default): deducted from their payout
           </span>
         </label>
         <label className="flex items-start gap-2 text-sm">

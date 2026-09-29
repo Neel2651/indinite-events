@@ -221,8 +221,8 @@ Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 
   `account.updated` and refreshed on return from Stripe. Card checkout and payment links need an active, un-paused
   organiser. The super admin can pause online sales (cash / account / comp bookings still work).
 - **Stripe card fee** (default 1.5% + 20p), set per organiser by the super admin, paid by one of:
+  - **Organiser** (the default since 1 Oct 2026): added to the application fee, so it's deducted from their payout.
   - **Indinite**: comes out of the platform fee.
-  - **Organiser**: added to the application fee, so it's deducted from their payout.
   - **Customer**: added to card bookings (online and payment links, not cash / account / comp) as a
     **"Card processing fee"** line after tax, not taxed, grossed up so it covers Stripe's fee on the whole charge:
     `ceil((base × bps + fixed × 10000) / (10000 − bps))`. It's fixed on the order when priced, recovered in the
