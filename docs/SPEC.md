@@ -14,6 +14,10 @@
   - View orders, resend tickets, see sales and check-ins.
 - Stripe Connect Express onboarding; organizer receives payment minus platform commission.
 - Gate scanner PWA (offline-capable), duplicate-entry prevention.
+- **Organiser app (29 Sep 2026):** the staff area is installable from the browser ("Indinite for organisers", no
+  app store): home-screen icon, full screen, phone bottom tabs (Home, Orders, Book, Scan/Check-ins, More), phone
+  layouts for dashboard, orders, new booking and check-ins. Opens on each role's home (`/dashboard` → owner and staff
+  panel, gate staff → `/scan`). Only the scanner works offline; other screens show an offline page.
 - Audit trail on every state change.
 
 ### Out of v1 (post-Navratri)

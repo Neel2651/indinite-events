@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Types } from "mongoose";
 import { Event, gateStats, Order, Ticket } from "@indinite/db";
+import { InstallAppCard } from "@/components/staff/install-app-card";
 import { PageHeader, StatCard } from "@/components/staff/shell";
 import { formatDateRange, formatDay, price } from "@/lib/format";
 import { requireOrg } from "@/lib/staff";
@@ -33,7 +34,8 @@ export default async function OrgDashboard({ params }: { params: Promise<{ slug:
   return (
     <>
       <PageHeader title="Dashboard" description={`Everything for ${organizer.name}.`} />
-      <div className="grid gap-4 sm:grid-cols-3">
+      <InstallAppCard />
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <StatCard label="Passes sold" value={passes} />
         {canSeeMoney && <StatCard label="Paid orders" value={totals.count} />}
         {canSeeMoney && <StatCard label="Ticket sales" value={price(totals.total)} hint="Before refunds and Indinite commission" />}

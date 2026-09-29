@@ -104,7 +104,8 @@ export default async function OrderPage({ params }: { params: Promise<{ slug: st
           </section>
         </div>
 
-        <aside className="h-fit space-y-6">
+        {/* Phones: customer, payment and actions first; passes and history below. */}
+        <aside className="order-first h-fit space-y-6 lg:order-none">
           <section className="rounded-lg border border-border bg-card p-6">
             <h2 className="text-lg">Customer</h2>
             <p className="mt-2 font-semibold">{order.customer?.name}</p>

@@ -2,6 +2,7 @@
  * Accessibility check (SPEC §7: WCAG AA on public pages and the ticket view), using axe-core.
  *   pnpm --filter @indinite/e2e test:a11y            (dev server running, seeded data)
  *   A11Y_BASE_URL=http://localhost:3002 pnpm --filter @indinite/e2e test:a11y
+ *   A11Y_STAFF_EMAIL=owner@demo-garba.test A11Y_STAFF_PASSWORD=… (optional: also checks the organiser app at phone size)
  * Fails on any "serious" or "critical" WCAG 2.1 A/AA violation. Minor ones are listed but don't fail.
  */
 import AxeBuilder from "@axe-core/playwright";
@@ -41,6 +42,31 @@ try {
   for (const path of ["/", eventHref ?? "/"]) {
     await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
     failures += await check(page, `${path} (mobile)`);
+  }
+
+  // Signed-in organiser app at phone size, if staff credentials are given (e.g. a seed account on a dev server).
+  const email = process.env.A11Y_STAFF_EMAIL;
+  const password = process.env.A11Y_STAFF_PASSWORD;
+  if (email && password) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${BASE}/sign-in`);
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.waitForURL(/\/(org|admin|scan)/, { timeout: 30_000 }).catch(async (e) => {
+      console.log("Sign-in didn't finish:", (await page.locator("main").innerText()).replace(/\s+/g, " ").slice(0, 200));
+      throw e;
+    });
+    const home = new URL(page.url()).pathname;
+    if (home.startsWith("/org/")) {
+      for (const sub of ["", "/orders", "/bookings/new", "/checkins", "/coupons", "/payments"]) {
+        await page.goto(`${BASE}${home}${sub}`, { waitUntil: "networkidle" });
+        failures += await check(page, `${home}${sub} (mobile, signed in)`);
+      }
+      // The "More" sheet.
+      await page.getByRole("button", { name: "More" }).click();
+      failures += await check(page, `${home} More sheet (mobile)`);
+    }
   }
 } finally {
   await browser.close();

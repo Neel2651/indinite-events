@@ -1,0 +1,23 @@
+{
+  "id": "/dashboard",
+  "name": "Indinite for organisers",
+  "short_name": "Indinite",
+  "description": "Bookings, orders, check-ins and gate scanning for Indinite Events organisers",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0e1f",
+  "theme_color": "#0a0e1f",
+  "lang": "en-GB",
+  "icons": [
+    { "src": "/app-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/app-icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/app-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "New booking", "url": "/dashboard?go=bookings/new", "icons": [{ "src": "/app-icon-192.png", "sizes": "192x192" }] },
+    { "name": "Orders", "url": "/dashboard?go=orders", "icons": [{ "src": "/app-icon-192.png", "sizes": "192x192" }] },
+    { "name": "Scan passes", "url": "/scan", "icons": [{ "src": "/app-icon-192.png", "sizes": "192x192" }] }
+  ]
+}

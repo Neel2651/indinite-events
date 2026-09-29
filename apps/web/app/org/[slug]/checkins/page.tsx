@@ -40,7 +40,45 @@ export default async function CheckinsPage({ params }: { params: Promise<{ slug:
               )}
             </div>
           </div>
-          <div className="mt-4 overflow-x-auto">
+          {/* Phones: one card per night. */}
+          <ul className="mt-4 space-y-3 sm:hidden">
+            {nights.map((n) => {
+              const pct = n.expected ? Math.round((n.admitted / n.expected) * 100) : 0;
+              return (
+                <li key={n.sessionId} className="rounded-md border border-border p-4">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span>
+                      <span className="font-semibold">{n.label}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">{formatDay(n.startsAt)}</span>
+                    </span>
+                    <span>
+                      <span className="font-display text-xl font-bold tabular-nums">{n.admitted}</span>
+                      <span className="text-sm text-muted-foreground"> / {n.expected}</span>
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-muted" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${n.label}: ${pct}% checked in`}>
+                    <div className="h-2 rounded-full bg-brand-orange" style={{ width: `${Math.min(100, pct)}%` }} />
+                  </div>
+                  {n.gates.length === 0 ? (
+                    <p className="mt-2 text-sm text-muted-foreground">No scans yet</p>
+                  ) : (
+                    <ul className="mt-3 space-y-1 text-sm">
+                      {n.gates.map((g) => (
+                        <li key={g.gate} className="flex flex-wrap justify-between gap-x-3">
+                          <span>
+                            <span className="font-semibold">{g.gate}</span>: {g.admitted} in{g.manual > 0 && ` (${g.manual} override)`}
+                            {g.refused > 0 && `, ${g.refused} refused`}
+                          </span>
+                          {g.lastScanAt && <span className="text-muted-foreground">last {formatTime(g.lastScanAt)}</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-4 hidden overflow-x-auto sm:block">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border text-muted-foreground">
                 <tr>

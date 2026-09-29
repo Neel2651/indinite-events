@@ -108,6 +108,7 @@ export function AuditTable({ entries, showOrganiser, entityHref }: { entries: Au
                 <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
                   {e.changes.length} change{e.changes.length === 1 ? "" : "s"}
                 </summary>
+                <div className="overflow-x-auto">
                 <table className="mt-2 w-full text-xs">
                   <thead className="text-muted-foreground">
                     <tr>
@@ -126,6 +127,7 @@ export function AuditTable({ entries, showOrganiser, entityHref }: { entries: Au
                     ))}
                   </tbody>
                 </table>
+                </div>
               </details>
             )}
           </li>

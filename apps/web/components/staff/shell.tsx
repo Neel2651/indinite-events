@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { MobileTabBar, OfflineBanner, type MobileTab } from "./mobile-nav";
 import { SignOutButton, StaffNav } from "./nav";
+import { RegisterAppSW } from "./register-app-sw";
 
 interface Props {
   /** "Admin", or the organiser's name. */
@@ -10,14 +12,19 @@ interface Props {
   user: { name: string; email: string; roleLabel: string };
   /** Extra links shown next to the user (e.g. switch organiser, admin). */
   links?: { href: string; label: string }[];
+  /** Phone bottom tabs (up to 4, plus "More" for the rest of `nav` and `links`). */
+  tabs?: MobileTab[];
   children: ReactNode;
 }
 
-export function StaffShell({ area, areaHref, nav, user, links = [], children }: Props) {
+export function StaffShell({ area, areaHref, nav, user, links = [], tabs = [], children }: Props) {
+  const tabHrefs = new Set(tabs.map((t) => t.href));
   return (
     <div className="flex min-h-dvh flex-col bg-muted print:bg-white">
-      <header className="dark bg-background text-foreground print:hidden">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 pt-4">
+      <RegisterAppSW />
+      <OfflineBanner />
+      <header className="dark bg-background pt-[env(safe-area-inset-top)] text-foreground print:hidden">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 pt-4 pb-3 sm:pb-0">
           <div className="flex items-center gap-3">
             <Link href="/" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight text-brand-orange" title="Public site">
               <img src="/brand/indinite-mark.png" alt="" width={32} height={28} className="h-7 w-auto" />
@@ -30,7 +37,7 @@ export function StaffShell({ area, areaHref, nav, user, links = [], children }: 
               {area}
             </Link>
           </div>
-          <div className="flex items-center gap-3 text-sm">
+          <div className="hidden items-center gap-3 text-sm sm:flex">
             {links.map((l) => (
               <Link key={l.href} href={l.href} className="font-semibold text-on-dark-muted hover:text-white">
                 {l.label}
@@ -43,11 +50,12 @@ export function StaffShell({ area, areaHref, nav, user, links = [], children }: 
             <SignOutButton />
           </div>
         </div>
-        <div className="mx-auto mt-2 max-w-6xl px-5">
+        <div className="mx-auto mt-2 hidden max-w-6xl px-5 sm:block">
           <StaffNav items={nav} />
         </div>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 print:max-w-none print:p-0">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-28 sm:px-5 sm:py-8 print:max-w-none print:p-0">{children}</main>
+      <MobileTabBar tabs={tabs} more={nav.filter((n) => !tabHrefs.has(n.href))} links={links} user={{ name: user.name, roleLabel: user.roleLabel }} />
     </div>
   );
 }
@@ -66,10 +74,10 @@ export function PageHeader({ title, description, actions }: { title: string; des
 
 export function StatCard({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 font-display text-2xl font-bold">{value}</p>
-      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+    <div className="rounded-lg border border-border bg-card p-3 sm:p-5">
+      <p className="text-xs text-muted-foreground sm:text-sm">{label}</p>
+      <p className="mt-1 font-display text-lg font-bold sm:text-2xl">{value}</p>
+      {hint && <p className="mt-1 hidden text-xs text-muted-foreground sm:block">{hint}</p>}
     </div>
   );
 }

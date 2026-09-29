@@ -36,6 +36,8 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
   (`setEventPricing`, `setEventCharges`, coupons, `recordCommissionPayment`), `eventFinance`, `getOrderHistory`.
 - Demo videos: `pnpm --filter @indinite/e2e demo:videos [booking|organiser|scanning]` → `e2e/demo-videos/out/`.
 - `apps/web/lib/queries.ts`: public read models for events.
+- Installable staff app: `public/app.webmanifest` + `lib/app-meta.ts` (org, admin, scan layouts), one service worker
+  `public/scan-sw.js` (scanner offline, `/offline` page for staff screens), phone tabs `components/staff/mobile-nav.tsx`.
 
 ## Commands
 - `pnpm dev` — web + worker

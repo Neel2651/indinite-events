@@ -44,7 +44,31 @@ function defaultSession(event: ScanEvent): string {
 
 // ---------------------------------------------------------------------------------------------
 
-export function ScannerApp() {
+/**
+ * Ask the service worker to keep every script this page has loaded, for offline scanning, and wait until it has
+ * (at most 8 s). On a first visit the worker may only take control after the scanner has loaded, so this waits
+ * for that too. The camera is shown as ready only after this, so "ready" means "ready to work offline".
+ */
+function cacheLoadedFiles(): Promise<void> {
+  if (!("serviceWorker" in navigator)) return Promise.resolve();
+  const send = (sw: ServiceWorker) =>
+    new Promise<void>((resolve) => {
+      const urls = performance
+        .getEntriesByType("resource")
+        .map((e) => e.name)
+        .filter((u) => u.startsWith(`${location.origin}/_next/static/`));
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => resolve();
+      sw.postMessage({ type: "cache-urls", urls }, [channel.port2]);
+    });
+  const controlled = navigator.serviceWorker.controller
+    ? Promise.resolve(navigator.serviceWorker.controller)
+    : new Promise<ServiceWorker | null>((resolve) => navigator.serviceWorker.addEventListener("controllerchange", () => resolve(navigator.serviceWorker.controller), { once: true }));
+  return Promise.race([controlled.then((sw) => (sw ? send(sw) : undefined)), new Promise<void>((r) => setTimeout(r, 8000))]);
+}
+
+/** `panelHref`: link back to the organiser panel for staff who have one (gate-only staff don't). */
+export function ScannerApp({ panelHref = null }: { panelHref?: string | null }) {
   const [events, setEvents] = useState<ScanEvent[] | null>(null);
   const [userName, setUserName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -70,12 +94,12 @@ export function ScannerApp() {
   }, []);
 
   if (setup) return <Scanning setup={setup} onExit={() => setSetup(null)} />;
-  return <SetupScreen events={events} userName={userName} error={error} onStart={setSetup} />;
+  return <SetupScreen events={events} userName={userName} error={error} onStart={setSetup} panelHref={panelHref} />;
 }
 
 // ---------------------------------------------------------------------------------------------
 
-function SetupScreen({ events, userName, error, onStart }: { events: ScanEvent[] | null; userName: string; error: string | null; onStart: (s: Setup) => void }) {
+function SetupScreen({ events, userName, error, onStart, panelHref }: { events: ScanEvent[] | null; userName: string; error: string | null; onStart: (s: Setup) => void; panelHref: string | null }) {
   const [eventId, setEventId] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [gate, setGate] = useState("");
@@ -129,16 +153,23 @@ function SetupScreen({ events, userName, error, onStart }: { events: ScanEvent[]
             INDINITE <span className="font-sans font-normal text-on-dark-muted">scanner</span>
           </span>
         </p>
-        <button
-          type="button"
-          onClick={async () => {
-            await authClient.signOut();
-            window.location.href = "/sign-in";
-          }}
-          className="rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold"
-        >
-          Sign out
-        </button>
+        <div className="flex items-center gap-2">
+          {panelHref && (
+            <a href={panelHref} className="rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold">
+              Back to organiser
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={async () => {
+              await authClient.signOut();
+              window.location.href = "/sign-in";
+            }}
+            className="rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold"
+          >
+            Sign out
+          </button>
+        </div>
       </div>
       <h1 className="mt-6 text-3xl">Gate scanning</h1>
       {userName && <p className="mt-1 text-on-dark-muted">Signed in as {userName}</p>}
@@ -446,6 +477,10 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
     void (async () => {
       await loadLocal();
       const QrScanner = (await import("qr-scanner")).default;
+      // The decoder runs in a web worker loaded on first use: load it now, while online.
+      await QrScanner.createQrEngine()
+        .then((engine) => (engine as unknown as { terminate?: () => void }).terminate?.())
+        .catch(() => {});
       if (cancelled || !videoRef.current) return;
       scanner = new QrScanner(videoRef.current, (r) => void check(r.data), {
         returnDetailedScanResult: true,
@@ -455,6 +490,8 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
       });
       try {
         await scanner.start();
+        await cacheLoadedFiles();
+        if (cancelled) return;
         setCamera("on");
       } catch {
         setCamera("blocked");
@@ -579,7 +616,7 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
           <div className="aspect-square w-[70%] max-w-[320px] rounded-3xl border-4 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
         </div>
         <p className="absolute inset-x-0 top-6 text-center text-sm font-semibold drop-shadow">
-          {camera === "blocked" ? "Camera blocked. Allow camera access, or enter codes by hand." : "Point the camera at a pass"}
+          {camera === "blocked" ? "Camera blocked. Allow camera access, or enter codes by hand." : camera === "on" ? "Point the camera at a pass" : "Getting ready for offline scanning…"}
         </p>
       </div>
 

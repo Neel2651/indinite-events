@@ -58,8 +58,14 @@ export default async function OrdersPage({ params, searchParams }: Props) {
       )}
       <form className="mb-4 flex flex-wrap gap-3" role="search">
         {couponCode && <input type="hidden" name="coupon" value={couponCode} />}
-        <input name="q" defaultValue={q} placeholder="Search by order ref, name or email" className={`${inputClass} mt-0 max-w-sm`} />
-        <select name="how" defaultValue={how} className={`${inputClass} mt-0 w-auto`}>
+        <label htmlFor="orders-q" className="sr-only">
+          Search orders
+        </label>
+        <input id="orders-q" name="q" type="search" defaultValue={q} placeholder="Search by order ref, name or email" className={`${inputClass} mt-0 max-w-sm`} />
+        <label htmlFor="orders-how" className="sr-only">
+          Payment type
+        </label>
+        <select id="orders-how" name="how" defaultValue={how} className={`${inputClass} mt-0 w-auto`}>
           <option value="">All payment types</option>
           {Object.entries(HOW).map(([v, l]) => (
             <option key={v} value={v}>
@@ -71,7 +77,33 @@ export default async function OrdersPage({ params, searchParams }: Props) {
           Search
         </button>
       </form>
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
+      {/* Phones: one card per order. */}
+      <ul className="space-y-3 sm:hidden">
+        {orders.map((o) => (
+          <li key={String(o._id)}>
+            <Link href={`/org/${slug}/orders/${o.publicId}`} className="block rounded-lg border border-border bg-card p-4 active:bg-muted">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="font-display font-semibold tracking-wider text-brand-orange-strong">{o.publicId}</span>
+                <span className="font-display font-semibold">{price(o.totalPence)}</span>
+              </div>
+              <p className="mt-1 truncate font-semibold">{o.customer?.name}</p>
+              <p className="truncate text-sm text-muted-foreground">{o.customer?.email}</p>
+              <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  {o.items.reduce((n, i) => n + i.qty, 0)} {o.items.reduce((n, i) => n + i.qty, 0) === 1 ? "pass" : "passes"}
+                </span>
+                <span>{HOW[o.offline?.method ?? o.source] ?? o.source}</span>
+                <span className="font-semibold text-foreground">{STATUS[o.status ?? "pending"]}</span>
+                <span>
+                  {formatDay(o.createdAt as Date)}, {formatTime(o.createdAt as Date)}
+                </span>
+              </p>
+            </Link>
+          </li>
+        ))}
+        {orders.length === 0 && <li className="rounded-lg border border-border bg-card px-4 py-6 text-muted-foreground">No orders found.</li>}
+      </ul>
+      <div className="hidden overflow-x-auto rounded-lg border border-border bg-card sm:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border text-muted-foreground">
             <tr>

@@ -228,11 +228,11 @@ export function OfflineBookingForm({
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button type="button" aria-label={`Remove one ${t.name}`} disabled={n === 0} onClick={() => setFor(t.id, n - 1, t.available)} className="size-9 rounded-full border border-border font-bold disabled:opacity-40">
+                    <button type="button" aria-label={`Remove one ${t.name}`} disabled={n === 0} onClick={() => setFor(t.id, n - 1, t.available)} className="size-11 rounded-full border border-border text-lg font-bold disabled:opacity-40 sm:size-9 sm:text-base">
                       −
                     </button>
                     <span className="w-6 text-center font-display font-semibold tabular-nums">{n}</span>
-                    <button type="button" aria-label={`Add one ${t.name}`} disabled={n >= t.available} onClick={() => setFor(t.id, n + 1, t.available)} className="size-9 rounded-full border border-border font-bold disabled:opacity-40">
+                    <button type="button" aria-label={`Add one ${t.name}`} disabled={n >= t.available} onClick={() => setFor(t.id, n + 1, t.available)} className="size-11 rounded-full border border-border text-lg font-bold disabled:opacity-40 sm:size-9 sm:text-base">
                       +
                     </button>
                   </div>
@@ -246,20 +246,20 @@ export function OfflineBookingForm({
           <legend className="mb-2 font-display font-semibold">Customer</legend>
           <label className="block text-sm">
             Full name
-            <input name="name" required maxLength={120} className={inputClass} />
+            <input name="name" required maxLength={120} autoComplete="off" autoCapitalize="words" className={inputClass} />
           </label>
           <label className="block text-sm">
             Email
-            <input name="email" type="email" required className={inputClass} />
+            <input name="email" type="email" required inputMode="email" autoComplete="off" autoCapitalize="none" spellCheck={false} className={inputClass} />
           </label>
           <label className="block text-sm">
             Phone (optional)
-            <input name="phone" type="tel" maxLength={30} className={inputClass} />
+            <input name="phone" type="tel" inputMode="tel" maxLength={30} autoComplete="off" className={inputClass} />
           </label>
         </fieldset>
       </div>
 
-      <aside className="h-fit space-y-5 rounded-lg border border-border bg-muted/50 p-5">
+      <aside id="booking-payment" className="h-fit scroll-mt-4 space-y-5 rounded-lg border border-border bg-muted/50 p-5">
         <fieldset>
           <legend className="font-display font-semibold">Payment</legend>
           <div className="mt-2 space-y-2">
@@ -368,6 +368,21 @@ export function OfflineBookingForm({
           {pending ? "Working…" : SUBMIT[method]}
         </button>
       </aside>
+
+      {/* Phones: the total stays in view above the tab bar while choosing passes. */}
+      {count > 0 && (
+        <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 sm:bottom-0 flex items-center justify-between gap-3 border-t border-border bg-card px-4 py-3 shadow-lg lg:hidden">
+          <span>
+            <span className="block text-xs text-muted-foreground">
+              {count} {count === 1 ? "pass" : "passes"}
+            </span>
+            <span className="font-display text-xl font-bold">{price(preview?.totalPence ?? 0)}</span>
+          </span>
+          <a href="#booking-payment" className="btn-cta">
+            Payment and details
+          </a>
+        </div>
+      )}
     </form>
   );
 }

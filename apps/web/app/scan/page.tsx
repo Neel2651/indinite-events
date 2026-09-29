@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { can } from "@indinite/core";
 import { ScannerApp } from "@/components/scanner/scanner-app";
 import { RegisterAppSW } from "@/components/staff/register-app-sw";
-import { requireStaff } from "@/lib/staff";
+import { homeFor, requireStaff } from "@/lib/staff";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ export default async function ScanPage() {
   return (
     <>
       <RegisterAppSW />
-      <ScannerApp />
+      <ScannerApp panelHref={homeFor(user) === "/scan" ? null : "/dashboard"} />
     </>
   );
 }

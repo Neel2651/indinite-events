@@ -1,4 +1,5 @@
 import { ROLE_LABELS } from "@indinite/auth";
+import type { MobileTab } from "@/components/staff/mobile-nav";
 import { StaffShell } from "@/components/staff/shell";
 import { requireOrg } from "@/lib/staff";
 
@@ -19,6 +20,13 @@ export default async function OrgLayout({ children, params }: { children: React.
   if (can("audit.read")) nav.push({ href: `${base}/audit`, label: "Audit log" });
   nav.push({ href: `${base}/payments`, label: "Payments" });
 
+  // Phone bottom tabs: the four things organisers do most (SPEC organiser app, 29 Sep 2026).
+  const tabs: MobileTab[] = [{ href: base, label: "Home", icon: "home", exact: true }];
+  if (can("order.read")) tabs.push({ href: `${base}/orders`, label: "Orders", icon: "orders" });
+  if (can("order.issueOffline") || can("order.createPaymentLink")) tabs.push({ href: `${base}/bookings/new`, label: "Book", icon: "plus" });
+  if (can("scan.perform")) tabs.push({ href: "/scan", label: "Scan", icon: "scan" });
+  else if (can("reports.read")) tabs.push({ href: `${base}/checkins`, label: "Check-ins", icon: "checkins" });
+
   const links: { href: string; label: string }[] = [];
   if (can("scan.perform")) links.push({ href: "/scan", label: "Open scanner" });
   if (user.isSuperAdmin) links.push({ href: "/admin", label: "Admin" });
@@ -31,6 +39,7 @@ export default async function OrgLayout({ children, params }: { children: React.
       nav={nav}
       user={{ name: user.name, email: user.email, roleLabel: role ? ROLE_LABELS[role] : "Super admin" }}
       links={links}
+      tabs={tabs}
     >
       {children}
     </StaffShell>

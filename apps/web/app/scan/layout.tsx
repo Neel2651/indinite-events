@@ -1,14 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import { appMetadata, appViewport } from "@/lib/app-meta";
 
-export const metadata: Metadata = {
-  title: "Scanner",
-  manifest: "/scan.webmanifest",
-  robots: { index: false },
-  appleWebApp: { capable: true, title: "Indinite scanner", statusBarStyle: "black-translucent" },
-  icons: { apple: "/scanner-icon-192.png" },
-};
+// Part of the installable staff app (lib/app-meta.ts); gate staff open it straight onto the scanner.
+export const metadata: Metadata = { ...appMetadata, title: "Scanner" };
 
-export const viewport: Viewport = { themeColor: "#0a0e1f", width: "device-width", initialScale: 1, maximumScale: 1, userScalable: false };
+export const viewport: Viewport = { ...appViewport, maximumScale: 1, userScalable: false };
 
 export default function ScanLayout({ children }: { children: React.ReactNode }) {
   return children;

@@ -37,24 +37,24 @@ export function ChargesEditor({ slug, eventId, initial, canEdit, commissionBps, 
     <div className="space-y-4">
       {rows.length === 0 && <p className="text-sm text-muted-foreground">No charges. Customers pay the ticket price, the platform fee and tax.</p>}
       {rows.map((r, i) => (
-        <div key={i} className="grid grid-cols-[1fr_130px_110px_auto] items-end gap-2">
-          <label className="block text-sm">
-            <span className={i ? "sr-only" : ""}>Charge name</span>
+        <div key={i} className="grid grid-cols-2 items-end gap-2 rounded-md border border-border p-3 sm:grid-cols-[1fr_130px_110px_auto] sm:border-0 sm:p-0">
+          <label className="col-span-2 block text-sm sm:col-span-1">
+            <span className={i ? "sm:sr-only" : ""}>Charge name</span>
             <input value={r.name} disabled={!canEdit} onChange={(e) => update(i, { name: e.target.value })} placeholder="e.g. Venue fee" maxLength={60} className={inputClass} />
           </label>
           <label className="block text-sm">
-            <span className={i ? "sr-only" : ""}>Type</span>
+            <span className={i ? "sm:sr-only" : ""}>Type</span>
             <select value={r.kind} disabled={!canEdit} onChange={(e) => update(i, { kind: e.target.value as ChargeInput["kind"] })} className={inputClass}>
               <option value="fixed">£ per ticket</option>
               <option value="percent">% of price</option>
             </select>
           </label>
           <label className="block text-sm">
-            <span className={i ? "sr-only" : ""}>Amount</span>
+            <span className={i ? "sm:sr-only" : ""}>Amount</span>
             <input value={r.amount} disabled={!canEdit} onChange={(e) => update(i, { amount: e.target.value })} inputMode="decimal" placeholder={r.kind === "fixed" ? "0.30" : "2.5"} className={inputClass} />
           </label>
           {canEdit && (
-            <button type="button" onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} className="mb-1 rounded-full border border-border px-3 py-2 text-xs font-semibold">
+            <button type="button" onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))} className="col-span-2 mb-1 rounded-full border border-border px-3 py-2 text-xs font-semibold sm:col-span-1">
               Remove
             </button>
           )}

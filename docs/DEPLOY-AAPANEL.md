@@ -130,3 +130,5 @@ Zero-downtime reload for the web app; the worker restarts after finishing in-fli
   `proxy_pass` lines to `3005` (or set `PORT=3000` in the server's `.env.local`) before the next deploy, or the site
   will return 502.
 - Nginx sets `X-Forwarded-For` to the real client IP (not appended), which the rate limits rely on. Keep it that way.
+- The organiser app installs from the browser. Keep the Nginx `no-cache` rules for `/scan-sw.js` and
+  `/app.webmanifest` (in `deploy/nginx-aapanel.conf`), or phones keep an old version of the app.

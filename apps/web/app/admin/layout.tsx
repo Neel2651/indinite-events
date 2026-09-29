@@ -1,8 +1,10 @@
 import { StaffShell } from "@/components/staff/shell";
+import { appMetadata, appViewport } from "@/lib/app-meta";
 import { requireSuperAdmin } from "@/lib/staff";
 
 export const dynamic = "force-dynamic";
-export const metadata = { robots: { index: false } };
+export const metadata = appMetadata;
+export const viewport = appViewport;
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireSuperAdmin();
@@ -17,6 +19,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       ]}
       user={{ name: user.name, email: user.email, roleLabel: "Super admin" }}
       links={[{ href: "/org", label: "Organiser panels" }]}
+      tabs={[
+        { href: "/admin", label: "Home", icon: "home", exact: true },
+        { href: "/admin/events", label: "Events", icon: "events" },
+        { href: "/admin/orders", label: "Orders", icon: "orders" },
+        { href: "/admin/finance", label: "Finance", icon: "money" },
+      ]}
     >
       {children}
     </StaffShell>
