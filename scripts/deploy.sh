@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy / update Indinite Events on the server (aaPanel + PM2). See docs/DEPLOY-AAPANEL.md.
 #   bash scripts/deploy.sh            # pull, install, build, reload
-#   bash scripts/deploy.sh --seed     # first deploy of a staging server: also load the demo data
+#   bash scripts/deploy.sh --seed     # staging: also add or update the demo data (keeps orders)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -51,7 +51,8 @@ if [[ "${1:-}" == "--seed" ]]; then
   #   exit 1
   # fi
   echo "→ Loading demo data (staging)"
-  pnpm --filter @indinite/db seed || echo "  (demo events already exist; skipped)"
+  # Adds missing demo organisers and events and updates existing ones; orders and passes are kept.
+  pnpm --filter @indinite/db seed -- --update
   pnpm --filter @indinite/auth seed-users
 fi
 

@@ -54,7 +54,7 @@ Create the media folder outside the checkout: `mkdir -p /www/wwwroot/indinite-me
 ## 4. First deploy
 ```bash
 cd /www/wwwroot/indinite-events
-bash scripts/deploy.sh --seed    # --seed loads the demo events + staff accounts (staging only)
+bash scripts/deploy.sh --seed    # --seed adds or updates the demo events + staff accounts (staging only; keeps orders)
 ```
 It installs, builds, syncs database indexes, starts both PM2 processes, saves the PM2 list and checks
 `http://127.0.0.1:3005/api/health`. Make PM2 start on reboot (once): `pm2 startup` (run the command it prints),

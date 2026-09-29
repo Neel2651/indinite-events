@@ -3,8 +3,13 @@
  * and generated images (written to MEDIA_DIR). London is on sale now; Leicester opens Sun 4 Oct 2026 at 10:00.
  * Auth users (super admin, organizer owner) are added once Better Auth is wired up.
  *
- *   pnpm --filter @indinite/db seed            # refuses if demo data already exists
- *   pnpm --filter @indinite/db seed -- --reset # deletes the demo organisers' data first
+ *   pnpm --filter @indinite/db seed             # refuses if demo data already exists
+ *   pnpm --filter @indinite/db seed -- --update # adds what's missing and updates what's there, keeping orders and passes
+ *   pnpm --filter @indinite/db seed -- --reset  # deletes the demo organisers' data first
+ *
+ * --update goes through the same audited services as the admin screens, so quotas never drop below passes
+ * already sold or held, and a night with passes can't be removed. Pass types and discounts that aren't in this
+ * file are left alone.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -14,6 +19,8 @@ import { runWithContext, systemActor } from "@indinite/core/context";
 import {
   audited,
   connectDb,
+  createDayPass,
+  createTicketType,
   disconnectDb,
   Discount,
   Event,
@@ -23,8 +30,16 @@ import {
   mediaUrl,
   Order,
   Organizer,
+  setEventCharges,
+  setEventPricing,
+  setEventStatus,
+  setOrganizerCommission,
   Ticket,
   TicketType,
+  updateDayPass,
+  updateEvent,
+  updateOrganizer,
+  updateTicketType,
   withTransaction,
 } from "../src";
 import { PALETTES, coverArt, dandiyaArt, diyaArt, mandalaArt, type Palette } from "./seed-media";
@@ -34,6 +49,8 @@ if (process.env.NODE_ENV === "production" && process.env.DEPLOY_ENV !== "staging
 }
 
 const reset = process.argv.includes("--reset");
+const update = process.argv.includes("--update");
+if (reset && update) throw new Error("Use --reset or --update, not both");
 
 /** Nights run 19:30–23:30 London time (BST, UTC+1). `day` is the October 2026 date. */
 const night = (label: string, day: number) => ({
@@ -187,16 +204,23 @@ async function writeImages(d: SeedOrganizer) {
   );
 }
 
-async function seedOne(session: ClientSession, d: SeedOrganizer, media: Awaited<ReturnType<typeof writeImages>>) {
+type Media = Awaited<ReturnType<typeof writeImages>>;
+
+const weekdayOf = (d: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" }).format(d);
+
+async function seedOne(session: ClientSession, d: SeedOrganizer, media: Media) {
   const [organizer] = await Organizer.create(
     [{ ...d.organizer, authOrgId: `seed-org-${d.organizer.slug}` }],
     { session },
   );
-  const orgId = organizer!._id;
-  const audit = (action: string, type: "organizer" | "event" | "ticketType" | "discount", id: Types.ObjectId, after: Record<string, unknown>) =>
-    audited(session, { action, entity: { type, id }, after, organizerId: orgId, reason: "dev seed" });
+  await audited(session, { action: "organizer.created", entity: { type: "organizer", id: organizer!._id }, after: organizer!.toObject(), organizerId: organizer!._id, reason: "dev seed" });
+  return seedEvent(session, d, organizer!._id, media);
+}
 
-  await audit("organizer.created", "organizer", orgId, organizer!.toObject());
+/** The event, its pass types, day pass and discount, for an organiser that already exists. */
+async function seedEvent(session: ClientSession, d: SeedOrganizer, orgId: Types.ObjectId, media: Media) {
+  const audit = (action: string, type: "event" | "ticketType" | "discount", id: Types.ObjectId, after: Record<string, unknown>) =>
+    audited(session, { action, entity: { type, id }, after, organizerId: orgId, reason: "dev seed" });
 
   const [event] = await Event.create([{ ...d.event, ...(d.pricing ?? {}), media, organizerId: orgId, status: "published" }], { session });
   await audit("event.created", "event", event!._id, event!.toObject());
@@ -222,21 +246,18 @@ async function seedOne(session: ClientSession, d: SeedOrganizer, media: Awaited<
     const groupId = new mongoose.Types.ObjectId();
     const dp = d.dayPass;
     const members = await TicketType.create(
-      event!.sessions.map((s, i) => {
-        const weekday = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" }).format(s.startsAt);
-        return {
-          eventId: event!._id,
-          name: dayPassMemberName(dp.name, s.startsAt),
-          description: dp.description,
-          pricePence: dp.price(i, weekday),
-          quota: dp.quota,
-          maxPerOrder: dp.maxPerOrder,
-          validSessionIds: [s._id],
-          salesStartAt: d.salesStartAt,
-          sortOrder: 100 + i,
-          dayPass: { groupId, name: dp.name },
-        };
-      }),
+      event!.sessions.map((s, i) => ({
+        eventId: event!._id,
+        name: dayPassMemberName(dp.name, s.startsAt),
+        description: dp.description,
+        pricePence: dp.price(i, weekdayOf(s.startsAt)),
+        quota: dp.quota,
+        maxPerOrder: dp.maxPerOrder,
+        validSessionIds: [s._id],
+        salesStartAt: d.salesStartAt,
+        sortOrder: 100 + i,
+        dayPass: { groupId, name: dp.name },
+      })),
       { session, ordered: true },
     );
     for (const t of members) await audit("ticketType.created", "ticketType", t._id, t.toObject());
@@ -249,7 +270,141 @@ async function seedOne(session: ClientSession, d: SeedOrganizer, media: Awaited<
     discountCode = discount!.code ?? null;
   }
 
-  return { organizer: organizer!.slug, event: event!.slug, ticketTypes: await TicketType.countDocuments({ eventId: event!._id }).session(session), discount: discountCode, images: media.length };
+  return { organizer: d.organizer.slug, event: event!.slug, ticketTypes: await TicketType.countDocuments({ eventId: event!._id }).session(session), discount: discountCode, images: media.length };
+}
+
+/** Same value? (plain JSON comparison, enough for seed data) */
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const time = (d: Date | null | undefined) => (d ? new Date(d).getTime() : null);
+
+/**
+ * --update: bring an existing demo organiser in line with this file without touching its orders or passes.
+ * Returns the list of things that changed.
+ */
+async function updateOne(d: SeedOrganizer, media: Media): Promise<string[]> {
+  const changes: string[] = [];
+  const org = await Organizer.findOne({ slug: d.organizer.slug }).lean();
+  if (!org) throw new Error(`${d.organizer.slug} not found`);
+  const orgId = String(org._id);
+
+  const details = { name: d.organizer.name, contactEmail: d.organizer.contactEmail, orderPrefix: d.organizer.orderPrefix };
+  if (!same(details, { name: org.name, contactEmail: org.contactEmail, orderPrefix: org.orderPrefix })) {
+    await updateOrganizer(orgId, { ...details, status: org.status ?? "active", maxDiscountBpsForManager: org.maxDiscountBpsForManager ?? 0 });
+    changes.push("updated organiser details");
+  }
+  if (org.commissionBps !== d.organizer.commissionBps) {
+    await setOrganizerCommission(orgId, d.organizer.commissionBps);
+    changes.push(`set commission to ${d.organizer.commissionBps / 100}%`);
+  }
+
+  const existing = await Event.findOne({ slug: d.event.slug, organizerId: org._id, deletedAt: null }).lean();
+  if (!existing) {
+    await withTransaction((session) => seedEvent(session, d, org._id, media));
+    return [...changes, "created the event"];
+  }
+  const eventId = String(existing._id);
+
+  // Nights are matched by position, so passes already issued keep pointing at the same night.
+  const sessions = d.event.sessions.map((s, i) => ({ ...(existing.sessions[i] ? { id: String(existing.sessions[i]._id) } : {}), label: s.label, startsAt: s.startsAt, endsAt: s.endsAt }));
+  const venue = { ...d.event.venue, postcode: d.event.venue.postcode.toUpperCase() };
+  const eventNow = { title: existing.title, description: existing.description ?? "", venue: { name: existing.venue.name, address: existing.venue.address, postcode: existing.venue.postcode, mapUrl: existing.venue.mapUrl ?? undefined, lat: existing.venue.lat ?? undefined, lng: existing.venue.lng ?? undefined }, sessions: existing.sessions.map((s) => ({ label: s.label, startsAt: time(s.startsAt), endsAt: time(s.endsAt) })) };
+  const eventWanted = { title: d.event.title, description: d.event.description, venue: { name: venue.name, address: venue.address, postcode: venue.postcode, mapUrl: venue.mapUrl, lat: venue.lat, lng: venue.lng }, sessions: sessions.map((s) => ({ label: s.label, startsAt: time(s.startsAt), endsAt: time(s.endsAt) })) };
+  if (!same(eventNow, eventWanted)) {
+    await updateEvent(eventId, { title: d.event.title, slug: d.event.slug, description: d.event.description, venue: d.event.venue, sessions });
+    changes.push("updated event details and nights");
+  }
+  const taxBps = d.pricing?.taxBps ?? 0;
+  if ((existing.taxBps ?? 0) !== taxBps || existing.commissionBps != null) {
+    await setEventPricing(eventId, { commissionBps: null, taxBps });
+    changes.push("updated event tax");
+  }
+  const charges = d.pricing?.charges ?? [];
+  if (!same((existing.charges ?? []).map((c) => ({ name: c.name, kind: c.kind, value: c.value })), charges)) {
+    await setEventCharges(orgId, eventId, charges);
+    changes.push("updated event charges");
+  }
+  const mediaNow = (existing.media ?? []).map((m) => ({ type: m.type, url: m.url, alt: m.alt, order: m.order }));
+  if (!same(mediaNow, media)) {
+    await withTransaction(async (session) => {
+      await Event.updateOne({ _id: existing._id }, { $set: { media } }, { session });
+      await audited(session, { action: "event.media_updated", entity: { type: "event", id: existing._id }, before: { media: mediaNow }, after: { media }, organizerId: org._id, reason: "dev seed" });
+    });
+    changes.push("updated images");
+  }
+  if (existing.status !== "published") {
+    await setEventStatus(eventId, "published");
+    changes.push("published the event");
+  }
+
+  // Pass types: matched by name. Ones not in this file are left as they are.
+  const event = (await Event.findById(existing._id).lean())!;
+  const types = await TicketType.find({ eventId: existing._id }).lean();
+  for (const [i, t] of d.ticketTypes.entries()) {
+    const input = {
+      name: t.name,
+      description: t.description ?? "",
+      pricePence: t.pricePence,
+      quota: t.quota,
+      maxPerOrder: t.maxPerOrder ?? 10,
+      validSessionIds: t.nights.map((n) => String(event.sessions[n]!._id)),
+      salesStartAt: d.salesStartAt,
+      sortOrder: i + 1,
+      active: true,
+    };
+    const found = types.find((x) => !x.dayPass?.groupId && x.name === t.name);
+    if (!found) {
+      await createTicketType({ ...input, eventId });
+      changes.push(`added ${t.name}`);
+      continue;
+    }
+    const now = { name: found.name, description: found.description ?? "", pricePence: found.pricePence, quota: found.quota, maxPerOrder: found.maxPerOrder ?? 10, validSessionIds: found.validSessionIds.map(String), salesStartAt: time(found.salesStartAt), sortOrder: found.sortOrder ?? 0, active: found.active ?? true };
+    if (!same(now, { ...input, salesStartAt: time(input.salesStartAt) }) || found.salesEndAt) {
+      await updateTicketType(String(found._id), input);
+      changes.push(`updated ${t.name}`);
+    }
+  }
+
+  if (d.dayPass) {
+    const dp = d.dayPass;
+    const nights = event.sessions.map((s, i) => ({ sessionId: String(s._id), pricePence: dp.price(i, weekdayOf(s.startsAt)), quota: dp.quota, active: true }));
+    const input = { name: dp.name, description: dp.description, maxPerOrder: dp.maxPerOrder, salesStartAt: d.salesStartAt, sortOrder: 1, nights };
+    const members = types.filter((x) => x.dayPass?.groupId && x.dayPass.name === dp.name);
+    if (!members.length) {
+      await createDayPass(eventId, input);
+      changes.push(`added ${dp.name}`);
+    } else {
+      const byNight = new Map(members.map((m) => [String(m.validSessionIds[0]), m]));
+      const now = members.map((m) => ({ night: String(m.validSessionIds[0]), name: m.name, description: m.description ?? "", pricePence: m.pricePence, quota: m.quota, maxPerOrder: m.maxPerOrder, active: m.active ?? true, salesStartAt: time(m.salesStartAt), salesEndAt: time(m.salesEndAt) }));
+      const wanted = event.sessions.map((s, i) => {
+        const m = byNight.get(String(s._id));
+        return m && { night: String(s._id), name: dayPassMemberName(dp.name, s.startsAt), description: dp.description, pricePence: nights[i]!.pricePence, quota: dp.quota, maxPerOrder: dp.maxPerOrder, active: true, salesStartAt: time(d.salesStartAt), salesEndAt: null };
+      });
+      if (members.length !== event.sessions.length || !same(now.sort((a, b) => a.night.localeCompare(b.night)), wanted.filter(Boolean).sort((a, b) => a!.night.localeCompare(b!.night)))) {
+        await updateDayPass(String(members[0]!.dayPass!.groupId), input);
+        changes.push(`updated ${dp.name} (${nights.length} nights)`);
+      }
+    }
+  }
+
+  if (d.discount) {
+    const found = await Discount.findOne({ organizerId: org._id, code: d.discount.code }).lean();
+    const wanted = { ...d.discount, eventId: existing._id };
+    await withTransaction(async (session) => {
+      if (!found) {
+        const [discount] = await Discount.create([{ ...wanted, organizerId: org._id, createdBy: "seed" }], { session });
+        await audited(session, { action: "discount.created", entity: { type: "discount", id: discount!._id }, after: discount!.toObject(), organizerId: org._id, reason: "dev seed" });
+        changes.push(`added discount ${d.discount!.code}`);
+        return;
+      }
+      const before = { kind: found.kind, value: found.value, maxUses: found.maxUses, eventId: String(found.eventId) };
+      const after = { kind: wanted.kind, value: wanted.value, maxUses: wanted.maxUses, eventId: String(wanted.eventId) };
+      if (same(before, after)) return;
+      await Discount.updateOne({ _id: found._id }, { $set: { kind: wanted.kind, value: wanted.value, maxUses: wanted.maxUses, eventId: wanted.eventId } }, { session, runValidators: true });
+      await audited(session, { action: "discount.updated", entity: { type: "discount", id: found._id }, before, after, organizerId: org._id, reason: "dev seed" });
+      changes.push(`updated discount ${d.discount!.code}`);
+    });
+  }
+  return changes;
 }
 
 /** Delete everything belonging to the demo organisers. Audit logs are append-only and stay. */
@@ -273,21 +428,44 @@ const mediaByEvent = new Map<string, Awaited<ReturnType<typeof writeImages>>>();
 for (const d of DATA) mediaByEvent.set(d.event.slug, await writeImages(d));
 console.log(`Wrote images to ${mediaDir()}`);
 
-await runWithContext({ actor: systemActor, requestId: "seed" }, () =>
-  withTransaction(async (session) => {
-    const slugs = DATA.map((d) => d.organizer.slug);
-    const existing = await Organizer.find({ slug: { $in: slugs } }, { _id: 1 }, { session }).lean();
-    if (existing.length) {
-      if (!reset) throw new Error(`Demo data already exists (${slugs.join(", ")}). Rerun with --reset to replace it.`);
-      await deleteDemoData(session, existing.map((o) => o._id));
-      console.log(`Removed existing demo data for ${existing.length} organiser(s)`);
-    }
+const describe = (d: SeedOrganizer, r: { organizer: string; event: string; ticketTypes: number; images: number; discount: string | null }) => {
+  const sales = d.salesStartAt ? `bookings open ${d.salesStartAt.toISOString()}` : "bookings open now";
+  return `Seeded ${r.organizer}: event ${r.event} (published, ${sales}), ${r.ticketTypes} pass types, ${r.images} images${r.discount ? `, discount ${r.discount}` : ""}`;
+};
+
+if (update) {
+  // One organiser at a time; each step is its own audited transaction (the services' own).
+  let failed = 0;
+  await runWithContext({ actor: systemActor, requestId: "seed:update" }, async () => {
     for (const d of DATA) {
-      const r = await seedOne(session, d, mediaByEvent.get(d.event.slug)!);
-      const sales = d.salesStartAt ? `bookings open ${d.salesStartAt.toISOString()}` : "bookings open now";
-      console.log(`Seeded ${r.organizer}: event ${r.event} (published, ${sales}), ${r.ticketTypes} pass types, ${r.images} images${r.discount ? `, discount ${r.discount}` : ""}`);
+      const media = mediaByEvent.get(d.event.slug)!;
+      try {
+        if (!(await Organizer.exists({ slug: d.organizer.slug }))) {
+          console.log(describe(d, await withTransaction((session) => seedOne(session, d, media))));
+          continue;
+        }
+        const changes = await updateOne(d, media);
+        console.log(`${d.organizer.slug}: ${changes.length ? changes.join(", ") : "already up to date"}`);
+      } catch (e) {
+        failed++;
+        console.error(`${d.organizer.slug}: couldn't update. ${e instanceof Error ? e.message : e}`);
+      }
     }
-  }),
-);
+  });
+  if (failed) process.exitCode = 1;
+} else {
+  await runWithContext({ actor: systemActor, requestId: "seed" }, () =>
+    withTransaction(async (session) => {
+      const slugs = DATA.map((d) => d.organizer.slug);
+      const existing = await Organizer.find({ slug: { $in: slugs } }, { _id: 1 }, { session }).lean();
+      if (existing.length) {
+        if (!reset) throw new Error(`Demo data already exists (${slugs.join(", ")}). Rerun with --update to add and update it, or --reset to replace it.`);
+        await deleteDemoData(session, existing.map((o) => o._id));
+        console.log(`Removed existing demo data for ${existing.length} organiser(s)`);
+      }
+      for (const d of DATA) console.log(describe(d, await seedOne(session, d, mediaByEvent.get(d.event.slug)!)));
+    }),
+  );
+}
 
 await disconnectDb();
