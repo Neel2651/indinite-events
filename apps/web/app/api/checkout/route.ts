@@ -11,6 +11,15 @@ export const runtime = "nodejs";
 const error = (message: string, status: number) => Response.json({ error: message }, { status });
 
 /**
+ * 20 checkouts per IP per 10 minutes. A load test comes from one IP, so a demo server can raise it with
+ * LOAD_TEST_CHECKOUT_LIMIT; demo mode is refused on the live site, so this never loosens real checkout.
+ */
+function checkoutLimitPerIp(mode: "stripe" | "demo"): number {
+  const override = Number(process.env.LOAD_TEST_CHECKOUT_LIMIT);
+  return mode === "demo" && Number.isInteger(override) && override > 0 ? override : 20;
+}
+
+/**
  * SPEC §4.1: POST { eventId, customer, items, couponCode? } → { redirectUrl }.
  * Stripe mode: pending order + hold, then Stripe Checkout (tickets are issued by the webhook).
  * Demo mode (dev / staging only): approved straight away through the same fulfilment.
@@ -26,7 +35,7 @@ export async function POST(req: Request) {
     // Each checkout holds seats: stop scripts from holding the whole event.
     const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const [byIp, byEmail] = await Promise.all([
-      hitRateLimit(`checkout:ip:${ip}`, 20, 10 * 60_000),
+      hitRateLimit(`checkout:ip:${ip}`, checkoutLimitPerIp(mode), 10 * 60_000),
       hitRateLimit(`checkout:email:${parsed.data.customer.email}`, 8, 10 * 60_000),
     ]);
     if (!byIp.allowed || !byEmail.allowed) return error("Too many bookings in a short time. Please wait a few minutes and try again.", 429);

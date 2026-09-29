@@ -6,7 +6,8 @@
   "scripts": {
     "demo:videos": "tsx --env-file-if-exists=../.env.local demo-videos/record.ts",
     "test:offline-limit": "tsx --env-file-if-exists=../.env.local tests/offline-limit.ts",
-    "test:a11y": "tsx tests/a11y.ts"
+    "test:a11y": "tsx tests/a11y.ts",
+    "test:load": "tsx tests/load.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
