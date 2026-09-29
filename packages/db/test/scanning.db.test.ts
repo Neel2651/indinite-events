@@ -61,7 +61,7 @@ const scan = (over: Partial<IncomingScan>): IncomingScan => ({
   gate: "Gate A",
   deviceId: "phone-1",
   result: "admitted",
-  scannedAt: new Date().toISOString(),
+  scannedAt: "2026-10-11T19:00:00Z", // Night 1, after gates opened
   ...over,
 });
 const sync = (scans: IncomingScan[], canManualAdmit = false) =>
@@ -98,10 +98,10 @@ describe("scanning", () => {
   });
 
   it("manual admit needs permission and a reason, and is audited", async () => {
-    const denied = await sync([scan({ sessionId: night2, result: "manual_admit", reason: "Bought wrong night" })], false);
+    const denied = await sync([scan({ sessionId: night2, result: "manual_admit", reason: "Bought wrong night", scannedAt: "2026-10-12T19:00:00Z" })], false);
     expect(denied.results[0]!.result).not.toBe("manual_admit");
 
-    const ok = await sync([scan({ sessionId: night2, result: "manual_admit", reason: "Bought wrong night, manager approved" })], true);
+    const ok = await sync([scan({ sessionId: night2, result: "manual_admit", reason: "Bought wrong night, manager approved", scannedAt: "2026-10-12T19:00:00Z" })], true);
     expect(ok.results[0]!.result).toBe("manual_admit");
     expect(await AuditLog.countDocuments({ action: "scan.manual_admit" })).toBe(1);
   });

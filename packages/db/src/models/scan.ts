@@ -6,6 +6,8 @@ export const SCAN_RESULTS = [
   "already_used",
   "invalid",
   "wrong_session",
+  /** Scanned before gates opened (1 hour before the night starts). */
+  "too_early",
   "cancelled",
   "manual_admit",
 ] as const;

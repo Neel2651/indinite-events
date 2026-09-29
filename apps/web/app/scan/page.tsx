@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { can } from "@indinite/core";
 import { ScannerApp } from "@/components/scanner/scanner-app";
-import { RegisterScannerSW } from "@/components/scanner/register-sw";
+import { RegisterAppSW } from "@/components/staff/register-app-sw";
 import { requireStaff } from "@/lib/staff";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export default async function ScanPage() {
   if (!allowed) redirect("/dashboard");
   return (
     <>
-      <RegisterScannerSW />
+      <RegisterAppSW />
       <ScannerApp />
     </>
   );

@@ -12,6 +12,7 @@ const keys = generateQrKeyPair();
 let eventId: string;
 let night1: string;
 let night2: string;
+let night3: string;
 let tokens: string[] = [];
 
 beforeAll(async () => {
@@ -26,13 +27,16 @@ beforeAll(async () => {
     title: "Navratri",
     venue: { name: "Hall", address: "1 Road", postcode: "E1 1AA" },
     sessions: [
-      { label: "Night 1", startsAt: new Date(Date.now() + 86_400_000), endsAt: new Date(Date.now() + 90_000_000) },
-      { label: "Night 2", startsAt: new Date(Date.now() + 172_800_000), endsAt: new Date(Date.now() + 176_400_000) },
+      // Starts in 30 minutes: gates are open (they open 1 hour before).
+      { label: "Night 1", startsAt: new Date(Date.now() + 30 * 60_000), endsAt: new Date(Date.now() + 4 * 3_600_000) },
+      { label: "Night 2", startsAt: new Date(Date.now() + 45 * 60_000), endsAt: new Date(Date.now() + 5 * 3_600_000) },
+      // Starts in 3 hours: gates not open yet.
+      { label: "Night 3", startsAt: new Date(Date.now() + 3 * 3_600_000), endsAt: new Date(Date.now() + 7 * 3_600_000) },
     ],
     status: "published",
   });
   eventId = String(event._id);
-  [night1, night2] = event.sessions.map((s) => String(s._id)) as [string, string];
+  [night1, night2, night3] = event.sessions.map((s) => String(s._id)) as [string, string, string];
   const tt = await TicketType.create({ eventId: event._id, name: "Night 1", pricePence: 1000, quota: 10, validSessionIds: [event.sessions[0]!._id] });
   const order = await runWithContext({ actor: { type: "customer" } }, () =>
     createCheckoutOrder({ eventId, customer: { name: "A", email: "a@example.com" }, items: [{ ticketTypeId: String(tt._id), qty: 3 }] }),
@@ -111,5 +115,18 @@ describe("gate claims", () => {
     );
     expect(synced.results[0]!.result).toBe("admitted");
     expect(await Scan.countDocuments({ ticketId: t!._id, sessionId: new mongoose.Types.ObjectId(night2) })).toBe(1);
+  });
+
+  it("refuses a pass before gates open (1 hour before the night), with no record of entry", async () => {
+    const t = await Ticket.findOne({ qrToken: tokens[2] }).lean();
+    await Ticket.updateOne({ _id: t!._id }, { $addToSet: { validSessionIds: new mongoose.Types.ObjectId(night3) } });
+    const early = await claim({ token: tokens[2], sessionId: night3 });
+    expect(early.result).toBe("too_early");
+    expect(await Scan.countDocuments({ ticketId: t!._id, sessionId: new mongoose.Types.ObjectId(night3), result: { $in: ["admitted", "manual_admit"] } })).toBe(0);
+    // A phone that decided offline with a wrong clock can't get it admitted either: the scan time is checked on sync.
+    const synced = await runWithContext({ actor: { type: "user", id: "u1" } }, () =>
+      syncScans({ eventId, scannerUserId: "u1", canManualAdmit: true, scans: [{ clientScanId: randomUUID(), ticketId: String(t!._id), sessionId: night3, gate: "Gate A", deviceId: "d1", result: "manual_admit", reason: "Manager said ok", scannedAt: new Date().toISOString() }] }),
+    );
+    expect(synced.results[0]!.result).toBe("too_early");
   });
 });

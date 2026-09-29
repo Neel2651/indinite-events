@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { normalisePassCode, passCode, verifyTicketToken, type ManifestTicket, type ScanResult } from "@indinite/core";
+import { gatesOpenAt, isTooEarly, normalisePassCode, passCode, verifyTicketToken, type ManifestTicket, type ScanResult } from "@indinite/core";
 import { audited } from "../audit";
 import { Event } from "../models/event";
 import { Order } from "../models/order";
@@ -126,6 +126,12 @@ export async function syncScans(input: {
     let result: ScanResult = s.result;
     let reason = s.reason?.slice(0, 300);
     if (result === "manual_admit" && (!input.canManualAdmit || !reason || !ticket)) result = ticket ? "already_used" : "invalid";
+    // Gates open 1 hour before the night starts; no override before then.
+    const night = event.sessions.find((x) => String(x._id) === s.sessionId);
+    if ((result === "admitted" || result === "manual_admit") && night && isTooEarly(night.startsAt, new Date(s.scannedAt))) {
+      result = "too_early";
+      reason = `scanned before gates opened (${gatesOpenAt(night.startsAt).toISOString()})`;
+    }
     // The device decided offline; re-check against the server's copy of the ticket.
     if (result === "admitted") {
       if (!ticket) result = "invalid";
@@ -209,7 +215,7 @@ export async function gateStats(eventId: string) {
         gate,
         admitted: count(["admitted", "manual_admit"]),
         manual: count(["manual_admit"]),
-        refused: count(["already_used", "invalid", "wrong_session", "cancelled"]),
+        refused: count(["already_used", "invalid", "wrong_session", "too_early", "cancelled"]),
         lastScanAt: g.reduce<Date | null>((m, r) => (!m || r.last > m ? r.last : m), null),
       };
     });
@@ -256,7 +262,8 @@ export async function claimScan(input: ClaimInput): Promise<ClaimResult> {
   if (previous) return resultFromScan(previous);
 
   const event = await Event.findById(input.eventId, { sessions: 1 }).lean();
-  if (!event || !event.sessions.some((s) => String(s._id) === input.sessionId)) return { result: "invalid", reason: "unknown_ticket" };
+  const night = event?.sessions.find((s) => String(s._id) === input.sessionId);
+  if (!event || !night) return { result: "invalid", reason: "unknown_ticket" };
   const sessionId = new Types.ObjectId(input.sessionId);
 
   let ticketId: Types.ObjectId | undefined;
@@ -279,6 +286,8 @@ export async function claimScan(input: ClaimInput): Promise<ClaimResult> {
   if (!ticket) result = "invalid";
   else if (ticket.status !== "valid") result = "cancelled";
   else if (!ticket.validSessionIds.some((s) => String(s) === input.sessionId)) result = "wrong_session";
+  // Server time decides: a phone with a wrong clock can't let people in early.
+  else if (isTooEarly(night.startsAt, new Date())) result = "too_early";
   else result = "admitted";
 
   const doc = {

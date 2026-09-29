@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import {
   decideForTicket,
   decideScan,
+  gatesOpenAt,
   normalisePassCode,
   offlineScansLeft,
   OFFLINE_SCAN_LIMIT,
@@ -377,6 +378,7 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
         else if (c.result === "already_used") decision = { result: "already_used", ticket, prior: c.prior ?? { scannedAt: new Date().toISOString(), gate: "another gate" } };
         else if (c.result === "admitted" || c.result === "manual_admit") decision = { result: "admitted", ticket };
         else if (c.result === "wrong_session") decision = { result: "wrong_session", ticket };
+        else if (c.result === "too_early") decision = { result: "too_early", ticket, opensAt: gatesOpenAt(session.startsAt) };
         else decision = { result: "cancelled", ticket };
         await record(decision, { synced: true, prior: c.prior, clientScanId });
         return decision;
@@ -386,7 +388,7 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
         clearTimeout(timer);
       }
     },
-    [setup, record, refreshManifest],
+    [setup, session.startsAt, record, refreshManifest],
   );
 
   /** Offline and already used the allowance: refuse to scan until back online and synced. */
@@ -412,6 +414,9 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
         sessionId: setup.sessionId,
         findTicket: (id: string) => ticketsRef.current.get(id),
         findAdmission: (id: string, s: string) => admissionsRef.current.get(`${id}:${s}`),
+        // Gates open 1 hour before the night starts.
+        nightStartsAt: session.startsAt,
+        now: new Date(),
       };
       const local = decideScan(input);
       const clientScanId = crypto.randomUUID();
@@ -431,7 +436,7 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
       // record the claim, it answers with that result instead of logging a second scan.
       await show(local, false, clientScanId, true);
     },
-    [setup.sessionId, serverClaim, show, present, offlineBlocked],
+    [setup.sessionId, session.startsAt, serverClaim, show, present, offlineBlocked],
   );
 
   // Camera
@@ -539,6 +544,8 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
         sessionId: setup.sessionId,
         findTicket: (id) => ticketsRef.current.get(id),
         findAdmission: (id, s) => admissionsRef.current.get(`${id}:${s}`),
+        nightStartsAt: session.startsAt,
+        now: new Date(),
       }),
       true,
       clientScanId,
@@ -679,6 +686,7 @@ const TONE = {
   admitted: "bg-success",
   already_used: "bg-warning",
   wrong_session: "bg-danger",
+  too_early: "bg-warning",
   cancelled: "bg-danger",
   invalid: "bg-danger",
 } as const;
@@ -718,6 +726,9 @@ function ResultScreen({
     title = "Wrong night";
     const nights = sessions.filter((s) => d.ticket.validSessionIds.includes(s.id)).map((s) => dayFmt.format(new Date(s.startsAt)));
     detail = `This pass is for ${nights.join(", ") || "another night"}`;
+  } else if (d.result === "too_early") {
+    title = "Too early";
+    detail = `Gates open at ${timeFmt.format(d.opensAt)}, 1 hour before the start. Ask them to come back then.`;
   } else if (d.result === "cancelled") {
     title = "Pass cancelled";
     detail = "This pass was refunded or cancelled";

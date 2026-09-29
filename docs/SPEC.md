@@ -129,6 +129,9 @@ Scan: verify signature locally → check manifest → check local scan log → s
 (green admitted / amber already used with time+gate / red invalid) in under 1 s. Queue scans; sync every
 10 s when online; server resolves conflicts (first admitted wins, later ones recorded as already_used).
 Manual admit requires reason; audited.
+**Gates open 1 hour before each night starts (agreed 29 Sep 2026):** a pass scanned earlier is refused as
+`too_early` ("Too early. Gates open at 15:00") with no override, e.g. a 4:00 pm BST night admits from 3:00 pm.
+Online, the server's clock decides; offline scans are re-checked on sync using their scan time.
 **Online-first + offline limit:** when online, the server verifies and records each scan before the phone shows a
 result (strictly once per pass per night). Offline (or no server answer within 2 s), a phone may decide at most
 **5 scans**; the 6th is refused ("Reconnect to keep scanning") until it's back online and those scans have synced.

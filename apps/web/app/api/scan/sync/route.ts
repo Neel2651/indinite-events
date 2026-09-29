@@ -17,7 +17,7 @@ const bodySchema = z.object({
         sessionId: z.string().regex(/^[a-f0-9]{24}$/),
         gate: z.string().trim().min(1).max(60),
         deviceId: z.string().min(1).max(80),
-        result: z.enum(["admitted", "already_used", "invalid", "wrong_session", "cancelled", "manual_admit"]),
+        result: z.enum(["admitted", "already_used", "invalid", "wrong_session", "too_early", "cancelled", "manual_admit"]),
         reason: z.string().max(300).optional(),
         scannedAt: z.iso.datetime(),
       }),

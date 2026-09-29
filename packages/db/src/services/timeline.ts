@@ -22,6 +22,7 @@ const SCAN_TITLE: Record<string, [string, TimelineEntry["tone"]]> = {
   manual_admit: ["Let in by override", "warning"],
   already_used: ["Refused: already scanned", "warning"],
   wrong_session: ["Refused: wrong night", "danger"],
+  too_early: ["Refused: gates not open yet", "warning"],
   cancelled: ["Refused: cancelled", "danger"],
   invalid: ["Refused: invalid", "danger"],
 };

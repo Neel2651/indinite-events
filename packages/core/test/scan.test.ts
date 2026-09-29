@@ -86,3 +86,32 @@ describe("offline limit", () => {
     expect([0, 1, 4, 5, 6].map((n) => offlineScansLeft(n))).toEqual([5, 4, 1, 0, 0]);
   });
 });
+
+describe("gates open 1 hour before the night starts", () => {
+  // 4:00 pm BST on Sun 11 Oct 2026 = 15:00 UTC; gates open at 3:00 pm BST = 14:00 UTC.
+  const startsAt = new Date("2026-10-11T15:00:00Z");
+  const at = (iso: string) =>
+    decideForTicket(ticketId, { sessionId: night1, findTicket: () => ticket(), findAdmission: () => undefined, nightStartsAt: startsAt, now: new Date(iso) });
+
+  it("refuses a pass scanned more than an hour early, saying when gates open", () => {
+    expect(at("2026-10-11T13:59:59Z")).toMatchObject({ result: "too_early", opensAt: new Date("2026-10-11T14:00:00Z") });
+    expect(at("2026-10-11T09:00:00Z").result).toBe("too_early");
+  });
+
+  it("admits from exactly one hour before, and after the start", () => {
+    expect(at("2026-10-11T14:00:00Z").result).toBe("admitted");
+    expect(at("2026-10-11T15:30:00Z").result).toBe("admitted");
+  });
+
+  it("works in winter time too (GMT)", () => {
+    // 4:00 pm GMT on 1 Nov = 16:00 UTC; gates open 15:00 UTC.
+    const winter = (iso: string) =>
+      decideForTicket(ticketId, { sessionId: night1, findTicket: () => ticket(), findAdmission: () => undefined, nightStartsAt: "2026-11-01T16:00:00Z", now: new Date(iso) }).result;
+    expect(winter("2026-11-01T14:59:00Z")).toBe("too_early");
+    expect(winter("2026-11-01T15:00:00Z")).toBe("admitted");
+  });
+
+  it("still reports the wrong night or a used pass before timing", () => {
+    expect(decideForTicket(ticketId, { sessionId: night2, findTicket: () => ticket(), findAdmission: () => undefined, nightStartsAt: startsAt, now: new Date("2026-10-11T09:00:00Z") }).result).toBe("wrong_session");
+  });
+});

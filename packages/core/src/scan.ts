@@ -5,7 +5,22 @@ import { verifyTicketToken } from "./qr";
  * Gate decision, made on the scanning device (works offline, SPEC §4.5):
  * signature → manifest → ticket status → valid for tonight → already scanned tonight.
  */
-export type ScanResult = "admitted" | "already_used" | "invalid" | "wrong_session" | "cancelled" | "manual_admit";
+export type ScanResult = "admitted" | "already_used" | "invalid" | "wrong_session" | "too_early" | "cancelled" | "manual_admit";
+
+/**
+ * Gates open 1 hour before a night starts (agreed 29 Sep 2026): a 4:00 pm night admits from 3:00 pm UK time.
+ * Earlier scans are refused ("too_early"), with no override. Night times are stored in UTC, so BST/GMT is
+ * handled by the Date itself.
+ */
+export const GATES_OPEN_BEFORE_MS = 60 * 60_000;
+
+export function gatesOpenAt(nightStartsAt: Date | string): Date {
+  return new Date(new Date(nightStartsAt).getTime() - GATES_OPEN_BEFORE_MS);
+}
+
+export function isTooEarly(nightStartsAt: Date | string, now: Date): boolean {
+  return now.getTime() < gatesOpenAt(nightStartsAt).getTime();
+}
 
 export interface ManifestTicket {
   id: string;
@@ -30,6 +45,7 @@ export type ScanDecision =
   | { result: "admitted"; ticket: ManifestTicket }
   | { result: "already_used"; ticket: ManifestTicket; prior: PriorAdmission }
   | { result: "wrong_session"; ticket: ManifestTicket }
+  | { result: "too_early"; ticket: ManifestTicket; opensAt: Date }
   | { result: "cancelled"; ticket: ManifestTicket }
   | { result: "invalid"; reason: "unreadable" | "bad_signature" | "unknown_ticket"; ticketId?: string };
 
@@ -41,6 +57,9 @@ export interface ScanInput {
   findTicket: (ticketId: string) => ManifestTicket | undefined;
   /** Earlier admission of this ticket tonight (this device or synced from others). */
   findAdmission: (ticketId: string, sessionId: string) => PriorAdmission | undefined;
+  /** When tonight's night starts; with `now`, passes are refused until gates open (GATES_OPEN_BEFORE_MS before). */
+  nightStartsAt?: Date | string;
+  now?: Date;
 }
 
 export function decideScan(input: ScanInput): ScanDecision {
@@ -55,6 +74,7 @@ export function decideForTicket(ticketId: string, input: Omit<ScanInput, "token"
   if (!ticket) return { result: "invalid", reason: "unknown_ticket", ticketId };
   if (ticket.status !== "valid") return { result: "cancelled", ticket };
   if (!ticket.validSessionIds.includes(input.sessionId)) return { result: "wrong_session", ticket };
+  if (input.nightStartsAt && isTooEarly(input.nightStartsAt, input.now ?? new Date())) return { result: "too_early", ticket, opensAt: gatesOpenAt(input.nightStartsAt) };
   const prior = input.findAdmission(ticketId, input.sessionId);
   if (prior) return { result: "already_used", ticket, prior };
   return { result: "admitted", ticket };
