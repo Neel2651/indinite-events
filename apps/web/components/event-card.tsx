@@ -9,9 +9,9 @@ import { formatDateRange, formatDayTime, price } from "@/lib/format";
 export function EventCard({ event }: { event: PublicEvent }) {
   const cover = event.media.find((m) => m.type === "image");
   return (
-    <article className="card-brand group relative flex flex-col overflow-hidden p-0 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+    <article className="card-brand group relative flex cursor-pointer flex-col overflow-hidden p-0 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-xl focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <span
-        className={`absolute left-4 top-4 z-10 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold tracking-widest text-foreground ${
+        className={`pointer-events-none absolute left-4 top-4 z-10 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold tracking-widest text-foreground ${
           event.bookingsOpen ? "bg-white" : "bg-brand-yellow"
         }`}
       >
@@ -47,8 +47,11 @@ export function EventCard({ event }: { event: PublicEvent }) {
           <span className="font-display font-bold">
             {event.fromPence !== null ? `From ${price(event.fromPence)}` : "Prices coming soon"}
           </span>
-          {/* Looks like a button; the tap goes to the card's link. */}
-          <span aria-hidden="true" className="btn-cta text-sm group-hover:brightness-105">
+          {/*
+            Looks like a button; taps and the pointer pass through to the card's link. (A hover filter here would
+            lift it above the link's overlay and swallow the click, so the hover is a shadow instead.)
+          */}
+          <span aria-hidden="true" className="btn-cta pointer-events-none text-sm transition-shadow group-hover:shadow-lg">
             View passes
           </span>
         </div>
