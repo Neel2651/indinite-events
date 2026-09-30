@@ -181,7 +181,7 @@ export function discountAsBps(subtotalPence: Pence, discount: Discount): number 
   return Math.ceil((Math.min(discount.value, subtotalPence) * 10000) / subtotalPence);
 }
 
-export const DEFAULT_COMMISSION_BPS = 600;
+export const DEFAULT_COMMISSION_BPS = 1000;
 
 /** 5000 → "50%", 1250 → "12.5%". */
 export const formatBpsPercent = (bps: number) => `${(bps / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
