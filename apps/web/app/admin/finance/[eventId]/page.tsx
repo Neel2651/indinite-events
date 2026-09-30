@@ -35,7 +35,7 @@ export default async function EventFinancePage({ params }: { params: Promise<{ e
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total sales" value={price(f.totalSalesPence)} hint="Everything customers paid" />
         <StatCard label="Organiser direct" value={price(f.direct.cashPence + f.direct.accountPence)} hint={`Cash ${price(f.direct.cashPence)} · Account ${price(f.direct.accountPence)}`} />
-        <StatCard label="Credited to organiser via Indinite" value={price(f.platform.organizerCreditedPence)} hint={`From ${price(f.platform.grossPence)} card and link sales${f.platform.cardFeesPence ? `, less ${price(f.platform.cardFeesPence)} card fees` : ""}`} />
+        <StatCard label="Credited to organiser via Indinite" value={price(f.platform.organizerCreditedPence)} hint={`From ${price(f.platform.grossPence)} card and link sales${f.platform.cardFeesPence ? `, less ${price(f.platform.cardFeesPence)} card fees` : ""}${f.platform.ownStripeAccountPence ? `. ${price(f.platform.ownStripeAccountPence)} went into their own Stripe account, where Stripe takes its fee` : ""}`} />
         <StatCard label="Our income" value={price(f.ourIncomePence)} hint={`Fees ${price(f.platform.platformFeesPence)} + commission ${price(f.direct.commissionOwedPence)}`} />
       </div>
 

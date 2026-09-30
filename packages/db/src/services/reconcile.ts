@@ -5,6 +5,7 @@ import { stripeGateway } from "../stripe";
 import { confirmCardPayment } from "./card-payments";
 import { releaseHold } from "./holds";
 import { syncExternalRefunds } from "./stripe-refunds";
+import { stripeTarget } from "./stripe-target";
 
 export interface ReconcileResult {
   confirmed: number;
@@ -31,7 +32,7 @@ export async function reconcileStripe(now = new Date(), opts: { lookbackDays?: n
     .lean();
   for (const o of pending) {
     try {
-      const s = await gw.retrieveCheckoutSession(o.stripe!.checkoutSessionId!);
+      const s = await gw.retrieveCheckoutSession(o.stripe!.checkoutSessionId!, stripeTarget(o).stripeAccount);
       if (s.status === "complete" && s.paymentStatus === "paid" && s.paymentIntentId) {
         await confirmCardPayment(String(o._id), s.id, s.paymentIntentId);
         result.confirmed++;

@@ -121,6 +121,24 @@ Zero-downtime reload for the web app; the worker restarts after finishing in-fli
 - **Started PM2 by hand instead of `deploy.sh`?** Also run `ln -sfn ../../.env.local apps/web/.env.local` and
   `pnpm --filter @indinite/web build` first, or the web app has no settings / no build.
 
+## Stripe: webhooks and connecting existing accounts
+Do these in Stripe test mode first, then again in live mode (each mode has its own keys and secrets).
+1. **Webhook for Indinite's own account.** Developers → Webhooks → Add endpoint →
+   `https://<domain>/api/webhooks/stripe`, "Events on your account": `checkout.session.completed`,
+   `checkout.session.async_payment_succeeded`, `checkout.session.expired`, `charge.refunded`. Signing secret →
+   `STRIPE_WEBHOOK_SECRET`.
+2. **Webhook for connected accounts** (same URL, second endpoint), "Events on Connected accounts": the same four
+   events plus `account.updated` and `account.application.deauthorized`. Signing secret →
+   `STRIPE_CONNECT_WEBHOOK_SECRET`. Needed for organisers' own accounts, and for Express status updates.
+3. **Let organisers connect an existing Stripe account** (optional). Connect → Settings → Onboarding options →
+   OAuth: turn OAuth on for **Standard** accounts and add the redirect URI
+   `https://<domain>/api/stripe/connect/callback`. Copy the client ID (`ca_…`) → `STRIPE_CONNECT_CLIENT_ID`.
+   Without it, the "Connect your existing Stripe account" button is hidden.
+4. `pm2 reload ecosystem.config.cjs --update-env` (or `bash scripts/deploy.sh`) after editing `.env.local`.
+
+Testing locally: `stripe listen --forward-to localhost:3001/api/webhooks/stripe --forward-connect-to localhost:3001/api/webhooks/stripe`
+prints one signing secret; put it in both `STRIPE_WEBHOOK_SECRET` and `STRIPE_CONNECT_WEBHOOK_SECRET`.
+
 ## Notes
 - **Live server later:** same steps with `DEPLOY_ENV` removed (or `live`) and `PAYMENTS_MODE=stripe`; demo
   payments are refused on a live server by design. Online card checkout needs the Stripe milestones first.

@@ -1,17 +1,28 @@
 import { applyBps, assertPence, type Pence } from "./money";
 
 /**
- * Organiser merchant (Stripe Connect Express) status, SPEC §4.8.
+ * Organiser merchant status, SPEC §4.8. Organisers either get a new Stripe Express account from Indinite, or
+ * connect their existing Stripe account (Standard, via OAuth).
  * - not_started: no Stripe account yet
  * - in_progress: account created, owner hasn't finished Stripe's form
  * - pending_verification: form submitted, Stripe is checking
  * - active: Stripe allows card payments
  * - restricted: Stripe needs more information before payments can continue
+ * - disconnected: the organiser's own Stripe account was disconnected from Indinite
  */
-export type MerchantStatus = "not_started" | "in_progress" | "pending_verification" | "active" | "restricted";
+export type MerchantStatus = "not_started" | "in_progress" | "pending_verification" | "active" | "restricted" | "disconnected";
+
+/** express = created by Indinite (destination charges); standard = the organiser's existing account (direct charges). */
+export type StripeAccountType = "express" | "standard";
+
+/** How a card payment is made: on Indinite's account and passed on (Express), or on the organiser's own account. */
+export type ChargeType = "destination" | "direct";
+
+export const chargeTypeFor = (accountType: string | null | undefined): ChargeType => (accountType === "standard" ? "direct" : "destination");
 
 export interface MerchantFields {
   stripeAccountId?: string | null;
+  stripeDisconnectedAt?: Date | null;
   chargesEnabled?: boolean | null;
   detailsSubmitted?: boolean | null;
   stripeDisabledReason?: string | null;
@@ -20,7 +31,8 @@ export interface MerchantFields {
 }
 
 export function merchantStatus(o: MerchantFields): MerchantStatus {
-  if (!o.stripeAccountId) return "not_started";
+  // Disconnecting clears the account (orders keep their own copy of it), so it can be connected again later.
+  if (!o.stripeAccountId) return o.stripeDisconnectedAt ? "disconnected" : "not_started";
   if (o.chargesEnabled) return (o.stripeCurrentlyDue?.length ?? 0) > 0 && o.stripeDisabledReason ? "restricted" : "active";
   if (!o.detailsSubmitted) return "in_progress";
   return o.stripeDisabledReason && !String(o.stripeDisabledReason).includes("pending") ? "restricted" : "pending_verification";
@@ -37,11 +49,20 @@ export const MERCHANT_STATUS_LABELS: Record<MerchantStatus, string> = {
   pending_verification: "Waiting for Stripe",
   active: "Active",
   restricted: "Action needed",
+  disconnected: "Disconnected",
 };
 
 export type CardFeePayer = "platform" | "organizer" | "customer";
 
 export const CARD_FEE_PAYERS: readonly CardFeePayer[] = ["platform", "organizer", "customer"];
+
+/**
+ * Who can bear the card fee for an account type. On the organiser's own account (direct charges) Stripe takes its
+ * fee from the organiser at their own Stripe rate, so Indinite can't reimburse it exactly: "platform" isn't offered.
+ */
+export function cardFeePayersFor(accountType: string | null | undefined): readonly CardFeePayer[] {
+  return chargeTypeFor(accountType) === "direct" ? ["organizer", "customer"] : CARD_FEE_PAYERS;
+}
 
 /** Stripe's card processing fee as configured by the super admin (default 1.5% + 20p, UK cards, paid by the organiser). */
 export interface CardFeeSettings {
@@ -84,11 +105,15 @@ export function customerCardFeePence(basePence: Pence, s: Pick<CardFeeSettings, 
 }
 
 /**
- * Stripe application fee for a destination charge: Indinite's platform fee, plus Stripe's card fee when the
- * organiser or customer bears it (with destination charges Stripe takes its fee from the platform, so we recover
- * it here). A customer-paid fee is fixed on the order when it's priced (`cardFeePence`).
+ * Stripe application fee (Indinite's cut of a card payment).
+ * - Destination charge (Express): Indinite's platform fee, plus Stripe's card fee when the organiser or customer
+ *   bears it (Stripe takes its fee from the platform, so we recover it here). A customer-paid fee is fixed on the
+ *   order when it's priced (`cardFeePence`).
+ * - Direct charge (the organiser's own account): the platform fee only. Stripe takes its fee from the organiser's
+ *   account itself, and a customer-paid card fee stays with the organiser to cover it.
  */
-export function applicationFeeFor(o: { totalPence: Pence; platformFeePence: Pence; cardFeePence?: Pence | null }, fee: CardFeeSettings): Pence {
+export function applicationFeeFor(o: { totalPence: Pence; platformFeePence: Pence; cardFeePence?: Pence | null }, fee: CardFeeSettings, chargeType: ChargeType = "destination"): Pence {
+  if (chargeType === "direct") return Math.min(o.totalPence, o.platformFeePence);
   const extra = o.cardFeePence ? o.cardFeePence : fee.payer === "organizer" ? cardFeePence(o.totalPence, fee) : 0;
   return Math.min(o.totalPence, o.platformFeePence + extra);
 }

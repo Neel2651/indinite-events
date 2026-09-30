@@ -12,6 +12,7 @@ import { stripeGateway } from "../stripe";
 import { withTransaction } from "../transaction";
 import { releaseHoldInSession } from "./holds";
 import { releaseCoupon } from "./pricing";
+import { stripeTarget } from "./stripe-target";
 
 /**
  * Cancel a booking (agreed 28 Sep 2026):
@@ -42,8 +43,9 @@ export async function cancelOrder(input: { user: AuthUser; organizerId: string; 
     // Close the Stripe page first so the customer can't pay after we cancel. If they already paid, don't cancel.
     const gw = stripeGateway();
     if (order.stripe?.checkoutSessionId && gw) {
-      await gw.expireCheckoutSession(order.stripe.checkoutSessionId);
-      const s = await gw.retrieveCheckoutSession(order.stripe.checkoutSessionId);
+      const { stripeAccount } = stripeTarget(order);
+      await gw.expireCheckoutSession(order.stripe.checkoutSessionId, stripeAccount);
+      const s = await gw.retrieveCheckoutSession(order.stripe.checkoutSessionId, stripeAccount);
       if (s.status === "complete") throw new CancelError("The customer has just paid for this booking, so it can't be cancelled. Refresh the page.", 409);
     }
     return withTransaction(async (session) => {

@@ -2,6 +2,8 @@
 
 import { useActionState, useState, useTransition } from "react";
 import {
+  adminConnectExistingAction,
+  adminDisconnectExistingAction,
   adminOpenDashboardAction,
   adminSendSetupEmailAction,
   adminStartOnboardingAction,
@@ -35,22 +37,28 @@ export function SalesPausedForm({ organizerId, paused }: { organizerId: string; 
   );
 }
 
-export function CardFeeForm({ organizerId, payer, percent, fixed }: { organizerId: string; payer: string; percent: number; fixed: number }) {
+export function CardFeeForm({ organizerId, payer, percent, fixed, ownAccount = false }: { organizerId: string; payer: string; percent: number; fixed: number; ownAccount?: boolean }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(cardFeeAction.bind(null, organizerId), null);
   return (
     <form action={action} className="space-y-3">
       <fieldset className="space-y-2">
         <legend className="text-sm font-semibold">Who pays Stripe&apos;s card fee?</legend>
-        <label className="flex items-start gap-2 text-sm">
-          <input type="radio" name="payer" value="platform" defaultChecked={payer === "platform"} className="mt-1 accent-[var(--brand-orange)]" />
-          <span>
-            <strong>Indinite</strong>: comes out of the platform fee
-          </span>
-        </label>
+        {ownAccount ? (
+          <p className="text-xs text-muted-foreground">
+            The organiser&apos;s own Stripe account is connected, so Stripe takes its fee from that account at their own rate. Indinite can&apos;t pay it; the rate below is only used for a customer card processing fee.
+          </p>
+        ) : (
+          <label className="flex items-start gap-2 text-sm">
+            <input type="radio" name="payer" value="platform" defaultChecked={payer === "platform"} className="mt-1 accent-[var(--brand-orange)]" />
+            <span>
+              <strong>Indinite</strong>: comes out of the platform fee
+            </span>
+          </label>
+        )}
         <label className="flex items-start gap-2 text-sm">
           <input type="radio" name="payer" value="organizer" defaultChecked={payer !== "platform" && payer !== "customer"} className="mt-1 accent-[var(--brand-orange)]" />
           <span>
-            <strong>Organiser</strong> (default): deducted from their payout
+            <strong>Organiser</strong> (default): {ownAccount ? "Stripe takes it from their account" : "deducted from their payout"}
           </span>
         </label>
         <label className="flex items-start gap-2 text-sm">
@@ -84,13 +92,65 @@ export function CardFeeForm({ organizerId, payer, percent, fixed }: { organizerI
  * Super admin: fill in the organiser's bank and business details on Stripe's form, open their Stripe dashboard,
  * or email the owner to finish it themselves.
  */
-export function AdminOnboardingActions({ organizerId, status, stripeReady, setupUrl }: { organizerId: string; status: string; stripeReady: boolean; setupUrl: string }) {
+export function AdminOnboardingActions({
+  organizerId,
+  status,
+  stripeReady,
+  setupUrl,
+  accountType,
+  connectAvailable,
+}: {
+  organizerId: string;
+  status: string;
+  stripeReady: boolean;
+  setupUrl: string;
+  /** "standard" = the organiser's own Stripe account is connected. */
+  accountType: "express" | "standard" | null;
+  connectAvailable: boolean;
+}) {
   const [pending, start] = useTransition();
   const [state, setState] = useState<ActionState>(null);
+  const [reason, setReason] = useState("");
   if (!stripeReady) return <p className="text-sm text-muted-foreground">Stripe isn&apos;t configured on this server yet (STRIPE_SECRET_KEY).</p>;
   const run = (fn: () => Promise<ActionState>) => start(async () => setState((await fn()) ?? null));
-  const primary =
-    status === "not_started" ? "Fill in bank and business details" : status === "in_progress" ? "Continue bank and business details" : status === "restricted" ? "Give Stripe the missing details" : null;
+  const own = accountType === "standard";
+  const choosing = status === "not_started" || status === "disconnected";
+  const primary = own
+    ? null
+    : choosing
+      ? "Fill in bank and business details"
+      : status === "in_progress"
+        ? "Continue bank and business details"
+        : status === "restricted"
+          ? "Give Stripe the missing details"
+          : null;
+  if (own) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">The organiser&apos;s own Stripe account is connected. Card payments are made on it (direct charges); Indinite takes its platform fee from each one.</p>
+        <details className="rounded-md border border-border p-3">
+          <summary className="cursor-pointer text-sm font-semibold">Disconnect their Stripe account</summary>
+          <div className="mt-3 space-y-3">
+            <p className="text-sm text-muted-foreground">Online bookings and payment links stop straight away; passes already sold keep working. Card refunds then have to be made in their Stripe dashboard.</p>
+            <label className="block text-sm">
+              Reason (recorded in the audit log)
+              <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} className={inputClass} placeholder="e.g. Organiser asked to switch accounts" />
+            </label>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => confirm("Disconnect this organiser's Stripe account? Their online bookings stop.") && run(() => adminDisconnectExistingAction(organizerId, reason))}
+              className="rounded-full border border-destructive px-5 py-2.5 font-semibold text-destructive disabled:opacity-60"
+            >
+              {pending ? "Disconnecting…" : "Disconnect Stripe"}
+            </button>
+          </div>
+        </details>
+        <FormError message={state?.error} />
+        <Ok state={state} />
+      </div>
+    );
+  }
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-3">
@@ -99,7 +159,12 @@ export function AdminOnboardingActions({ organizerId, status, stripeReady, setup
             {pending ? "Opening Stripe…" : primary}
           </button>
         )}
-        {status !== "not_started" && status !== "in_progress" && (
+        {connectAvailable && (choosing || status === "in_progress") && (
+          <button type="button" disabled={pending} onClick={() => run(() => adminConnectExistingAction(organizerId))} className="rounded-full border border-border bg-card px-5 py-2.5 font-semibold disabled:opacity-60">
+            Connect their existing Stripe account
+          </button>
+        )}
+        {!choosing && status !== "in_progress" && (
           <button type="button" disabled={pending} onClick={() => run(() => adminOpenDashboardAction(organizerId))} className="rounded-full border border-border bg-card px-5 py-2.5 font-semibold disabled:opacity-60">
             Update bank details
           </button>

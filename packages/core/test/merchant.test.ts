@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applicationFeeFor, canTakeCardPayments, cardFeePence, customerCardFeePence, DEFAULT_CARD_FEE, merchantStatus, ticketRefundShares } from "../src";
+import { applicationFeeFor, canTakeCardPayments, cardFeePayersFor, cardFeePence, chargeTypeFor, customerCardFeePence, DEFAULT_CARD_FEE, merchantStatus, ticketRefundShares } from "../src";
 
 describe("merchant status", () => {
   it("walks through onboarding states", () => {
@@ -16,6 +16,34 @@ describe("merchant status", () => {
     expect(canTakeCardPayments(active)).toBe(true);
     expect(canTakeCardPayments({ ...active, onlineSalesPaused: true })).toBe(false);
     expect(canTakeCardPayments({ stripeAccountId: "acct_1" })).toBe(false);
+  });
+
+  it("a disconnected organiser can't take payments until they connect again", () => {
+    const gone = { stripeAccountId: null, detailsSubmitted: true, chargesEnabled: true, stripeDisconnectedAt: new Date() };
+    expect(merchantStatus(gone)).toBe("disconnected");
+    expect(canTakeCardPayments(gone)).toBe(false);
+    expect(merchantStatus({ ...gone, stripeAccountId: "acct_2" })).toBe("active");
+  });
+});
+
+describe("the organiser's own Stripe account (direct charges)", () => {
+  it("Express accounts use destination charges; connected existing accounts use direct charges", () => {
+    expect(chargeTypeFor(undefined)).toBe("destination");
+    expect(chargeTypeFor("express")).toBe("destination");
+    expect(chargeTypeFor("standard")).toBe("direct");
+  });
+
+  it("Indinite can't pay the card fee on the organiser's own account", () => {
+    expect(cardFeePayersFor("express")).toEqual(["platform", "organizer", "customer"]);
+    expect(cardFeePayersFor("standard")).toEqual(["organizer", "customer"]);
+  });
+
+  it("the application fee is the platform fee only: Stripe charges its fee to the organiser's account", () => {
+    const order = { totalPence: 1562, platformFeePence: 72 };
+    expect(applicationFeeFor(order, DEFAULT_CARD_FEE, "direct")).toBe(72);
+    // A customer-paid card fee stays with the organiser, to cover Stripe's fee on their account.
+    expect(applicationFeeFor({ totalPence: 1607, platformFeePence: 72, cardFeePence: 45 }, { ...DEFAULT_CARD_FEE, payer: "customer" }, "direct")).toBe(72);
+    expect(applicationFeeFor({ totalPence: 50, platformFeePence: 80 }, DEFAULT_CARD_FEE, "direct")).toBe(50);
   });
 });
 

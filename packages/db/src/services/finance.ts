@@ -33,6 +33,11 @@ export interface EventFinance {
     platformFeesPence: number;
     /** Stripe card fees recovered through the application fee (paid by the customer or organiser); not income. */
     cardFeesPence: number;
+    /**
+     * Part of the gross paid straight into the organiser's own connected Stripe account (direct charges). Stripe
+     * takes its card fee from that account itself, so it isn't in cardFeesPence.
+     */
+    ownStripeAccountPence: number;
   };
   /** Indinite's income: platform fees collected + commission owed on direct sales. */
   ourIncomePence: number;
@@ -45,13 +50,14 @@ export async function eventFinance(eventId: string): Promise<EventFinance | null
   const event = await Event.findById(eventId, { title: 1, organizerId: 1 }).lean();
   if (!event) return null;
   const [groups, ledger] = await Promise.all([
-    Order.aggregate<{ _id: { source: string; method: string | null }; total: number; fees: number; cardFees: number; refunded: number; orders: number; passes: number }>([
+    Order.aggregate<{ _id: { source: string; method: string | null }; total: number; ownAccount: number; fees: number; cardFees: number; refunded: number; orders: number; passes: number }>([
       { $match: { eventId: event._id, status: { $in: PAID } } },
       {
         $group: {
           _id: { source: "$source", method: { $ifNull: ["$offline.method", null] } },
           // Net of refunds.
           total: { $sum: { $subtract: ["$totalPence", { $ifNull: ["$refundedPence", 0] }] } },
+          ownAccount: { $sum: { $cond: [{ $eq: ["$stripe.chargeType", "direct"] }, { $subtract: ["$totalPence", { $ifNull: ["$refundedPence", 0] }] }, 0] } },
           refunded: { $sum: { $ifNull: ["$refundedPence", 0] } },
           // Indinite keeps its fee on refunds, except when the whole booking was refunded by the system
           // (late payment after the passes sold out), where the fee was returned too.
@@ -75,7 +81,7 @@ export async function eventFinance(eventId: string): Promise<EventFinance | null
     CommissionLedger.find({ eventId: event._id }).sort({ createdAt: 1 }).lean(),
   ]);
   const pick = (source: string, method: string | null = null) => groups.filter((g) => g._id.source === source && g._id.method === method);
-  const sum = (gs: typeof groups, k: "total" | "fees" | "cardFees" | "passes") => gs.reduce((n, g) => n + g[k], 0);
+  const sum = (gs: typeof groups, k: "total" | "ownAccount" | "fees" | "cardFees" | "passes") => gs.reduce((n, g) => n + g[k], 0);
 
   const online = [...pick("online"), ...pick("payment_link")];
   const cash = pick("offline", "cash");
@@ -110,6 +116,7 @@ export async function eventFinance(eventId: string): Promise<EventFinance | null
       organizerCreditedPence: sum(online, "total") - platformFees - cardFees,
       platformFeesPence: platformFees,
       cardFeesPence: cardFees,
+      ownStripeAccountPence: sum(online, "ownAccount"),
     },
     ourIncomePence: platformFees + owed,
     payments: ledger.filter((l) => l.kind === "settled").map((l) => ({ at: l.createdAt as Date, amountPence: l.amountPence, note: l.note ?? "" })),

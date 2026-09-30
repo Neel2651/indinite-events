@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import type { ChargeType } from "@indinite/core";
 
 /**
  * Every Stripe call goes through this gateway (SPEC §4.8, M4, §4.6). Production uses the real SDK; tests
@@ -8,6 +9,8 @@ import Stripe from "stripe";
 export interface StripeGateway {
   createExpressAccount(input: {
     organizerId: string;
+    /** Changes after a disconnect, so a new account is made rather than Stripe replaying the old one. */
+    attempt?: number;
     email: string;
     businessType: "individual" | "company";
     businessName: string;
@@ -16,6 +19,12 @@ export interface StripeGateway {
   createOnboardingLink(accountId: string, refreshUrl: string, returnUrl: string): Promise<string>;
   createDashboardLink(accountId: string): Promise<string>;
   retrieveAccount(accountId: string): Promise<StripeAccountSnapshot>;
+  /** Connect an existing Stripe account (OAuth, Standard): Stripe's page where the organiser approves Indinite. */
+  oauthAuthorizeUrl(input: { state: string; redirectUri: string; email?: string }): string;
+  /** Finish OAuth: the connected account's id. */
+  oauthToken(code: string): Promise<{ accountId: string }>;
+  /** Disconnect an existing account from Indinite's platform. */
+  oauthDeauthorize(accountId: string): Promise<void>;
   createCheckoutSession(input: {
     orderId: string;
     publicId: string;
@@ -23,20 +32,26 @@ export interface StripeGateway {
     customerEmail: string;
     totalPence: number;
     applicationFeePence: number;
-    destinationAccountId: string;
+    /** The organiser's connected account. */
+    accountId: string;
+    /** destination: charged on Indinite's account and passed on (Express). direct: charged on the organiser's own account. */
+    chargeType: ChargeType;
     expiresAt: Date;
     successUrl: string;
     cancelUrl: string;
   }): Promise<{ id: string; url: string }>;
-  expireCheckoutSession(sessionId: string): Promise<void>;
+  // `stripeAccount`: the organiser's account, for payments made directly on it (direct charges); omit otherwise.
+  expireCheckoutSession(sessionId: string, stripeAccount?: string): Promise<void>;
   /** Current state of a Checkout Session (cancel and reconciliation). */
-  retrieveCheckoutSession(sessionId: string): Promise<{ id: string; status: "open" | "complete" | "expired"; paymentStatus: string; paymentIntentId: string | null }>;
+  retrieveCheckoutSession(sessionId: string, stripeAccount?: string): Promise<{ id: string; status: "open" | "complete" | "expired"; paymentStatus: string; paymentIntentId: string | null }>;
   /** Every refund on a payment, ours (metadata.source = "indinite") and any made in the Stripe dashboard. */
-  listRefunds(paymentIntentId: string): Promise<{ id: string; amountPence: number; status: string; metadata: Record<string, string> }[]>;
+  listRefunds(paymentIntentId: string, stripeAccount?: string): Promise<{ id: string; amountPence: number; status: string; metadata: Record<string, string> }[]>;
   createRefund(input: {
     paymentIntentId: string;
     amountPence: number;
-    /** Take the refunded amount back from the organiser's balance (destination charge). */
+    /** Direct charge: refund on the organiser's own account (no transfer to reverse). */
+    stripeAccount?: string;
+    /** Take the refunded amount back from the organiser's balance (destination charge; ignored for direct charges). */
     reverseTransfer: boolean;
     /** Give back Indinite's application fee too (only when the whole booking failed on our side). */
     refundApplicationFee: boolean;
@@ -49,6 +64,8 @@ export interface StripeGateway {
 /** The fields we keep from a Stripe account. */
 export interface StripeAccountSnapshot {
   id: string;
+  /** Two-letter country, e.g. "GB". */
+  country: string | null;
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
   detailsSubmitted: boolean;
@@ -59,6 +76,7 @@ export interface StripeAccountSnapshot {
 export function snapshotAccount(a: Stripe.Account): StripeAccountSnapshot {
   return {
     id: a.id,
+    country: a.country ?? null,
     chargesEnabled: !!a.charges_enabled,
     payoutsEnabled: !!a.payouts_enabled,
     detailsSubmitted: !!a.details_submitted,
@@ -69,7 +87,12 @@ export function snapshotAccount(a: Stripe.Account): StripeAccountSnapshot {
 
 class LiveStripeGateway implements StripeGateway {
   private readonly stripe: Stripe;
-  constructor(secretKey: string, private readonly webhookSecret: string | undefined) {
+  constructor(
+    secretKey: string,
+    /** Events on Indinite's own account, and (Connect endpoint) events on organisers' connected accounts. */
+    private readonly webhookSecrets: string[],
+    private readonly connectClientId: string | undefined,
+  ) {
     this.stripe = new Stripe(secretKey, { appInfo: { name: "Indinite Events" }, maxNetworkRetries: 2 });
   }
 
@@ -91,7 +114,7 @@ class LiveStripeGateway implements StripeGateway {
         metadata: { organizerId: input.organizerId },
       },
       // One Stripe account per organiser, even if the request is retried.
-      { idempotencyKey: `acct-create-${input.organizerId}` },
+      { idempotencyKey: `acct-create-${input.organizerId}${input.attempt ? `-${input.attempt}` : ""}` },
     );
     return { id: account.id };
   }
@@ -109,7 +132,34 @@ class LiveStripeGateway implements StripeGateway {
     return snapshotAccount(await this.stripe.accounts.retrieve(accountId));
   }
 
+  oauthAuthorizeUrl(input: { state: string; redirectUri: string; email?: string }) {
+    return this.stripe.oauth.authorizeUrl({
+      response_type: "code",
+      client_id: this.clientId(),
+      scope: "read_write",
+      state: input.state,
+      redirect_uri: input.redirectUri,
+      stripe_user: { email: input.email, country: "GB", currency: "gbp" },
+    });
+  }
+
+  async oauthToken(code: string) {
+    const res = await this.stripe.oauth.token({ grant_type: "authorization_code", code });
+    if (!res.stripe_user_id) throw new Error("Stripe didn't return a connected account");
+    return { accountId: res.stripe_user_id };
+  }
+
+  async oauthDeauthorize(accountId: string) {
+    await this.stripe.oauth.deauthorize({ client_id: this.clientId(), stripe_user_id: accountId });
+  }
+
+  private clientId() {
+    if (!this.connectClientId) throw new Error("STRIPE_CONNECT_CLIENT_ID is not set");
+    return this.connectClientId;
+  }
+
   async createCheckoutSession(input: Parameters<StripeGateway["createCheckoutSession"]>[0]) {
+    const direct = input.chargeType === "direct";
     const session = await this.stripe.checkout.sessions.create(
       {
         mode: "payment",
@@ -128,7 +178,8 @@ class LiveStripeGateway implements StripeGateway {
         ],
         payment_intent_data: {
           application_fee_amount: input.applicationFeePence,
-          transfer_data: { destination: input.destinationAccountId },
+          // Direct: the payment is made on the organiser's own account (Stripe-Account header below).
+          ...(direct ? {} : { transfer_data: { destination: input.accountId } }),
           metadata: { orderId: input.orderId, publicId: input.publicId },
           description: `Indinite Events ${input.publicId}`,
         },
@@ -137,25 +188,25 @@ class LiveStripeGateway implements StripeGateway {
         success_url: input.successUrl,
         cancel_url: input.cancelUrl,
       },
-      { idempotencyKey: `checkout-${input.orderId}-${Math.floor(input.expiresAt.getTime() / 1000)}` },
+      { idempotencyKey: `checkout-${input.orderId}-${Math.floor(input.expiresAt.getTime() / 1000)}`, ...(direct ? { stripeAccount: input.accountId } : {}) },
     );
     if (!session.url) throw new Error("Stripe didn't return a checkout URL");
     return { id: session.id, url: session.url };
   }
 
-  async expireCheckoutSession(sessionId: string) {
-    await this.stripe.checkout.sessions.expire(sessionId).catch(() => {});
+  async expireCheckoutSession(sessionId: string, stripeAccount?: string) {
+    await this.stripe.checkout.sessions.expire(sessionId, {}, on(stripeAccount)).catch(() => {});
   }
 
-  async retrieveCheckoutSession(sessionId: string) {
-    const s = await this.stripe.checkout.sessions.retrieve(sessionId);
+  async retrieveCheckoutSession(sessionId: string, stripeAccount?: string) {
+    const s = await this.stripe.checkout.sessions.retrieve(sessionId, {}, on(stripeAccount));
     const pi = typeof s.payment_intent === "string" ? s.payment_intent : (s.payment_intent?.id ?? null);
     return { id: s.id, status: (s.status ?? "open") as "open" | "complete" | "expired", paymentStatus: s.payment_status, paymentIntentId: pi };
   }
 
-  async listRefunds(paymentIntentId: string) {
+  async listRefunds(paymentIntentId: string, stripeAccount?: string) {
     const out: { id: string; amountPence: number; status: string; metadata: Record<string, string> }[] = [];
-    for await (const r of this.stripe.refunds.list({ payment_intent: paymentIntentId, limit: 100 })) {
+    for await (const r of this.stripe.refunds.list({ payment_intent: paymentIntentId, limit: 100 }, on(stripeAccount))) {
       out.push({ id: r.id, amountPence: r.amount, status: r.status ?? "pending", metadata: (r.metadata ?? {}) as Record<string, string> });
     }
     return out;
@@ -166,21 +217,34 @@ class LiveStripeGateway implements StripeGateway {
       {
         payment_intent: input.paymentIntentId,
         amount: input.amountPence,
-        reverse_transfer: input.reverseTransfer,
+        // There's no transfer to reverse when the payment was made on the organiser's own account.
+        ...(input.stripeAccount ? {} : { reverse_transfer: input.reverseTransfer }),
         refund_application_fee: input.refundApplicationFee,
         // Marks refunds made by Indinite, so charge.refunded can tell them from Stripe dashboard refunds.
         metadata: { ...input.metadata, source: "indinite" },
       },
-      { idempotencyKey: input.idempotencyKey },
+      { idempotencyKey: input.idempotencyKey, ...on(input.stripeAccount) },
     );
     return { id: refund.id, status: refund.status ?? "pending" };
   }
 
+  /** Tries each endpoint's signing secret: the platform endpoint, then the Connect endpoint. */
   verifyWebhook(payload: string, signature: string) {
-    if (!this.webhookSecret) throw new Error("STRIPE_WEBHOOK_SECRET is not set");
-    return this.stripe.webhooks.constructEvent(payload, signature, this.webhookSecret);
+    if (!this.webhookSecrets.length) throw new Error("STRIPE_WEBHOOK_SECRET is not set");
+    let error: unknown;
+    for (const secret of this.webhookSecrets) {
+      try {
+        return this.stripe.webhooks.constructEvent(payload, signature, secret);
+      } catch (e) {
+        error = e;
+      }
+    }
+    throw error;
   }
 }
+
+/** Request options for a call on an organiser's own account (direct charges). */
+const on = (stripeAccount?: string) => (stripeAccount ? { stripeAccount } : {});
 
 const g = globalThis as unknown as { __stripeGateway?: StripeGateway | null };
 
@@ -192,8 +256,14 @@ export function stripeConfigured(env: Record<string, string | undefined> = proce
 
 export function stripeGateway(): StripeGateway | null {
   if (g.__stripeGateway !== undefined) return g.__stripeGateway;
-  g.__stripeGateway = stripeConfigured() ? new LiveStripeGateway(process.env.STRIPE_SECRET_KEY!, process.env.STRIPE_WEBHOOK_SECRET) : null;
+  const secrets = [process.env.STRIPE_WEBHOOK_SECRET, process.env.STRIPE_CONNECT_WEBHOOK_SECRET].map((v) => v?.trim()).filter((v): v is string => !!v);
+  g.__stripeGateway = stripeConfigured() ? new LiveStripeGateway(process.env.STRIPE_SECRET_KEY!, secrets, process.env.STRIPE_CONNECT_CLIENT_ID?.trim() || undefined) : null;
   return g.__stripeGateway;
+}
+
+/** "Connect your existing Stripe account" needs the platform's Connect client id (Stripe → Connect → Settings → OAuth). */
+export function stripeConnectConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  return stripeConfigured(env) && /^ca_[A-Za-z0-9]{10,}/.test(env.STRIPE_CONNECT_CLIENT_ID?.trim() ?? "");
 }
 
 /** Tests only: install a fake gateway (or null to simulate "not configured"). */

@@ -37,6 +37,11 @@ import {
   eventFinance,
   reconcileStripe,
   syncExternalRefunds,
+  completeExistingAccountConnect,
+  connectExistingAccountUrl,
+  disconnectExistingAccount,
+  readConnectState,
+  MerchantError,
   type Stripe,
   type StripeGateway,
 } from "../src";
@@ -64,23 +69,39 @@ class FakeStripe implements StripeGateway {
   async createDashboardLink(accountId: string) {
     return `https://connect.stripe.test/express/${accountId}`;
   }
+  /** Country of accounts connected through OAuth (tests change it). */
+  country = "GB";
   async retrieveAccount(id: string) {
-    return { id, chargesEnabled: true, payoutsEnabled: true, detailsSubmitted: true, disabledReason: null, currentlyDue: [] };
+    return { id, country: this.country, chargesEnabled: true, payoutsEnabled: true, detailsSubmitted: true, disabledReason: null, currentlyDue: [] as string[] };
+  }
+  oauthAuthorizeUrl(input: { state: string; redirectUri: string; email?: string }) {
+    this.record("oauthAuthorizeUrl", input);
+    return `https://connect.stripe.test/oauth/authorize?state=${encodeURIComponent(input.state)}`;
+  }
+  /** Which account the next OAuth code connects. */
+  nextOAuthAccount = "acct_own_1";
+  async oauthToken(code: string) {
+    this.record("oauthToken", code);
+    return { accountId: this.nextOAuthAccount };
+  }
+  async oauthDeauthorize(accountId: string) {
+    this.record("oauthDeauthorize", accountId);
   }
   sessions = new Map<string, { status: "open" | "complete" | "expired"; paymentStatus: string; paymentIntentId: string | null }>();
   refunds = new Map<string, { id: string; amountPence: number; status: string; metadata: Record<string, string> }[]>();
-  async createCheckoutSession(input: { orderId: string }) {
+  async createCheckoutSession(input: { orderId: string; chargeType: string; accountId: string }) {
     this.record("createCheckoutSession", input);
     const id = `cs_test_${++this.n}`;
     this.sessions.set(id, { status: "open", paymentStatus: "unpaid", paymentIntentId: null });
     return { id, url: `https://checkout.stripe.test/${id}` };
   }
-  async expireCheckoutSession(id: string) {
-    this.record("expireCheckoutSession", id);
+  async expireCheckoutSession(id: string, stripeAccount?: string) {
+    this.record("expireCheckoutSession", { id, stripeAccount });
     const s = this.sessions.get(id);
     if (s?.status === "open") s.status = "expired";
   }
-  async retrieveCheckoutSession(id: string) {
+  async retrieveCheckoutSession(id: string, stripeAccount?: string) {
+    this.record("retrieveCheckoutSession", { id, stripeAccount });
     const s = this.sessions.get(id) ?? { status: "expired" as const, paymentStatus: "unpaid", paymentIntentId: null };
     return { id, ...s };
   }
@@ -94,7 +115,8 @@ class FakeStripe implements StripeGateway {
     this.refunds.set(input.paymentIntentId, [...(this.refunds.get(input.paymentIntentId) ?? []), r]);
     return { id: r.id, status: r.status };
   }
-  async listRefunds(paymentIntentId: string) {
+  async listRefunds(paymentIntentId: string, stripeAccount?: string) {
+    this.record("listRefunds", { paymentIntentId, stripeAccount });
     return this.refunds.get(paymentIntentId) ?? [];
   }
   /** Test helper: someone refunded in the Stripe dashboard (no Indinite metadata). */
@@ -128,6 +150,10 @@ function stripeEvent(type: string, object: Record<string, unknown>, extra: Recor
 
 beforeAll(async () => {
   process.env.QR_SIGNING_PRIVATE_KEY = generateQrKeyPair().privateKeyHex;
+  // Connecting an existing account: signed OAuth state, and the Connect client id switched on.
+  process.env.LINK_SIGNING_SECRET ??= "test-link-secret-at-least-32-characters-long";
+  process.env.STRIPE_SECRET_KEY = "sk_test_fakefakefakefake";
+  process.env.STRIPE_CONNECT_CLIENT_ID = "ca_testtesttesttest";
   replSet = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: "wiredTiger" } });
   await mongoose.connect(replSet.getUri());
   await Promise.all(mongoose.modelNames().map((n) => mongoose.model(n).init()));
@@ -162,7 +188,7 @@ beforeEach(async () => {
 async function activateMerchant() {
   await asUser("admin-1", () => startMerchantOnboarding(orgId, APP));
   const org = await Organizer.findById(orgId).lean();
-  await asUser("admin-1", () => syncMerchantAccount({ id: org!.stripeAccountId!, chargesEnabled: true, payoutsEnabled: true, detailsSubmitted: true, disabledReason: null, currentlyDue: [] }, APP));
+  await asUser("admin-1", () => syncMerchantAccount({ id: org!.stripeAccountId!, country: "GB", chargesEnabled: true, payoutsEnabled: true, detailsSubmitted: true, disabledReason: null, currentlyDue: [] }, APP));
 }
 
 async function paidCardOrder(qty = 2) {
@@ -228,7 +254,8 @@ describe("card checkout (M4)", () => {
     const s = stripe.last("createCheckoutSession")!;
     // Platform fee 72p + Stripe's card fee on £15.62 (1.5% + 20p = 43p), deducted from the organiser's payout.
     expect(s).toMatchObject({ totalPence: 1562, applicationFeePence: 72 + 23 + 20, customerEmail: "asha@example.com" });
-    expect((s.destinationAccountId as string).startsWith("acct_test_")).toBe(true);
+    expect(s).toMatchObject({ chargeType: "destination" });
+    expect((s.accountId as string).startsWith("acct_test_")).toBe(true);
     expect((s.expiresAt as Date).getTime()).toBeGreaterThanOrEqual(Date.now() + 30 * 60_000);
     const hold = await Hold.findOne({ orderId: order._id }).lean();
     expect(hold!.expiresAt.getTime()).toBeGreaterThanOrEqual(Date.now() + 30 * 60_000);
@@ -487,5 +514,150 @@ describe("Stripe reconciliation", () => {
     const r = await runWithContext({ actor: systemActor }, () => reconcileStripe());
     expect(r?.refundsRecorded).toBe(1);
     expect((await Order.findById(order._id).lean())!.status).toBe("refunded");
+  });
+});
+
+describe("the organiser's existing Stripe account (OAuth, direct charges)", () => {
+  /** Owner connects their own account: Stripe's page, then back with a code. */
+  async function connectOwnAccount(accountId = "acct_own_1") {
+    stripe.nextOAuthAccount = accountId;
+    const url = await asUser("owner-1", () => connectExistingAccountUrl(orgId, APP, "owner-1", "org"));
+    const state = decodeURIComponent(new URL(url).searchParams.get("state")!);
+    const who = readConnectState(state);
+    expect(who).toEqual({ organizerId: orgId, userId: "owner-1", from: "org" });
+    return asUser("owner-1", () => completeExistingAccountConnect(who.organizerId, "ac_code", APP));
+  }
+
+  async function paidOwnAccountOrder(qty = 2) {
+    await connectOwnAccount();
+    const order = await asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty }] }, new Date(), { requireCardPayments: true }));
+    const { url } = await asCustomer(() => startCardCheckout(String(order._id), urls));
+    const sessionId = url.split("/").pop()!;
+    await handleStripeEvent(stripeEvent("checkout.session.completed", { id: sessionId, payment_status: "paid", payment_intent: "pi_own_1", metadata: { orderId: String(order._id) } }, { account: "acct_own_1" }), APP);
+    return (await Order.findById(order._id).lean())!;
+  }
+
+  it("connects a UK account, sends Stripe the callback address, audits it, and can take payments", async () => {
+    const res = await connectOwnAccount();
+    expect(res.status).toBe("active");
+    expect(stripe.last("oauthAuthorizeUrl")).toMatchObject({ redirectUri: `${APP}/api/stripe/connect/callback`, email: "owner@example.com" });
+    expect(await Organizer.findById(orgId).lean()).toMatchObject({ stripeAccountId: "acct_own_1", stripeAccountType: "standard", chargesEnabled: true, stripeDisconnectedAt: null });
+    expect(await AuditLog.countDocuments({ action: "merchant.account_connected" })).toBe(1);
+    expect(stripe.count("createExpressAccount")).toBe(0);
+  });
+
+  it("refuses a forged or expired state", () => {
+    expect(() => readConnectState("org.x.y.1.abc")).toThrow(MerchantError);
+    expect(() => readConnectState(`admin.${orgId}.owner-1.9999999999.forged`)).toThrow(/isn't valid/);
+  });
+
+  it("an expired state asks them to start again", async () => {
+    const url = await asUser("owner-1", () => connectExistingAccountUrl(orgId, APP, "owner-1", "org", Date.now() - 20 * 60_000));
+    expect(() => readConnectState(decodeURIComponent(new URL(url).searchParams.get("state")!))).toThrow(/too long/);
+  });
+
+  it("refuses an account outside the UK, and disconnects it again", async () => {
+    stripe.country = "US";
+    await expect(connectOwnAccount()).rejects.toThrow(/isn't a UK account/);
+    expect(stripe.last("oauthDeauthorize")).toBe("acct_own_1");
+    expect((await Organizer.findById(orgId).lean())!.stripeAccountId).toBeUndefined();
+  });
+
+  it("refuses an account already connected to another organiser", async () => {
+    await Organizer.create({ name: "Other", slug: "other", contactEmail: "o@example.com", authOrgId: "a2", stripeAccountId: "acct_own_1", stripeAccountType: "standard" });
+    await expect(connectOwnAccount()).rejects.toThrow(/another organiser/);
+  });
+
+  it("can swap an unused Express account for their own, but not once it has taken payments", async () => {
+    await asUser("admin-1", () => startMerchantOnboarding(orgId, APP));
+    expect((await connectOwnAccount()).status).toBe("active");
+
+    await Organizer.updateOne({ _id: orgId }, { $unset: { stripeAccountId: 1 }, $set: { stripeAccountType: "express" } });
+    await paidCardOrder(1);
+    await expect(asUser("owner-1", () => connectExistingAccountUrl(orgId, APP, "owner-1", "org"))).rejects.toThrow(/already been taken/);
+  });
+
+  it("Indinite can't pay the card fee on their own account: switched to the organiser when connecting", async () => {
+    await asUser("admin-1", () => setCardFeeSettings(orgId, { payer: "platform", bps: 150, fixedPence: 20 }));
+    await connectOwnAccount();
+    expect((await Organizer.findById(orgId).lean())!.cardFee).toMatchObject({ payer: "organizer" });
+    await expect(asUser("admin-1", () => setCardFeeSettings(orgId, { payer: "platform", bps: 150, fixedPence: 20 }))).rejects.toThrow(/can't pay the card fee/);
+  });
+
+  it("charges on the organiser's account: no transfer, and only the platform fee goes to Indinite", async () => {
+    await connectOwnAccount();
+    const order = await asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }] }, new Date(), { requireCardPayments: true }));
+    await asCustomer(() => startCardCheckout(String(order._id), urls));
+    expect(stripe.last("createCheckoutSession")).toMatchObject({ chargeType: "direct", accountId: "acct_own_1", totalPence: 1562, applicationFeePence: 72 });
+    expect((await Order.findById(order._id).lean())!.stripe).toMatchObject({ chargeType: "direct", accountId: "acct_own_1", applicationFeePence: 72 });
+  });
+
+  it("issues passes only when the webhook comes from the order's account", async () => {
+    await connectOwnAccount();
+    const order = await asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }] }, new Date(), { requireCardPayments: true }));
+    const { url } = await asCustomer(() => startCardCheckout(String(order._id), urls));
+    const sessionId = url.split("/").pop()!;
+    const paid = { id: sessionId, payment_status: "paid", payment_intent: "pi_own_1", metadata: { orderId: String(order._id) } };
+    await handleStripeEvent(stripeEvent("checkout.session.completed", paid, { account: "acct_someone_else" }), APP);
+    await handleStripeEvent(stripeEvent("checkout.session.completed", paid), APP);
+    expect((await Order.findById(order._id).lean())!.status).toBe("pending");
+    await handleStripeEvent(stripeEvent("checkout.session.completed", paid, { account: "acct_own_1" }), APP);
+    expect((await Order.findById(order._id).lean())!.status).toBe("paid");
+    expect(await Ticket.countDocuments({ orderId: order._id })).toBe(1);
+  });
+
+  it("refunds on the organiser's account (no transfer to reverse) and reads dashboard refunds from it", async () => {
+    const order = await paidOwnAccountOrder(2);
+    const ticket = await Ticket.findOne({ orderId: order._id }).lean();
+    await asUser("owner-1", () => refundTickets({ user: owner(), organizerId: orgId, publicId: order.publicId, ticketIds: [String(ticket!._id)], reason: "Can't come" }));
+    expect(stripe.last("createRefund")).toMatchObject({ paymentIntentId: "pi_own_1", stripeAccount: "acct_own_1", refundApplicationFee: false });
+
+    stripe.dashboardRefund("pi_own_1", 1000);
+    await runWithContext({ actor: systemActor }, () => syncExternalRefunds("pi_own_1"));
+    expect(stripe.last("listRefunds")).toMatchObject({ paymentIntentId: "pi_own_1", stripeAccount: "acct_own_1" });
+  });
+
+  it("cancel and reconciliation look at the session on the organiser's account", async () => {
+    await connectOwnAccount();
+    const order = await asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }] }, new Date(), { requireCardPayments: true }));
+    await asCustomer(() => startCardCheckout(String(order._id), urls));
+    await Order.updateOne({ _id: order._id }, { $set: { updatedAt: new Date(Date.now() - 10 * 60_000) } }, { timestamps: false });
+    await runWithContext({ actor: systemActor }, () => reconcileStripe());
+    expect(stripe.last("retrieveCheckoutSession")).toMatchObject({ stripeAccount: "acct_own_1" });
+    await asUser("owner-1", () => cancelOrder({ user: owner(), organizerId: orgId, publicId: order.publicId, reason: "Customer asked" }));
+    expect(stripe.last("expireCheckoutSession")).toMatchObject({ stripeAccount: "acct_own_1" });
+  });
+
+  it("disconnecting stops online sales; old card bookings are then refunded in their own Stripe", async () => {
+    const order = await paidOwnAccountOrder(1);
+    await asUser("owner-1", () => disconnectExistingAccount(orgId, "Switching accounts"));
+    expect(stripe.last("oauthDeauthorize")).toBe("acct_own_1");
+    const org = (await Organizer.findById(orgId).lean())!;
+    expect(org.stripeAccountId).toBeUndefined();
+    expect(org.stripeDisconnectedAt).toBeInstanceOf(Date);
+    expect(await AuditLog.countDocuments({ action: "merchant.disconnected" })).toBe(1);
+    await expect(asCustomer(() => createCheckoutOrder({ eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }] }, new Date(), { requireCardPayments: true }))).rejects.toThrow(/aren't available/);
+
+    const quote = await quoteRefund(orgId, order.publicId);
+    expect(quote.method).toBe("outside_indinite");
+    const before = stripe.count("createRefund");
+    await asUser("owner-1", () => refundTickets({ user: owner(), organizerId: orgId, publicId: order.publicId, ticketIds: [quote.tickets[0]!.id], reason: "Refunded in Stripe" }));
+    expect(stripe.count("createRefund")).toBe(before);
+    // Can connect again (the same account or another).
+    expect((await connectOwnAccount("acct_own_1")).status).toBe("active");
+  });
+
+  it("a disconnect from Stripe's side (webhook) does the same", async () => {
+    await connectOwnAccount();
+    await handleStripeEvent(stripeEvent("account.application.deauthorized", {}, { account: "acct_own_1" }), APP);
+    expect((await Organizer.findById(orgId).lean())!).toMatchObject({ chargesEnabled: false });
+    expect((await Organizer.findById(orgId).lean())!.stripeDisconnectedAt).toBeInstanceOf(Date);
+  });
+
+  it("finance shows the part paid straight into their own account", async () => {
+    const order = await paidOwnAccountOrder(2);
+    const f = (await eventFinance(eventId))!;
+    expect(f.platform.ownStripeAccountPence).toBe(order.totalPence);
+    expect(f.platform.cardFeesPence).toBe(0);
   });
 });

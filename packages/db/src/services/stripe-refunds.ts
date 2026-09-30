@@ -6,6 +6,7 @@ import { Scan } from "../models/scan";
 import { Ticket } from "../models/ticket";
 import { quota } from "../quota";
 import { requireStripe } from "../stripe";
+import { directChargeReachable, stripeTarget } from "./stripe-target";
 import { withTransaction } from "../transaction";
 
 /**
@@ -19,7 +20,9 @@ import { withTransaction } from "../transaction";
 export async function syncExternalRefunds(paymentIntentId: string): Promise<{ recorded: number; full: boolean } | null> {
   const order = await Order.findOne({ "stripe.paymentIntentId": paymentIntentId }).lean();
   if (!order) return null;
-  const refunds = (await requireStripe().listRefunds(paymentIntentId)).filter((r) => r.status === "succeeded" || r.status === "pending");
+  // Paid into an organiser's own account that's since been disconnected: Indinite can't see its refunds.
+  if (!(await directChargeReachable(order))) return null;
+  const refunds = (await requireStripe().listRefunds(paymentIntentId, stripeTarget(order).stripeAccount)).filter((r) => r.status === "succeeded" || r.status === "pending");
   const known = new Set((order.refunds ?? []).map((r) => r.stripeRefundId).filter(Boolean));
   const external = refunds.filter((r) => r.metadata?.source !== "indinite" && !known.has(r.id));
   if (!external.length) return { recorded: 0, full: false };

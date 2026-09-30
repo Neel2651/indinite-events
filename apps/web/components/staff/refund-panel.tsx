@@ -12,9 +12,11 @@ interface Props {
   reason?: string;
   method: "stripe" | "outside_indinite" | "none";
   tickets: { id: string; label: string; refundablePence: number; status: string; scanned: boolean }[];
+  /** Paid by card into the organiser's own Stripe account, which has since been disconnected from Indinite. */
+  disconnectedCard?: boolean;
 }
 
-export function RefundPanel({ slug, publicId, eligible, reason: blocked, method, tickets }: Props) {
+export function RefundPanel({ slug, publicId, eligible, reason: blocked, method, tickets, disconnectedCard }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
@@ -63,7 +65,9 @@ export function RefundPanel({ slug, publicId, eligible, reason: blocked, method,
         {method === "stripe"
           ? "The amount goes back to the customer's card and is taken from your Stripe balance."
           : method === "outside_indinite"
-            ? "This booking was paid to you directly, so you repay the customer yourself."
+            ? disconnectedCard
+              ? "This card payment went into your own Stripe account, which is no longer connected to Indinite. Refund the customer in your Stripe dashboard, then record it here."
+              : "This booking was paid to you directly, so you repay the customer yourself."
             : ""}{" "}
         Refunded passes stop working at the gate and go back on sale.
       </p>

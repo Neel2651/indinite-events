@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createOrganizer, createOrganizerSchema, inviteMember, MembershipError } from "@indinite/auth";
 import { appUrl } from "@indinite/auth";
 import { CARD_FEE_PAYERS } from "@indinite/core";
-import { MerchantError, merchantDashboardLink, saveMerchantPrefill, sendMerchantSetupEmail, setCardFeeSettings, startMerchantOnboarding, StripeNotConfiguredError, setOnlineSalesPaused, setOrganizerCommission, SettingsError, updateOrganizer } from "@indinite/db";
+import { connectExistingAccountUrl, disconnectExistingAccount, MerchantError, merchantDashboardLink, saveMerchantPrefill, sendMerchantSetupEmail, setCardFeeSettings, startMerchantOnboarding, StripeNotConfiguredError, setOnlineSalesPaused, setOrganizerCommission, SettingsError, updateOrganizer } from "@indinite/db";
 import { auth } from "@/lib/auth";
 import { asStaff, requireSuperAdmin } from "@/lib/staff";
 
@@ -119,6 +119,30 @@ export async function adminOpenDashboardAction(organizerId: string): Promise<Act
     return { error: stripeMessage(e) };
   }
   redirect(url);
+}
+
+/** Super admin: connect the organiser's existing Stripe account (they approve Indinite on Stripe's page). */
+export async function adminConnectExistingAction(organizerId: string): Promise<ActionState> {
+  const user = await requireSuperAdmin();
+  let url: string;
+  try {
+    url = await connectExistingAccountUrl(organizerId, appUrl(), user.id, "admin");
+  } catch (e) {
+    return { error: stripeMessage(e) };
+  }
+  redirect(url);
+}
+
+/** Super admin: disconnect the organiser's own Stripe account. Online sales stop until payments are set up again. */
+export async function adminDisconnectExistingAction(organizerId: string, reason: string): Promise<ActionState> {
+  const user = await requireSuperAdmin();
+  try {
+    await asStaff(user, () => disconnectExistingAccount(organizerId, reason), organizerId);
+  } catch (e) {
+    return { error: stripeMessage(e) };
+  }
+  revalidatePath(`/admin/organisers/${organizerId}`);
+  return { ok: "Stripe account disconnected. Online sales are off until payments are set up again." };
 }
 
 /** Super admin: email the owner(s) a link to finish Stripe setup themselves. */

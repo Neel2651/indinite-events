@@ -1,4 +1,4 @@
-import { applicationFeeFor, canTakeCardPayments, cardFeeOf } from "@indinite/core";
+import { applicationFeeFor, canTakeCardPayments, cardFeeOf, chargeTypeFor } from "@indinite/core";
 import { runWithContext, stripeActor } from "@indinite/core/context";
 import { audited } from "../audit";
 import { enqueueSendRefundEmail } from "../jobs";
@@ -13,13 +13,15 @@ import { CheckoutError, fulfilOrder, HoldExpiredError, LateSoldOutError } from "
 import { releaseHold } from "./holds";
 import { disconnectMerchantAccount, syncMerchantAccount } from "./merchant";
 import { syncExternalRefunds } from "./stripe-refunds";
+import { stripeTarget } from "./stripe-target";
 
 /** Stripe needs a Checkout Session to live at least 30 minutes (and at most 24 hours). */
 const MIN_SESSION_MS = 31 * 60_000;
 const MAX_SESSION_MS = 24 * 3_600_000 - 60_000;
 
 /**
- * M4: send a pending order (public checkout or payment link) to Stripe Checkout as a destination charge.
+ * M4: send a pending order (public checkout or payment link) to Stripe Checkout. Express organisers are paid by a
+ * destination charge; organisers who connected their existing Stripe account by a direct charge on that account.
  * Returns the URL to redirect the customer to. £0 orders are confirmed straight away.
  */
 export async function startCardCheckout(orderId: string, urls: { successUrl: string; cancelUrl: string }, now = new Date()): Promise<{ url: string; free?: boolean }> {
@@ -54,7 +56,9 @@ export async function startCardCheckout(orderId: string, urls: { successUrl: str
   const sessionExpiresAt = new Date(Math.min(expiresAt.getTime(), now.getTime() + MAX_SESSION_MS));
 
   const event = await Event.findById(order.eventId, { title: 1 }).lean();
-  const applicationFeePence = applicationFeeFor({ totalPence: order.totalPence, platformFeePence: order.platformFeePence ?? order.applicationFeePence, cardFeePence: order.cardFeePence }, cardFeeOf(org));
+  const chargeType = chargeTypeFor(org.stripeAccountType);
+  const accountId = org.stripeAccountId!;
+  const applicationFeePence = applicationFeeFor({ totalPence: order.totalPence, platformFeePence: order.platformFeePence ?? order.applicationFeePence, cardFeePence: order.cardFeePence }, cardFeeOf(org), chargeType);
   const description = `${event?.title ?? "Event"}: ${order.items.map((i) => `${i.qty} × ${i.name}`).join(", ")}`;
   const session = await gw.createCheckoutSession({
     orderId: String(order._id),
@@ -63,7 +67,8 @@ export async function startCardCheckout(orderId: string, urls: { successUrl: str
     customerEmail: order.customer!.email,
     totalPence: order.totalPence,
     applicationFeePence,
-    destinationAccountId: org.stripeAccountId!,
+    accountId,
+    chargeType,
     expiresAt: sessionExpiresAt,
     successUrl: urls.successUrl,
     cancelUrl: urls.cancelUrl,
@@ -72,13 +77,22 @@ export async function startCardCheckout(orderId: string, urls: { successUrl: str
   await withTransaction(async (s) => {
     await Order.updateOne(
       { _id: order._id },
-      { $set: { "stripe.checkoutSessionId": session.id, "stripe.url": session.url, "stripe.sessionExpiresAt": sessionExpiresAt, "stripe.applicationFeePence": applicationFeePence } },
+      {
+        $set: {
+          "stripe.checkoutSessionId": session.id,
+          "stripe.url": session.url,
+          "stripe.sessionExpiresAt": sessionExpiresAt,
+          "stripe.applicationFeePence": applicationFeePence,
+          "stripe.accountId": accountId,
+          "stripe.chargeType": chargeType,
+        },
+      },
       { session: s },
     );
     await audited(s, {
       action: "order.checkout_started",
       entity: { type: "order", id: order._id },
-      after: { checkoutSessionId: session.id, applicationFeePence },
+      after: { checkoutSessionId: session.id, applicationFeePence, chargeType },
       organizerId: order.organizerId,
     });
   });
@@ -101,6 +115,7 @@ export async function confirmCardPayment(orderId: string, checkoutSessionId: str
     const refund = await requireStripe().createRefund({
       paymentIntentId,
       amountPence: order.totalPence,
+      stripeAccount: stripeTarget(order).stripeAccount,
       reverseTransfer: true,
       refundApplicationFee: true,
       idempotencyKey: `late-soldout-${orderId}`,
@@ -161,6 +176,19 @@ export async function handleStripeEvent(event: Stripe.Event, appUrl?: string): P
   }
 }
 
+/**
+ * Events about a payment on an organiser's own account (direct charge) carry `event.account`: act only if it's
+ * the account the order was paid into. Platform events (destination charges) have no `event.account`.
+ */
+async function fromOrdersAccount(orderId: string, account: string | undefined): Promise<boolean> {
+  const order = await Order.findById(orderId, { "stripe.accountId": 1, "stripe.chargeType": 1 }).lean();
+  if (!order) return true; // confirmCardPayment reports a missing order
+  const direct = order.stripe?.chargeType === "direct";
+  const ok = direct ? account === order.stripe?.accountId : !account;
+  if (!ok) console.warn(`[stripe webhook] event for order ${orderId} came from ${account ?? "the platform"}, not the order's account; ignored`);
+  return ok;
+}
+
 async function processEvent(event: Stripe.Event, appUrl?: string) {
   switch (event.type) {
     case "checkout.session.completed":
@@ -170,6 +198,7 @@ async function processEvent(event: Stripe.Event, appUrl?: string) {
       const orderId = s.metadata?.orderId ?? s.client_reference_id;
       const paymentIntentId = typeof s.payment_intent === "string" ? s.payment_intent : s.payment_intent?.id;
       if (!orderId || !paymentIntentId) return;
+      if (!(await fromOrdersAccount(orderId, event.account))) return;
       await confirmCardPayment(orderId, s.id, paymentIntentId);
       return;
     }
@@ -180,6 +209,7 @@ async function processEvent(event: Stripe.Event, appUrl?: string) {
       const order = await Order.findById(orderId, { status: 1, "stripe.checkoutSessionId": 1 }).lean();
       // Only if this is still the order's current session (a newer one may be open).
       if (!order || order.status !== "pending" || order.stripe?.checkoutSessionId !== s.id) return;
+      if (!(await fromOrdersAccount(orderId, event.account))) return;
       const hold = await Hold.findOne({ orderId: order._id, releasedAt: null }, { _id: 1 }).lean();
       if (hold) await releaseHold(hold._id, "checkout_expired");
       return;

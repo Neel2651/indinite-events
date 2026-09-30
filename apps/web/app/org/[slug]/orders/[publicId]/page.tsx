@@ -176,6 +176,7 @@ export default async function OrderPage({ params }: { params: Promise<{ slug: st
                 eligible={refund.eligible}
                 reason={refund.reason}
                 method={refund.method}
+                disconnectedCard={refund.method === "outside_indinite" && order.source !== "offline"}
                 tickets={refund.tickets.map((t, i) => ({ id: t.id, label: `Pass ${i + 1}: ${t.ticketTypeName}`, refundablePence: t.refundablePence, status: t.status, scanned: t.scanned }))}
               />
             </section>

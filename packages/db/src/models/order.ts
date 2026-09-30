@@ -76,8 +76,11 @@ const orderSchema = new Schema(
       paymentIntentId: String,
       url: String,
       sessionExpiresAt: Date,
-      /** Application fee sent to Stripe (platform fee, plus card fee when the organiser bears it). */
+      /** Application fee sent to Stripe (platform fee, plus card fee when the organiser bears it on Express). */
       applicationFeePence: Number,
+      /** The organiser's connected account the payment was made for, and how (missing on older orders = destination). */
+      accountId: String,
+      chargeType: { type: String, enum: ["destination", "direct"] },
     },
     offline: {
       /** bank_transfer = paid into the organiser's own account. */

@@ -48,7 +48,7 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
 - `pnpm lint` — ESLint (TypeScript, Next.js, jsx-a11y accessibility rules); must have no errors
 - `pnpm typecheck && pnpm lint && pnpm test` — must pass before any milestone is done
 - `pnpm --filter @indinite/e2e test:a11y` — axe WCAG 2.1 AA check of public pages (dev server running; `A11Y_BASE_URL` to change)
-- `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
+- `stripe listen --forward-to localhost:3000/api/webhooks/stripe --forward-connect-to localhost:3000/api/webhooks/stripe`
 
 ## Non-negotiable rules
 1. **Money is integer pence** (`amountPence: number`). Never floats, never pounds. Currency is always `gbp`.
@@ -69,12 +69,15 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
 11. British English in all UI copy. Sentence case. Buttons say exactly what happens ("Send payment link").
 
 ## Stripe patterns
-- Organizers are **Express** connected accounts, onboarded via Account Links.
-- Charges are **destination charges** via Checkout Sessions:
+- Organizers are **Express** connected accounts, onboarded via Account Links, or connect their **existing** Stripe
+  account via Connect OAuth (`stripeAccountType: "standard"`, SPEC §4.8).
+- Express: **destination charges** via Checkout Sessions:
   `payment_intent_data: { application_fee_amount, transfer_data: { destination } }`, card payments only for v1.
+  Existing accounts: **direct charges** (`stripeAccount` header, `application_fee_amount` only). Use
+  `stripeTarget(order)` for every call about an order's payment.
 - `expires_at` between 30 min (public checkout) and 24 h (organizer payment links); release holds on
   `checkout.session.expired`.
-- Refunds: `refund_application_fee: true, reverse_transfer: true`.
+- Refunds: `reverse_transfer: true` (destination only); Indinite's fee isn't refunded except for late sold-out refunds.
 - Handle: `checkout.session.completed`, `checkout.session.expired`, `charge.refunded`, `account.updated`.
 
 ## Working style

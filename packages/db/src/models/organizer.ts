@@ -8,8 +8,15 @@ const organizerSchema = new Schema(
     contactEmail: { type: String, required: true, lowercase: true, trim: true },
     /** Better Auth organization id — members and roles live there. */
     authOrgId: { type: String, required: true, unique: true },
-    /** Stripe Connect Express account (SPEC §4.8). Status fields are synced from Stripe (account.updated). */
+    /**
+     * Stripe connected account (SPEC §4.8): an Express account created by Indinite, or the organiser's existing
+     * account connected through OAuth ("standard", paid by direct charges). Status fields are synced from Stripe
+     * (account.updated). Cleared on disconnect; orders keep the account they were paid on.
+     */
     stripeAccountId: { type: String, index: { unique: true, sparse: true } },
+    stripeAccountType: { type: String, enum: ["express", "standard"], default: "express" },
+    /** When the account was last disconnected (status "disconnected" until another account is connected). */
+    stripeDisconnectedAt: { type: Date, default: null },
     chargesEnabled: { type: Boolean, default: false },
     payoutsEnabled: { type: Boolean, default: false },
     detailsSubmitted: { type: Boolean, default: false },

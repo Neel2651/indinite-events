@@ -8,6 +8,7 @@ import { Scan } from "../models/scan";
 import { Ticket } from "../models/ticket";
 import { quota } from "../quota";
 import { requireStripe } from "../stripe";
+import { directChargeReachable, stripeTarget } from "./stripe-target";
 import { withTransaction } from "../transaction";
 
 /**
@@ -16,7 +17,9 @@ import { withTransaction } from "../transaction";
  * - only before the event starts, and only passes that haven't been scanned;
  * - only the ticket price actually paid (after coupon) — platform fee, organiser charges and tax are never refunded;
  * - card/payment-link orders are refunded through Stripe (Indinite keeps its fee; the amount comes back from the
- *   organiser's balance); cash / organiser's-account orders are recorded here and repaid by the organiser directly;
+ *   organiser's balance); cash / organiser's-account orders are recorded here and repaid by the organiser directly,
+ *   as are card payments made into the organiser's own Stripe account after it's been disconnected (Indinite can
+ *   no longer refund those: the organiser refunds them in their Stripe dashboard);
  *   complimentary passes are simply cancelled.
  * Refunded passes stop working at the gate and their seats go back on sale.
  */
@@ -51,7 +54,8 @@ async function loadForRefund(organizerId: string, publicId: string) {
     order.discount?.amountPence ?? 0,
     complimentary,
   );
-  const method: RefundQuote["method"] = order.source === "offline" ? (complimentary ? "none" : "outside_indinite") : "stripe";
+  const method: RefundQuote["method"] =
+    order.source === "offline" ? (complimentary ? "none" : "outside_indinite") : (await directChargeReachable(order)) ? "stripe" : "outside_indinite";
   return { order, event, tickets, scanned, shares, method };
 }
 
@@ -109,6 +113,7 @@ export async function refundTickets(input: { user: AuthUser; organizerId: string
     const refund = await requireStripe().createRefund({
       paymentIntentId: order.stripe.paymentIntentId,
       amountPence,
+      stripeAccount: stripeTarget(order).stripeAccount,
       reverseTransfer: true, // take it back from the organiser's balance
       refundApplicationFee: false, // Indinite's platform fee isn't refundable
       idempotencyKey: `refund-${order._id}-${[...wanted].sort().join(".")}`,

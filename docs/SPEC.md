@@ -220,6 +220,20 @@ Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 
 - Merchant status (not started, in progress, waiting for Stripe, active, action needed) is synced from
   `account.updated` and refreshed on return from Stripe. Card checkout and payment links need an active, un-paused
   organiser. The super admin can pause online sales (cash / account / comp bookings still work).
+- **Existing Stripe account (agreed 1 Oct 2026).** Instead of a new Express account, the owner or super admin can
+  **connect the organiser's existing Stripe account** (Connect OAuth, a "Standard" account). Payments are then
+  **direct charges** on the organiser's account (Stripe-Account header, `application_fee_amount` = Indinite's cut,
+  no `transfer_data`); they show in the organiser's own Stripe dashboard. Rules:
+  - UK accounts only (country GB); one account per organiser and never shared between organisers.
+  - Allowed when the organiser has no account, was disconnected, or has an Express account that never took a
+    payment (it can be swapped).
+  - Card fee: Stripe takes it from the organiser's account at their own rate, so "Indinite pays" isn't offered
+    (switched to the organiser when connecting). A customer-paid card fee stays with the organiser.
+  - Disconnecting (owner / super admin from Indinite, or the organiser in Stripe: `account.application.deauthorized`)
+    stops online sales straight away; passes keep working. Card refunds for those bookings are then made in the
+    organiser's Stripe dashboard and recorded in Indinite as repaid by the organiser.
+  - Orders store `stripe.accountId` and `stripe.chargeType`; every later call (refund, cancel, reconciliation) uses
+    them, and webhooks for direct charges are only acted on when `event.account` is the order's account.
 - **Stripe card fee** (default 1.5% + 20p), set per organiser by the super admin, paid by one of:
   - **Organiser** (the default since 1 Oct 2026): added to the application fee, so it's deducted from their payout.
   - **Indinite**: comes out of the platform fee.
@@ -243,7 +257,7 @@ API: `/api/checkout`, `/api/webhooks/stripe`, `/api/org/orders` (payment link / 
 `/api/org/stripe/onboarding-link`, `/api/scan/manifest`, `/api/scan/sync`, `/api/orders/lookup`
 
 ## 6. Environment variables
-MONGODB_URI, BETTER_AUTH_SECRET, BETTER_AUTH_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+MONGODB_URI, BETTER_AUTH_SECRET, BETTER_AUTH_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_CONNECT_CLIENT_ID, STRIPE_CONNECT_WEBHOOK_SECRET,
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, RESEND_API_KEY, EMAIL_FROM, QR_SIGNING_PRIVATE_KEY,
 NEXT_PUBLIC_QR_PUBLIC_KEY, MEDIA_DIR, PAYMENTS_MODE, LINK_SIGNING_SECRET, APP_URL
 

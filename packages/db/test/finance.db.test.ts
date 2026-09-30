@@ -61,7 +61,7 @@ describe("finance", () => {
     const f = (await eventFinance(eventId))!;
     expect(f.totalSalesPence).toBe(2300 + 1150 + 3450);
     expect(f.direct).toEqual({ cashPence: 1150, accountPence: 3450, complimentaryPasses: 1, commissionOwedPence: 400, commissionPaidPence: 300, outstandingPence: 100 });
-    expect(f.platform).toEqual({ grossPence: 2300, organizerCreditedPence: 2100, platformFeesPence: 200, cardFeesPence: 0 });
+    expect(f.platform).toEqual({ grossPence: 2300, organizerCreditedPence: 2100, platformFeesPence: 200, cardFeesPence: 0, ownStripeAccountPence: 0 });
     expect(f.ourIncomePence).toBe(600);
     expect(f.payments).toHaveLength(1);
   });

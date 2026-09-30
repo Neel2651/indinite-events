@@ -3,11 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Types } from "mongoose";
 import { appUrl } from "@indinite/auth";
-import { merchantStatus, MERCHANT_STATUS_LABELS } from "@indinite/core";
-import { merchantSetupUrl, Organizer, refreshMerchantAccount, stripeConfigured } from "@indinite/db";
+import { cardFeeOf, merchantStatus, MERCHANT_STATUS_LABELS } from "@indinite/core";
+import { merchantSetupUrl, Organizer, refreshMerchantAccount, stripeConfigured, stripeConnectConfigured } from "@indinite/db";
 import { AdminOnboardingActions, CardFeeForm, OrganizerDetailsForm, SalesPausedForm } from "@/components/staff/admin-merchant-forms";
 import { PageHeader } from "@/components/staff/shell";
 import { formatDayTime } from "@/lib/format";
+import { connectMessage, connectOutcomeText } from "@/lib/stripe-connect";
 import { asStaff, requireSuperAdmin } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Organiser" };
@@ -27,6 +28,9 @@ export default async function AdminOrganiserPage({ params, searchParams }: Props
   const org = await Organizer.findById(id).lean();
   if (!org) notFound();
   const status = merchantStatus(org);
+  const own = Boolean(org.stripeAccountId) && org.stripeAccountType === "standard";
+  const fee = cardFeeOf(org);
+  const outcome = connectOutcomeText(stripe, await connectMessage());
 
   return (
     <>
@@ -50,7 +54,7 @@ export default async function AdminOrganiserPage({ params, searchParams }: Props
           </p>
           <dl className="grid grid-cols-2 gap-2 text-sm">
             <dt className="text-muted-foreground">Stripe account</dt>
-            <dd>{org.stripeAccountId ?? "Not created yet"}</dd>
+            <dd>{org.stripeAccountId ? `${org.stripeAccountId} (${own ? "their own, connected" : "Express, set up by Indinite"})` : status === "disconnected" ? "Disconnected" : "Not created yet"}</dd>
             <dt className="text-muted-foreground">Card payments</dt>
             <dd>{org.chargesEnabled ? "On" : "Off"}</dd>
             <dt className="text-muted-foreground">Payouts</dt>
@@ -66,7 +70,22 @@ export default async function AdminOrganiserPage({ params, searchParams }: Props
           </dl>
           {stripe === "refresh" && <p className="rounded-md bg-muted px-3 py-2 text-sm">That Stripe link expired. Use the button below to open a new one.</p>}
           {stripe === "return" && <p className="rounded-md bg-muted px-3 py-2 text-sm">Back from Stripe. The status above is up to date.</p>}
-          <AdminOnboardingActions organizerId={id} status={status} stripeReady={configured} setupUrl={merchantSetupUrl(appUrl(), org.slug)} />
+          {outcome && (
+            <p
+              role={outcome.tone === "error" ? "alert" : "status"}
+              className={`rounded-md px-3 py-2 text-sm ${outcome.tone === "ok" ? "bg-success/10 text-success" : outcome.tone === "error" ? "bg-destructive/10 text-destructive" : "bg-muted"}`}
+            >
+              {outcome.text}
+            </p>
+          )}
+          <AdminOnboardingActions
+            organizerId={id}
+            status={status}
+            stripeReady={configured}
+            setupUrl={merchantSetupUrl(appUrl(), org.slug)}
+            accountType={org.stripeAccountId ? (org.stripeAccountType ?? "express") : null}
+            connectAvailable={stripeConnectConfigured()}
+          />
         </section>
         <section className="space-y-6 rounded-lg border border-border bg-card p-6">
           <div>
@@ -76,7 +95,7 @@ export default async function AdminOrganiserPage({ params, searchParams }: Props
           </div>
           <div className="border-t border-border pt-6">
             <h2 className="mb-3 text-lg">Card fees</h2>
-            <CardFeeForm organizerId={id} payer={org.cardFee?.payer ?? "platform"} percent={(org.cardFee?.bps ?? 150) / 100} fixed={(org.cardFee?.fixedPence ?? 20) / 100} />
+            <CardFeeForm organizerId={id} payer={fee.payer} percent={fee.bps / 100} fixed={fee.fixedPence / 100} ownAccount={own} />
           </div>
         </section>
       </div>

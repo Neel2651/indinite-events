@@ -1,8 +1,9 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { appUrl } from "@indinite/auth";
-import { MerchantError, merchantDashboardLink, sendMerchantSetupEmail, startMerchantOnboarding, StripeNotConfiguredError } from "@indinite/db";
+import { connectExistingAccountUrl, disconnectExistingAccount, MerchantError, merchantDashboardLink, sendMerchantSetupEmail, startMerchantOnboarding, StripeNotConfiguredError } from "@indinite/db";
 import { asStaff, requireOrg } from "@/lib/staff";
 
 export type State = { ok?: string; error?: string } | null;
@@ -24,7 +25,33 @@ export async function startOnboardingAction(slug: string): Promise<State> {
   redirect(url);
 }
 
-/** Stripe Express dashboard: bank details, payouts. */
+/** Owner or super admin: connect the organiser's existing Stripe account (Stripe asks them to sign in and approve). */
+export async function connectExistingAction(slug: string): Promise<State> {
+  const { user, organizer, can } = await requireOrg(slug);
+  if (!can("stripe.onboard")) return { error: "Only the organiser's owner can set up payments." };
+  let url: string;
+  try {
+    url = await connectExistingAccountUrl(organizer.id, appUrl(), user.id, "org");
+  } catch (e) {
+    return { error: message(e) };
+  }
+  redirect(url);
+}
+
+/** Owner or super admin: disconnect their own Stripe account from Indinite (online sales stop). */
+export async function disconnectExistingAction(slug: string, reason: string): Promise<State> {
+  const { user, organizer, can } = await requireOrg(slug);
+  if (!can("stripe.onboard")) return { error: "Only the organiser's owner can change payments." };
+  try {
+    await asStaff(user, () => disconnectExistingAccount(organizer.id, reason), organizer.id);
+  } catch (e) {
+    return { error: message(e) };
+  }
+  revalidatePath(`/org/${slug}/payments`);
+  return { ok: "Your Stripe account is disconnected. Online sales are off until you set up payments again." };
+}
+
+/** Stripe dashboard: bank details, payouts. */
 export async function openDashboardAction(slug: string): Promise<State> {
   const { organizer, can } = await requireOrg(slug);
   if (!can("stripe.onboard")) return { error: "Only the organiser's owner can change bank details." };
