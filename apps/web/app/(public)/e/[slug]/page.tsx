@@ -92,19 +92,6 @@ export default async function EventPage({ params }: Props) {
               </ul>
             </section>
           )}
-          <section>
-            <h2 className="text-2xl">Nights</h2>
-            <ul className="mt-4 grid gap-2 sm:grid-cols-3">
-              {event.sessions.map((s) => (
-                <li key={s.id} className="rounded-md border border-border px-4 py-3">
-                  <span className="font-display font-semibold">{s.label}</span>
-                  <span className="block text-sm text-muted-foreground">
-                    {formatDay(s.startsAt)}, {formatTime(s.startsAt)}–{formatTime(s.endsAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
         </div>
 
         <aside className="card-brand h-fit space-y-5">
