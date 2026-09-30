@@ -161,7 +161,7 @@ function SetupScreen({ events, userName, error, onStart, panelHref }: { events: 
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-brand-navy px-5 py-8 text-white">
+    <div className="flex min-h-dvh flex-col bg-brand-navy px-[max(1.25rem,env(safe-area-inset-left))] pt-[calc(env(safe-area-inset-top)+2rem)] pb-[calc(env(safe-area-inset-bottom)+2rem)] text-white">
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-2 font-display text-lg font-bold text-brand-orange">
           <img src="/brand/indinite-mark.png" alt="" width={32} height={28} className="h-7 w-auto" />
@@ -171,8 +171,15 @@ function SetupScreen({ events, userName, error, onStart, panelHref }: { events: 
         </p>
         <div className="flex items-center gap-2">
           {panelHref && (
-            <a href={panelHref} className="rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold">
-              Back to organiser
+            <a
+              href={panelHref}
+              aria-label="Back to organiser panel"
+              className="inline-flex min-h-11 items-center gap-1 whitespace-nowrap rounded-full border border-white/25 py-2 pr-4 pl-2.5 text-sm font-semibold active:bg-white/15"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+              Back
             </a>
           )}
           <button
@@ -181,7 +188,7 @@ function SetupScreen({ events, userName, error, onStart, panelHref }: { events: 
               await authClient.signOut();
               window.location.href = "/sign-in";
             }}
-            className="rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold"
+            className="min-h-11 whitespace-nowrap rounded-full border border-white/25 px-4 text-sm font-semibold active:bg-white/15"
           >
             Sign out
           </button>
@@ -609,11 +616,18 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-black text-white">
-      <header className="z-10 flex items-center justify-between gap-3 bg-brand-navy/95 px-4 py-3">
-        <button type="button" onClick={onExit} aria-label="Back to scanner setup" className="-ml-1 shrink-0 rounded-full p-2 hover:bg-white/10">
-          <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      {/* The installed app draws under the status bar and notch (viewportFit: cover), so pad by the safe areas. */}
+      <header className="z-10 flex items-center justify-between gap-3 bg-brand-navy/95 pt-[calc(env(safe-area-inset-top)+0.5rem)] pr-[max(1rem,env(safe-area-inset-right))] pb-3 pl-[max(0.75rem,env(safe-area-inset-left))]">
+        <button
+          type="button"
+          onClick={onExit}
+          aria-label="Back to scanner setup"
+          className="flex min-h-11 shrink-0 items-center gap-1 rounded-full border border-white/25 py-2 pr-4 pl-2.5 text-sm font-semibold active:bg-white/15"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M15 18l-6-6 6-6" />
           </svg>
+          Back
         </button>
         <div className="min-w-0 flex-1">
           <p className="truncate font-display font-semibold">{setup.event.title}</p>
@@ -621,7 +635,7 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
             {session.label} · {dayFmt.format(new Date(session.startsAt))} · {setup.gate}
           </p>
         </div>
-        <button type="button" onClick={onExit} className="shrink-0 rounded-full border border-white/25 px-3 py-1.5 text-xs font-semibold">
+        <button type="button" onClick={onExit} className="min-h-11 shrink-0 rounded-full border border-white/25 px-3 text-xs font-semibold active:bg-white/15">
           Change
         </button>
       </header>
@@ -641,7 +655,7 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
         </p>
       </div>
 
-      <footer className="z-10 grid grid-cols-3 items-center gap-2 bg-brand-navy/95 px-4 py-3 text-center text-xs">
+      <footer className="z-10 grid grid-cols-3 items-center gap-2 bg-brand-navy/95 px-[max(1rem,env(safe-area-inset-left))] pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] text-center text-xs">
         <div>
           <p className="font-display text-2xl font-bold">{admittedTonight}</p>
           <p className="text-on-dark-muted">in tonight</p>
@@ -706,7 +720,7 @@ function ManualEntry({ onCancel, onSubmit }: { onCancel: () => void; onSubmit: (
           e.preventDefault();
           onSubmit(code);
         }}
-        className="relative w-full space-y-4 rounded-t-3xl bg-white p-6 text-brand-navy"
+        className="relative w-full space-y-4 rounded-t-3xl bg-white p-6 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] text-brand-navy"
       >
         <h2 id="manual-entry-title" className="text-xl">
           Enter the code under the QR
