@@ -93,8 +93,24 @@ export function ScannerApp({ panelHref = null }: { panelHref?: string | null }) 
       });
   }, []);
 
-  if (setup) return <Scanning setup={setup} onExit={() => setSetup(null)} />;
-  return <SetupScreen events={events} userName={userName} error={error} onStart={setSetup} panelHref={panelHref} />;
+  // Scanning is its own step in the browser history, so the phone's Back gesture (or the browser's Back button)
+  // returns to this setup screen instead of leaving the scanner; Back from setup then leaves as normal.
+  useEffect(() => {
+    const onPop = () => setSetup(null);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const startScanning = (s: Setup) => {
+    window.history.pushState({ scanner: "scanning" }, "");
+    setSetup(s);
+  };
+  const stopScanning = () => {
+    if ((window.history.state as { scanner?: string } | null)?.scanner === "scanning") window.history.back();
+    else setSetup(null);
+  };
+
+  if (setup) return <Scanning setup={setup} onExit={stopScanning} />;
+  return <SetupScreen events={events} userName={userName} error={error} onStart={startScanning} panelHref={panelHref} />;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -171,7 +187,7 @@ function SetupScreen({ events, userName, error, onStart, panelHref }: { events: 
           </button>
         </div>
       </div>
-      <h1 className="mt-6 text-3xl">Gate scanning</h1>
+      <h1 className="mt-6 text-3xl text-white">Gate scanning</h1>
       {userName && <p className="mt-1 text-on-dark-muted">Signed in as {userName}</p>}
 
       {events === null ? (
@@ -594,7 +610,12 @@ function Scanning({ setup, onExit }: { setup: Setup; onExit: () => void }) {
   return (
     <div className="fixed inset-0 flex flex-col bg-black text-white">
       <header className="z-10 flex items-center justify-between gap-3 bg-brand-navy/95 px-4 py-3">
-        <div className="min-w-0">
+        <button type="button" onClick={onExit} aria-label="Back to scanner setup" className="-ml-1 shrink-0 rounded-full p-2 hover:bg-white/10">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+        <div className="min-w-0 flex-1">
           <p className="truncate font-display font-semibold">{setup.event.title}</p>
           <p className="text-xs text-on-dark-muted">
             {session.label} · {dayFmt.format(new Date(session.startsAt))} · {setup.gate}
