@@ -220,12 +220,12 @@ async function connectBlocked(org: { _id: Types.ObjectId; stripeAccountId?: stri
 export async function connectExistingAccountUrl(organizerId: string, appUrl: string, userId: string, from: ConnectFrom, now = Date.now()): Promise<string> {
   const gw = requireStripe();
   if (!stripeConnectConfigured()) throw new MerchantError("Connecting an existing Stripe account isn't switched on yet. Add STRIPE_CONNECT_CLIENT_ID to the server settings.", 503);
-  const org = await Organizer.findById(organizerId, { stripeAccountId: 1, stripeAccountType: 1, contactEmail: 1 }).lean();
+  const org = await Organizer.findById(organizerId, { stripeAccountId: 1, stripeAccountType: 1 }).lean();
   if (!org) throw new MerchantError("Organiser not found.", 404);
   const blocked = await connectBlocked(org);
   if (blocked) throw new MerchantError(blocked, 409);
   const token = signOrderLink(stateSubject(from, organizerId, userId), linkSecret(), now, CONNECT_STATE_TTL_MS);
-  return gw.oauthAuthorizeUrl({ state: `${from}.${organizerId}.${userId}.${token}`, redirectUri: connectCallbackUrl(appUrl), email: org.contactEmail });
+  return gw.oauthAuthorizeUrl({ state: `${from}.${organizerId}.${userId}.${token}`, redirectUri: connectCallbackUrl(appUrl) });
 }
 
 /** Read the OAuth state back: which organiser, started by which user, from where. Throws if forged or expired. */

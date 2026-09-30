@@ -19,8 +19,8 @@ export interface StripeGateway {
   createOnboardingLink(accountId: string, refreshUrl: string, returnUrl: string): Promise<string>;
   createDashboardLink(accountId: string): Promise<string>;
   retrieveAccount(accountId: string): Promise<StripeAccountSnapshot>;
-  /** Connect an existing Stripe account (OAuth, Standard): Stripe's page where the organiser approves Indinite. */
-  oauthAuthorizeUrl(input: { state: string; redirectUri: string; email?: string }): string;
+  /** Connect an existing Stripe account (OAuth, Standard): Stripe's page where the organiser signs in and approves Indinite. */
+  oauthAuthorizeUrl(input: { state: string; redirectUri: string }): string;
   /** Finish OAuth: the connected account's id. */
   oauthToken(code: string): Promise<{ accountId: string }>;
   /** Disconnect an existing account from Indinite's platform. */
@@ -132,14 +132,17 @@ class LiveStripeGateway implements StripeGateway {
     return snapshotAccount(await this.stripe.accounts.retrieve(accountId));
   }
 
-  oauthAuthorizeUrl(input: { state: string; redirectUri: string; email?: string }) {
+  oauthAuthorizeUrl(input: { state: string; redirectUri: string }) {
     return this.stripe.oauth.authorizeUrl({
       response_type: "code",
       client_id: this.clientId(),
       scope: "read_write",
       state: input.state,
       redirect_uri: input.redirectUri,
-      stripe_user: { email: input.email, country: "GB", currency: "gbp" },
+      // This is for organisers who already have Stripe: open on "Sign in", not Stripe's sign-up form (the default
+      // for read_write), and always ask which account, so someone with several accounts can pick the right one.
+      stripe_landing: "login",
+      always_prompt: true,
     });
   }
 

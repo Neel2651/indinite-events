@@ -35,7 +35,7 @@ export function PaymentsActions({ slug, status, accountType, canManage, setupUrl
             <strong className="text-foreground">Set up payments with Stripe</strong>: a new Stripe account for your ticket sales. Takes about 10 minutes; have your bank details and photo ID ready.
           </li>
           <li>
-            <strong className="text-foreground">Connect your existing Stripe account</strong>: if your business already uses Stripe. Sign in to Stripe and approve Indinite. Payments go into that account and show in your usual Stripe dashboard. UK accounts only.
+            <strong className="text-foreground">Connect your existing Stripe account</strong>: if your business already uses Stripe. Stripe asks you to sign in with your usual Stripe email and password, then approve Indinite. Payments go into that account and show in your usual Stripe dashboard. UK accounts only.
           </li>
         </ul>
       )}

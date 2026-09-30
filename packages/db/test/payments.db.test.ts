@@ -74,7 +74,7 @@ class FakeStripe implements StripeGateway {
   async retrieveAccount(id: string) {
     return { id, country: this.country, chargesEnabled: true, payoutsEnabled: true, detailsSubmitted: true, disabledReason: null, currentlyDue: [] as string[] };
   }
-  oauthAuthorizeUrl(input: { state: string; redirectUri: string; email?: string }) {
+  oauthAuthorizeUrl(input: { state: string; redirectUri: string }) {
     this.record("oauthAuthorizeUrl", input);
     return `https://connect.stripe.test/oauth/authorize?state=${encodeURIComponent(input.state)}`;
   }
@@ -540,7 +540,7 @@ describe("the organiser's existing Stripe account (OAuth, direct charges)", () =
   it("connects a UK account, sends Stripe the callback address, audits it, and can take payments", async () => {
     const res = await connectOwnAccount();
     expect(res.status).toBe("active");
-    expect(stripe.last("oauthAuthorizeUrl")).toMatchObject({ redirectUri: `${APP}/api/stripe/connect/callback`, email: "owner@example.com" });
+    expect(stripe.last("oauthAuthorizeUrl")).toMatchObject({ redirectUri: `${APP}/api/stripe/connect/callback` });
     expect(await Organizer.findById(orgId).lean()).toMatchObject({ stripeAccountId: "acct_own_1", stripeAccountType: "standard", chargesEnabled: true, stripeDisconnectedAt: null });
     expect(await AuditLog.countDocuments({ action: "merchant.account_connected" })).toBe(1);
     expect(stripe.count("createExpressAccount")).toBe(0);
