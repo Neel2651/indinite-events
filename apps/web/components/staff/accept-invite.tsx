@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 import { FormError, inputClass } from "./ui";
+import { PasswordInput } from "./password-input";
 
 interface Props {
   invitationId: string;
@@ -105,20 +106,13 @@ export function AcceptInvite({ invitationId, email, signedInAsInvitee, signedInA
       )}
       <label className="block text-sm">
         {hasAccount ? "Password" : "Choose a password"}
-        <input
-          name="password"
-          type="password"
-          required
-          minLength={hasAccount ? 1 : 10}
-          autoComplete={hasAccount ? "current-password" : "new-password"}
-          className={inputClass}
-        />
+        <PasswordInput name="password" required minLength={hasAccount ? 1 : 10} autoComplete={hasAccount ? "current-password" : "new-password"} />
         {!hasAccount && <span className="mt-1 block text-xs text-muted-foreground">At least 10 characters.</span>}
       </label>
       {!hasAccount && (
         <label className="block text-sm">
           Confirm password
-          <input name="confirm" type="password" required minLength={10} autoComplete="new-password" className={inputClass} />
+          <PasswordInput name="confirm" required minLength={10} autoComplete="new-password" />
         </label>
       )}
       <FormError message={error} />

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 import { FormError, inputClass } from "./ui";
+import { PasswordInput } from "./password-input";
 
 /** Only allow same-site relative redirects after sign-in. */
 const safeNext = (next: string | null) => (next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard");
@@ -37,7 +38,7 @@ export function SignInForm({ next }: { next: string | null }) {
       </label>
       <label className="block text-sm">
         Password
-        <input name="password" type="password" required autoComplete="current-password" className={inputClass} />
+        <PasswordInput name="password" required autoComplete="current-password" />
       </label>
       <FormError message={error} />
       <button type="submit" disabled={pending} className="btn-cta w-full disabled:opacity-60">

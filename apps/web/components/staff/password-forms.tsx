@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
 import { FormError, inputClass } from "./ui";
+import { PasswordInput } from "./password-input";
 
 export function ForgotPasswordForm() {
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
@@ -76,12 +77,12 @@ export function ResetPasswordForm({ token }: { token: string }) {
     <form onSubmit={onSubmit} className="space-y-4">
       <label className="block text-sm">
         New password
-        <input name="password" type="password" required minLength={10} autoComplete="new-password" className={inputClass} />
+        <PasswordInput name="password" required minLength={10} autoComplete="new-password" />
         <span className="mt-1 block text-xs text-muted-foreground">At least 10 characters.</span>
       </label>
       <label className="block text-sm">
         Confirm new password
-        <input name="confirm" type="password" required minLength={10} autoComplete="new-password" className={inputClass} />
+        <PasswordInput name="confirm" required minLength={10} autoComplete="new-password" />
       </label>
       <FormError message={error} />
       <button type="submit" disabled={pending} className="btn-cta w-full disabled:opacity-60">

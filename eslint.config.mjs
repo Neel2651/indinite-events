@@ -30,7 +30,8 @@ export default tseslint.config(
     rules: {
       ...jsxA11y.flatConfigs.recommended.rules,
       // Labels in this app wrap their inputs; the rule's default wants both nesting and htmlFor.
-      "jsx-a11y/label-has-associated-control": ["error", { assert: "either", depth: 3 }],
+      // PasswordInput renders a real <input> (components/staff/password-input.tsx).
+      "jsx-a11y/label-has-associated-control": ["error", { assert: "either", depth: 3, controlComponents: ["PasswordInput"] }],
       // React Compiler advice (new in eslint-plugin-react-hooks 6): useful, but not bugs. The scanner's effects
       // are deliberate (sync timers, online/offline); keep them visible as warnings rather than rewrite it now.
       "react-hooks/set-state-in-effect": "warn",
