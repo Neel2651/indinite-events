@@ -278,6 +278,17 @@ export class StripeNotConfiguredError extends Error {
   }
 }
 
+/**
+ * What to tell staff when a Stripe call fails. Stripe's own explanation for setup problems (e.g. "complete your
+ * platform profile", "sign up for Connect", a bad key) instead of a generic message; keys are never shown.
+ */
+export function stripeErrorMessage(e: unknown, fallback = "Something went wrong talking to Stripe. Please try again."): string {
+  if (e instanceof Stripe.errors.StripeError && ["invalid_request_error", "authentication_error", "permission_error", "StripeInvalidRequestError", "StripeAuthenticationError", "StripePermissionError"].includes(e.type)) {
+    return `Stripe said: ${e.message.replace(/\b(sk|rk|pk)_(test|live)_[A-Za-z0-9*]+/g, "[API key]")}`;
+  }
+  return fallback;
+}
+
 export function requireStripe(): StripeGateway {
   const gw = stripeGateway();
   if (!gw) throw new StripeNotConfiguredError();

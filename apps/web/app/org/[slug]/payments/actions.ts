@@ -3,13 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { appUrl } from "@indinite/auth";
-import { connectExistingAccountUrl, disconnectExistingAccount, MerchantError, merchantDashboardLink, sendMerchantSetupEmail, startMerchantOnboarding, StripeNotConfiguredError } from "@indinite/db";
+import { connectExistingAccountUrl, disconnectExistingAccount, MerchantError, merchantDashboardLink, sendMerchantSetupEmail, startMerchantOnboarding, stripeErrorMessage, StripeNotConfiguredError } from "@indinite/db";
 import { asStaff, requireOrg } from "@/lib/staff";
 
 export type State = { ok?: string; error?: string } | null;
 
-const message = (e: unknown) =>
-  e instanceof MerchantError || e instanceof StripeNotConfiguredError ? e.message : "Something went wrong talking to Stripe. Please try again.";
+const message = (e: unknown) => (e instanceof MerchantError || e instanceof StripeNotConfiguredError ? e.message : stripeErrorMessage(e));
 
 /** Owner or super admin: create the Stripe account if needed and go to Stripe's setup form. */
 export async function startOnboardingAction(slug: string): Promise<State> {

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createOrganizer, createOrganizerSchema, inviteMember, MembershipError } from "@indinite/auth";
 import { appUrl } from "@indinite/auth";
 import { CARD_FEE_PAYERS } from "@indinite/core";
-import { connectExistingAccountUrl, disconnectExistingAccount, MerchantError, merchantDashboardLink, saveMerchantPrefill, sendMerchantSetupEmail, setCardFeeSettings, startMerchantOnboarding, StripeNotConfiguredError, setOnlineSalesPaused, setOrganizerCommission, SettingsError, updateOrganizer } from "@indinite/db";
+import { connectExistingAccountUrl, disconnectExistingAccount, MerchantError, merchantDashboardLink, saveMerchantPrefill, sendMerchantSetupEmail, setCardFeeSettings, startMerchantOnboarding, stripeErrorMessage, StripeNotConfiguredError, setOnlineSalesPaused, setOrganizerCommission, SettingsError, updateOrganizer } from "@indinite/db";
 import { auth } from "@/lib/auth";
 import { asStaff, requireSuperAdmin } from "@/lib/staff";
 
@@ -93,8 +93,7 @@ export async function cardFeeAction(organizerId: string, _: ActionState, form: F
   return { ok: "Card fee settings saved. They apply to new card payments." };
 }
 
-const stripeMessage = (e: unknown) =>
-  e instanceof MerchantError || e instanceof StripeNotConfiguredError ? e.message : "Something went wrong talking to Stripe. Please try again.";
+const stripeMessage = (e: unknown) => (e instanceof MerchantError || e instanceof StripeNotConfiguredError ? e.message : stripeErrorMessage(e));
 
 /** Super admin: create the Stripe account if needed and fill in the organiser's bank and business details on Stripe. */
 export async function adminStartOnboardingAction(organizerId: string): Promise<ActionState> {

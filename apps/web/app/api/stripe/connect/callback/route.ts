@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { can } from "@indinite/core";
 import { appUrl } from "@indinite/auth";
-import { completeExistingAccountConnect, connectDb, MerchantError, Organizer, readConnectState, StripeNotConfiguredError } from "@indinite/db";
+import { completeExistingAccountConnect, connectDb, MerchantError, Organizer, readConnectState, stripeErrorMessage, StripeNotConfiguredError } from "@indinite/db";
 import { asStaff, getStaffUser } from "@/lib/staff";
 import { CONNECT_MESSAGE_COOKIE } from "@/lib/stripe-connect";
 
@@ -52,7 +52,7 @@ export async function GET(req: Request) {
   } catch (e) {
     if (e instanceof MerchantError || e instanceof StripeNotConfiguredError) return back("error", e.message);
     console.error("[stripe connect] failed", e instanceof Error ? e.message : e);
-    return back("error", "Something went wrong talking to Stripe. Please try again.");
+    return back("error", stripeErrorMessage(e));
   }
   return back("connected");
 }
