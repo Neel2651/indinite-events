@@ -50,7 +50,17 @@ export function createAuth(extraPlugins: BetterAuthPlugin[] = []) {
       },
     },
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
-    rateLimit: { enabled: true, storage: "database", window: 60, max: 30, customRules: { "/sign-in/email": { window: 60, max: 5 }, "/request-password-reset": { window: 300, max: 3 } } },
+    rateLimit: {
+      enabled: true,
+      storage: "database",
+      window: 60,
+      max: 30,
+      customRules: {
+        // No limit on sign-in attempts (decided 1 Oct 2026): `false` also turns off Better Auth's built-in sign-in limit.
+        "/sign-in/email": false,
+        "/request-password-reset": { window: 300, max: 3 },
+      },
+    },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         // No public sign-up: over HTTP, an account can only be created for an email with a pending invitation.
