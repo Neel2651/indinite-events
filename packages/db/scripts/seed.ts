@@ -45,9 +45,9 @@ import {
 } from "../src";
 import { PALETTES, coverArt, dandiyaArt, diyaArt, mandalaArt, type Palette } from "./seed-media";
 
-// if (process.env.NODE_ENV === "production" && process.env.DEPLOY_ENV !== "staging") {
-//   throw new Error("The demo seed is for development and staging (DEPLOY_ENV=staging) only");
-// }
+if (process.env.NODE_ENV === "production" && process.env.DEPLOY_ENV !== "staging") {
+  throw new Error("The demo seed is for development and staging (DEPLOY_ENV=staging) only");
+}
 
 const reset = process.argv.includes("--reset");
 const update = process.argv.includes("--update");

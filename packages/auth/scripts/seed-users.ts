@@ -12,9 +12,9 @@ import { MongoClient } from "mongodb";
 import { createAuth } from "../src/auth";
 import { ensureAuthIndexes } from "../src/indexes";
 
-// if (process.env.NODE_ENV === "production" && process.env.DEPLOY_ENV !== "staging") {
-//   throw new Error("seed-users is for development and staging (DEPLOY_ENV=staging) only");
-// }
+if (process.env.NODE_ENV === "production" && process.env.DEPLOY_ENV !== "staging") {
+  throw new Error("seed-users is for development and staging (DEPLOY_ENV=staging) only");
+}
 
 const DEFAULT_PASSWORD = "IndiniteDemo2026!";
 const password = process.env.SEED_PASSWORD || DEFAULT_PASSWORD;

@@ -46,10 +46,10 @@ pnpm --filter @indinite/db sync-indexes
 pnpm --filter @indinite/auth sync-indexes
 
 if [[ "${1:-}" == "--seed" ]]; then
-  # if [[ "${DEPLOY_ENV:-}" != "staging" ]]; then
-  #   echo "✗ --seed is only for staging servers (DEPLOY_ENV=staging)." >&2
-  #   exit 1
-  # fi
+  if [[ "${DEPLOY_ENV:-}" != "staging" ]]; then
+    echo "✗ --seed is only for staging servers (DEPLOY_ENV=staging). On the live server use: pnpm setup:production" >&2
+    exit 1
+  fi
   echo "→ Loading demo data (staging)"
   # Adds missing demo organisers and events and updates existing ones; orders and passes are kept.
   pnpm --filter @indinite/db seed -- --update

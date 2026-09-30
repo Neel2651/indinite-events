@@ -139,6 +139,17 @@ Do these in Stripe test mode first, then again in live mode (each mode has its o
 Testing locally: `stripe listen --forward-to localhost:3001/api/webhooks/stripe --forward-connect-to localhost:3001/api/webhooks/stripe`
 prints one signing secret; put it in both `STRIPE_WEBHOOK_SECRET` and `STRIPE_CONNECT_WEBHOOK_SECRET`.
 
+## Live server: first-time database setup
+The demo seeds refuse to run on a live server (`NODE_ENV=production` without `DEPLOY_ENV=staging`). Instead, on a
+new, empty live database run, once, from the project folder:
+```bash
+pnpm setup:production admin@indinite.co.uk
+```
+It creates every collection and index, then the first super admin, asking for the password (typed twice, never
+shown, at least 10 characters). Safe to re-run: an existing account keeps its password and is made super admin.
+To change a password later: `pnpm --filter @indinite/auth set-password admin@indinite.co.uk`. Organisers and their
+staff are then added from the admin panel (they get an invitation email and choose their own password).
+
 ## Notes
 - **Live server later:** same steps with `DEPLOY_ENV` removed (or `live`) and `PAYMENTS_MODE=stripe`; demo
   payments are refused on a live server by design. Online card checkout needs the Stripe milestones first.

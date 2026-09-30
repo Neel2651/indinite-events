@@ -43,7 +43,9 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
 - `pnpm dev` — web + worker
 - `pnpm test` — Vitest (unit); `pnpm --filter @indinite/db test:db` — real-MongoDB concurrency tests
 - `pnpm --filter @indinite/core gen:qr-keys` — generate QR signing keys for .env.local
-- `pnpm --filter @indinite/db seed` / `sync-indexes`; `seed -- --update` adds and updates demo data in place (keeps orders), `--reset` replaces it
+- `pnpm --filter @indinite/db seed` / `sync-indexes`; `seed -- --update` adds and updates demo data in place (keeps orders), `--reset` replaces it.
+  Seeds refuse on a live server (`NODE_ENV=production` without `DEPLOY_ENV=staging`)
+- `pnpm setup:production <email>` — live database: collections, indexes and the first super admin (asks for the password)
 - `LOAD_BASE_URL=… pnpm --filter @indinite/e2e test:load` — load test (sales rush) against a demo server; see `e2e/tests/load.ts`
 - `pnpm lint` — ESLint (TypeScript, Next.js, jsx-a11y accessibility rules); must have no errors
 - `pnpm typecheck && pnpm lint && pnpm test` — must pass before any milestone is done
