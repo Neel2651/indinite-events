@@ -57,6 +57,12 @@ describe("can()", () => {
     }
   });
 
+  it("complimentary passes are owner or super admin only (1 Oct 2026)", () => {
+    for (const role of ORG_ROLES) expect(can(user(role), "order.issueComplimentary", ORG_A)).toBe(role === "owner");
+    expect(can(user("owner"), "order.issueComplimentary", ORG_B)).toBe(false);
+    expect(can(superAdmin, "order.issueComplimentary", ORG_B)).toBe(true);
+  });
+
   it("anyone who can create payment links can cancel an unpaid booking; only owners cancel paid ones", () => {
     for (const role of ["owner", "manager", "box_office"] as const) expect(can(user(role), "order.cancelPending", ORG_A)).toBe(true);
     for (const role of ["scanner", "finance"] as const) expect(can(user(role), "order.cancelPending", ORG_A)).toBe(false);

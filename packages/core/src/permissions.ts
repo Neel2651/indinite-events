@@ -19,6 +19,8 @@ export const PERMISSIONS = [
   "order.createPaymentLink",
   "order.applyDiscount",
   "order.issueOffline",
+  /** Complimentary (free) passes: organiser owner only (1 Oct 2026). Each owes Indinite the platform fee. */
+  "order.issueComplimentary",
   "order.resendTickets",
   "order.refund",
   "order.cancel",
@@ -55,6 +57,7 @@ export const ROLE_PERMISSIONS: Record<OrgRole, ReadonlySet<Permission>> = {
     "order.createPaymentLink",
     "order.applyDiscount",
     "order.issueOffline",
+    "order.issueComplimentary",
     "order.resendTickets",
     "order.refund",
     "order.cancel",

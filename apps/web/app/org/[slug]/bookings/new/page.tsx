@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Types } from "mongoose";
-import { available, bookability, cardFeeOf, DEFAULT_FREE_COMPLIMENTARY_PASSES, maxDiscountBps, UNBOOKABLE_LABEL } from "@indinite/core";
+import { available, bookability, cardFeeOf, maxDiscountBps, UNBOOKABLE_LABEL } from "@indinite/core";
 import { Event, eventBookingState, Organizer, pricingFor, TicketType } from "@indinite/db";
 import { OfflineBookingForm, type BookableEvent } from "@/components/staff/offline-booking-form";
 import { PageHeader } from "@/components/staff/shell";
@@ -27,8 +27,6 @@ export default async function NewBookingPage({ params }: { params: Promise<{ slu
     title: e.title,
     ...pricingFor(e, org ?? {}),
     cardFee: cardFeeOf(org ?? {}),
-    freeComplimentaryPasses: e.freeComplimentaryPasses ?? DEFAULT_FREE_COMPLIMENTARY_PASSES,
-    freeComplimentaryLeft: Math.max(0, (e.freeComplimentaryPasses ?? DEFAULT_FREE_COMPLIMENTARY_PASSES) - (e.complimentaryIssued ?? 0)),
     ticketTypes: types
       .filter((t) => String(t.eventId) === String(e._id))
       .map((t) => {
@@ -55,7 +53,7 @@ export default async function NewBookingPage({ params }: { params: Promise<{ slu
     <>
       <PageHeader title="New booking" description="Book for a customer: paid in cash or to your account, complimentary, or send them a card payment link." />
       <div className="rounded-lg border border-border bg-card p-6">
-        <OfflineBookingForm slug={slug} events={bookable} canOffline={can("order.issueOffline")} canPaymentLink={can("order.createPaymentLink")} discountLimitBps={discountLimitBps} />
+        <OfflineBookingForm slug={slug} events={bookable} canOffline={can("order.issueOffline")} canComplimentary={can("order.issueComplimentary")} canPaymentLink={can("order.createPaymentLink")} discountLimitBps={discountLimitBps} />
       </div>
     </>
   );

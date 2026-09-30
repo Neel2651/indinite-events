@@ -1,6 +1,5 @@
 import { Schema, type InferSchemaType } from "mongoose";
 import { defineModel } from "./_util";
-import { DEFAULT_FREE_COMPLIMENTARY_PASSES } from "@indinite/core";
 
 const sessionSchema = new Schema({
   label: { type: String, required: true }, // "Night 1"
@@ -48,8 +47,6 @@ const eventSchema = new Schema(
     commissionBps: { type: Number, min: 0, max: 10000, default: null },
     /** Tax on tickets + platform fee + charges (bps, 2000 = 20%). Admin only. */
     taxBps: { type: Number, min: 0, max: 10000, default: 0 },
-    /** Complimentary passes free of commission for this event (admin); after that the platform fee is owed. */
-    freeComplimentaryPasses: { type: Number, min: 0, max: 10000, default: DEFAULT_FREE_COMPLIMENTARY_PASSES },
     /** Complimentary passes issued so far (atomic $inc in the offline-issue transaction; never given back). */
     complimentaryIssued: { type: Number, min: 0, default: 0 },
     /** Organiser charges added per ticket (money goes to the organiser). */

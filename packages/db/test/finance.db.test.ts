@@ -54,15 +54,15 @@ describe("finance", () => {
     await admin(() => issueOfflineOrder(orgId, "u", { eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }], method: "cash", note: "Door" }));
     // Organiser's account: 3 × £10 → £34.50; owes £3.
     await admin(() => issueOfflineOrder(orgId, "u", { eventId, customer, items: [{ ticketTypeId: passId, qty: 3 }], method: "bank_transfer", note: "BACS ref 12" }));
-    // Comp: 1 × £10 → £0; inside the event's free allowance (5), so nothing owed.
+    // Comp: 1 × £10 → £0 to the guest; the organiser owes the £1 platform fee (no free allowance).
     await admin(() => issueOfflineOrder(orgId, "u", { eventId, customer, items: [{ ticketTypeId: passId, qty: 1 }], method: "complimentary", note: "Guest" }));
 
     await admin(() => recordCommissionPayment(eventId, "admin", 300, "Part payment, BACS"));
     const f = (await eventFinance(eventId))!;
     expect(f.totalSalesPence).toBe(2300 + 1150 + 3450);
-    expect(f.direct).toEqual({ cashPence: 1150, accountPence: 3450, complimentaryPasses: 1, commissionOwedPence: 400, commissionPaidPence: 300, outstandingPence: 100 });
+    expect(f.direct).toEqual({ cashPence: 1150, accountPence: 3450, complimentaryPasses: 1, commissionOwedPence: 500, commissionPaidPence: 300, outstandingPence: 200 });
     expect(f.platform).toEqual({ grossPence: 2300, organizerCreditedPence: 2100, platformFeesPence: 200, cardFeesPence: 0, ownStripeAccountPence: 0 });
-    expect(f.ourIncomePence).toBe(600);
+    expect(f.ourIncomePence).toBe(700);
     expect(f.payments).toHaveLength(1);
   });
 });

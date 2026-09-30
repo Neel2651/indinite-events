@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DEFAULT_FREE_COMPLIMENTARY_PASSES } from "@indinite/core";
 import { Event, eventFinance, Organizer } from "@indinite/db";
 import { EventPricingForm, RecordPaymentForm } from "@/components/staff/finance-forms";
 import { PageHeader, StatCard } from "@/components/staff/shell";
@@ -80,7 +79,7 @@ export default async function EventFinancePage({ params }: { params: Promise<{ e
           </section>
           <section className="rounded-lg border border-border bg-card p-6">
             <h2 className="mb-3 text-lg">Rates for this event</h2>
-            <EventPricingForm eventId={eventId} commission={pct(event?.commissionBps)} tax={pct(event?.taxBps ?? 0)} organiserRate={pct(organizer?.commissionBps ?? 600)} freeComps={event?.freeComplimentaryPasses ?? DEFAULT_FREE_COMPLIMENTARY_PASSES} compsIssued={event?.complimentaryIssued ?? 0} />
+            <EventPricingForm eventId={eventId} commission={pct(event?.commissionBps)} tax={pct(event?.taxBps ?? 0)} organiserRate={pct(organizer?.commissionBps ?? 600)} compsIssued={event?.complimentaryIssued ?? 0} />
           </section>
         </aside>
       </div>

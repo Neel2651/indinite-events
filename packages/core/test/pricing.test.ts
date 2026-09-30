@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyBps, cardFeePence, complimentaryCommission, discountAmount, DEFAULT_FREE_COMPLIMENTARY_PASSES, discountAsBps, formatGBP, priceOrder, receiptLines, type LineItem } from "../src";
+import { applyBps, cardFeePence, complimentaryCommission, discountAmount, discountAsBps, formatGBP, priceOrder, receiptLines, type LineItem } from "../src";
 
 const one = (price: number, qty = 1): LineItem[] => [{ ticketTypeId: "a", name: "Night pass", unitPricePence: price, qty }];
 const items: LineItem[] = [
@@ -109,38 +109,22 @@ describe("customer-paid card processing fee", () => {
   });
 });
 
-describe("complimentary allowance", () => {
+describe("complimentary passes (no free allowance, 1 Oct 2026)", () => {
   const mixed: LineItem[] = [
     { ticketTypeId: "a", name: "Season adult", unitPricePence: 4500, qty: 2 },
     { ticketTypeId: "b", name: "Night pass", unitPricePence: 1200, qty: 3 },
   ];
 
-  it("charges commission on every pass when there's no allowance left", () => {
-    expect(complimentaryCommission(mixed, 600, 0)).toEqual({ commissionPence: applyBps(9000 + 3600, 600), freePasses: 0, chargedPasses: 5 });
+  it("owes the platform fee on every pass's normal price", () => {
+    expect(complimentaryCommission(mixed, 600)).toBe(applyBps(9000 + 3600, 600));
+    expect(complimentaryCommission(mixed, 0)).toBe(0);
+    expect(() => complimentaryCommission(mixed, -1)).toThrow();
   });
 
-  it("covers the highest-priced passes first, then charges the rest", () => {
-    // 2 free: both season passes; commission on 3 × £12.
-    expect(complimentaryCommission(mixed, 600, 2)).toEqual({ commissionPence: applyBps(3600, 600), freePasses: 2, chargedPasses: 3 });
-    // 4 free: one night pass left to charge.
-    expect(complimentaryCommission(mixed, 600, 4)).toEqual({ commissionPence: 72, freePasses: 4, chargedPasses: 1 });
-  });
-
-  it("is completely free inside the allowance", () => {
-    expect(complimentaryCommission(mixed, 600, 5).commissionPence).toBe(0);
-    expect(complimentaryCommission(mixed, 600, 50)).toEqual({ commissionPence: 0, freePasses: 5, chargedPasses: 0 });
-  });
-
-  it("priceOrder uses the allowance; the customer always pays £0", () => {
-    const p = priceOrder({ items: mixed, commissionBps: 600, taxBps: 2000, complimentary: true, complimentaryFreeLeft: 4 });
+  it("the customer pays £0; commission is on the full normal price", () => {
+    const p = priceOrder({ items: mixed, commissionBps: 600, taxBps: 2000, complimentary: true });
     expect(p.totalPence).toBe(0);
-    expect(p.commissionPence).toBe(72);
-    expect(priceOrder({ items: mixed, commissionBps: 600, complimentary: true }).commissionPence).toBe(applyBps(12600, 600));
-  });
-
-  it("defaults to 5 per event and rejects a negative allowance", () => {
-    expect(DEFAULT_FREE_COMPLIMENTARY_PASSES).toBe(5);
-    expect(() => complimentaryCommission(mixed, 600, -1)).toThrow();
+    expect(p.commissionPence).toBe(applyBps(12600, 600));
   });
 });
 

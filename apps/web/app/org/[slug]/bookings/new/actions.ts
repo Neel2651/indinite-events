@@ -17,6 +17,7 @@ export async function issueOfflineAction(slug: string, payload: unknown): Promis
   if (!can("order.issueOffline")) return { ok: false, error: "You don't have permission to issue bookings." };
   const parsed = offlineIssueSchema.safeParse(payload);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the details and try again." };
+  if (parsed.data.method === "complimentary" && !can("order.issueComplimentary")) return { ok: false, error: "Only the organiser's owner can issue complimentary passes." };
   try {
     const { order, ticketsIssued } = await asStaff(user, () => issueOfflineOrder(organizer.id, user.id, parsed.data), organizer.id);
     const t = signOrderLink(order.publicId, linkSecret());

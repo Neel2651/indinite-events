@@ -38,7 +38,7 @@ export function RecordPaymentForm({ eventId, outstandingPounds }: { eventId: str
   );
 }
 
-export function EventPricingForm({ eventId, commission, tax, organiserRate, freeComps, compsIssued }: { eventId: string; commission: string; tax: string; organiserRate: string; freeComps: number; compsIssued: number }) {
+export function EventPricingForm({ eventId, commission, tax, organiserRate, compsIssued }: { eventId: string; commission: string; tax: string; organiserRate: string; compsIssued: number }) {
   const [state, action, pending] = useActionState<State, FormData>(eventPricingAction.bind(null, eventId), null);
   return (
     <form action={action} className="space-y-3">
@@ -52,13 +52,9 @@ export function EventPricingForm({ eventId, commission, tax, organiserRate, free
         <input name="tax" type="number" min={0} max={100} step={0.01} defaultValue={tax} className={inputClass} />
         <span className="mt-1 block text-xs text-muted-foreground">Charged on tickets + platform fee + charges. 0 if not applicable.</span>
       </label>
-      <label className="block text-sm">
-        Free complimentary passes
-        <input name="freeComps" type="number" min={0} max={10000} step={1} defaultValue={freeComps} className={inputClass} />
-        <span className="mt-1 block text-xs text-muted-foreground">
-          No commission on this many complimentary passes. After that the organiser owes the platform fee on each pass&apos;s normal price. {compsIssued} issued so far.
-        </span>
-      </label>
+      <p className="text-xs text-muted-foreground">
+        Complimentary passes: {compsIssued} issued so far. The organiser owes the platform fee on each one&apos;s normal price (no free allowance, no limit).
+      </p>
       <FormError message={state?.error} />
       <Ok state={state} />
       <button type="submit" disabled={pending} className="rounded-full border border-border px-5 py-2.5 font-semibold disabled:opacity-60">

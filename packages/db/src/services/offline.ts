@@ -1,5 +1,5 @@
 
-import { available, bookability, DEFAULT_FREE_COMPLIMENTARY_PASSES, generatePublicId, type AuthUser, offlineIssueSchema, paymentLinkBookingSchema, priceOrder, type LineItem, type OfflineIssueInput, type PaymentLinkBookingInput } from "@indinite/core";
+import { available, bookability, generatePublicId, type AuthUser, offlineIssueSchema, paymentLinkBookingSchema, priceOrder, type LineItem, type OfflineIssueInput, type PaymentLinkBookingInput } from "@indinite/core";
 import { audited } from "../audit";
 import { enqueueSendTickets } from "../jobs";
 import { CommissionLedger } from "../models/commission-ledger";
@@ -78,21 +78,10 @@ export async function issueOfflineOrder(organizerId: string, issuedBy: string, r
             throw e;
           }
         }
-        // Complimentary allowance (SPEC §4.7): count these passes atomically, then charge commission only on
-        // those beyond the event's free allowance. Aborting the transaction gives the count back.
-        let price = basePrice;
-        let freeComplimentary = 0;
-        if (complimentary) {
-          const counted = await Event.findOneAndUpdate(
-            { _id: event._id },
-            { $inc: { complimentaryIssued: compQty } },
-            { session, new: true, projection: { complimentaryIssued: 1, freeComplimentaryPasses: 1 } },
-          ).lean();
-          const allowance = counted!.freeComplimentaryPasses ?? DEFAULT_FREE_COMPLIMENTARY_PASSES;
-          const freeLeft = Math.max(0, allowance - (counted!.complimentaryIssued - compQty));
-          price = priceOrder({ items, ...settings, complimentary, complimentaryFreeLeft: freeLeft });
-          freeComplimentary = Math.min(freeLeft, compQty);
-        }
+        // Complimentary passes (SPEC §4.7, 1 Oct 2026): no limit and no free allowance; the platform fee is owed on
+        // every pass's normal price. Count them for the finance view (aborting the transaction gives the count back).
+        const price = basePrice;
+        if (complimentary) await Event.updateOne({ _id: event._id }, { $inc: { complimentaryIssued: compQty } }, { session });
         const now = new Date();
         const [order] = await Order.create(
           [
@@ -121,7 +110,7 @@ export async function issueOfflineOrder(organizerId: string, issuedBy: string, r
         const tickets = await issueTickets(order!, session, privateKey);
         if (price.commissionPence > 0) {
           await CommissionLedger.create(
-            [{ organizerId: organizer._id, eventId: event._id, orderId: order!._id, amountPence: price.commissionPence, kind: "offline_sale_owed", note: complimentary ? `${OFFLINE_METHOD_LABELS[input.method]} ${publicId}: ${compQty - freeComplimentary} of ${compQty} passes over the free allowance` : `${OFFLINE_METHOD_LABELS[input.method]} ${publicId}` }],
+            [{ organizerId: organizer._id, eventId: event._id, orderId: order!._id, amountPence: price.commissionPence, kind: "offline_sale_owed", note: complimentary ? `${OFFLINE_METHOD_LABELS[input.method]} ${publicId}: ${compQty} pass${compQty === 1 ? "" : "es"}` : `${OFFLINE_METHOD_LABELS[input.method]} ${publicId}` }],
             { session },
           );
         }
@@ -131,7 +120,7 @@ export async function issueOfflineOrder(organizerId: string, issuedBy: string, r
           after: order!.toObject(),
           reason: input.note,
           organizerId: organizer._id,
-          metadata: { method: input.method, tickets: tickets.length, commissionOwedPence: price.commissionPence, ...(complimentary ? { freeComplimentaryPasses: freeComplimentary } : {}) },
+          metadata: { method: input.method, tickets: tickets.length, commissionOwedPence: price.commissionPence },
         });
         await enqueueSendTickets({ orderId: String(order!._id), reason: "offline_issued" }, { session });
         return { order: order!.toObject(), ticketsIssued: tickets.length };

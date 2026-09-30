@@ -20,9 +20,6 @@ export interface BookableEvent {
   charges: OrderCharge[];
   /** Applies to payment links only (card payments). */
   cardFee: CardFeeSettings;
-  /** Complimentary passes free of commission for this event, and how many are left. */
-  freeComplimentaryPasses: number;
-  freeComplimentaryLeft: number;
   ticketTypes: {
     id: string;
     name: string;
@@ -42,7 +39,7 @@ export interface BookableEvent {
 const METHODS = [
   { value: "cash", label: "Cash", help: "Customer paid you in cash" },
   { value: "bank_transfer", label: "Organiser's account", help: "Paid into your bank account" },
-  { value: "complimentary", label: "Complimentary", help: "Free: guests, sponsors, volunteers" },
+  { value: "complimentary", label: "Complimentary", help: "Free for the guest: sponsors, volunteers, VIPs" },
   { value: "payment_link", label: "Generate payment link", help: "Email the customer a link to pay by card" },
 ] as const;
 type Method = (typeof METHODS)[number]["value"];
@@ -59,18 +56,21 @@ export function OfflineBookingForm({
   events,
   canPaymentLink,
   canOffline,
+  canComplimentary = false,
   discountLimitBps = 0,
 }: {
   slug: string;
   events: BookableEvent[];
   canPaymentLink: boolean;
   canOffline: boolean;
+  /** Complimentary passes: organiser owner (or super admin) only. */
+  canComplimentary?: boolean;
   /** Most this user may discount a payment link (bps of the ticket subtotal); 0 = not allowed. */
   discountLimitBps?: number;
 }) {
   const [eventId, setEventId] = useState(events[0]?.id ?? "");
   const [qty, setQty] = useState<Record<string, number>>({});
-  const methods = METHODS.filter((m) => (m.value === "payment_link" ? canPaymentLink : canOffline));
+  const methods = METHODS.filter((m) => (m.value === "payment_link" ? canPaymentLink : m.value === "complimentary" ? canOffline && canComplimentary : canOffline));
   const [method, setMethod] = useState<Method>(methods[0]?.value ?? "cash");
   const [couponInput, setCouponInput] = useState("");
   const [coupon, setCoupon] = useState<{ code: string; rule: Discount } | null>(null);
@@ -100,7 +100,6 @@ export function OfflineBookingForm({
           charges: event.charges,
           discount: complimentary ? undefined : (coupon?.rule ?? staffDiscount),
           complimentary,
-          complimentaryFreeLeft: complimentary ? event.freeComplimentaryLeft : undefined,
           cardFee: method === "payment_link" ? event.cardFee : undefined,
         })
       : null;
@@ -358,7 +357,7 @@ export function OfflineBookingForm({
 
         {complimentary && event && (
           <p className="rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">
-            {event.freeComplimentaryLeft} of {event.freeComplimentaryPasses} free complimentary passes left for this event. Extra passes owe Indinite the platform fee on their normal price.
+            Free for the guest. Each complimentary pass owes Indinite the platform fee ({(event.commissionBps / 100).toFixed(2).replace(/\.?0+$/, "")}%) on its normal price.
           </p>
         )}
 

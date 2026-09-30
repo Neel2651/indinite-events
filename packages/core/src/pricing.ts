@@ -56,13 +56,8 @@ export interface PricingInput {
   taxBps?: number;
   /** Coupon, applied to the ticket price before fees. */
   discount?: Discount;
-  /** Free passes: customer pays nothing, but commission is still owed on the normal price. */
+  /** Free passes: customer pays nothing, but commission is still owed on every pass's normal price. */
   complimentary?: boolean;
-  /**
-   * Complimentary only: passes still inside the event's commission-free allowance. Undefined = no allowance
-   * (commission on every pass).
-   */
-  complimentaryFreeLeft?: number;
   /** Card bookings only: when `payer` is "customer", a card processing fee is added after tax. */
   cardFee?: CardFeeSettings;
 }
@@ -94,7 +89,7 @@ export interface OrderPricing {
  *   = 12.00 + 0.72 + 0.30 + 2.60 = £15.62.
  */
 export function priceOrder(input: PricingInput): OrderPricing {
-  const { items, commissionBps, charges = [], taxBps = 0, discount, complimentary = false, complimentaryFreeLeft, cardFee } = input;
+  const { items, commissionBps, charges = [], taxBps = 0, discount, complimentary = false, cardFee } = input;
   if (items.length === 0) throw new Error("Order must contain at least one item");
   assertBps(commissionBps, "commissionBps");
   assertBps(taxBps, "taxBps");
@@ -109,7 +104,7 @@ export function priceOrder(input: PricingInput): OrderPricing {
   }
 
   if (complimentary) {
-    const { commissionPence } = complimentaryCommission(items, commissionBps, complimentaryFreeLeft ?? 0);
+    const commissionPence = complimentaryCommission(items, commissionBps);
     return {
       subtotalPence,
       discountPence: subtotalPence,
@@ -166,21 +161,13 @@ export function priceOrder(input: PricingInput): OrderPricing {
   };
 }
 
-/** Commission-free complimentary passes per event unless the super admin changes it (agreed 28 Sep 2026). */
-export const DEFAULT_FREE_COMPLIMENTARY_PASSES = 5;
-
 /**
- * Commission on complimentary passes (SPEC §4.7): the first `freeLeft` passes are free of commission, and the
- * organiser owes the platform fee on each further pass's normal price. The allowance covers the highest-priced
- * passes first.
+ * Commission on complimentary passes (SPEC §4.7, agreed 1 Oct 2026): no limit on how many an organiser owner issues,
+ * and no free allowance. The organiser owes Indinite the platform fee on every pass's normal price.
  */
-export function complimentaryCommission(items: LineItem[], commissionBps: number, freeLeft: number): { commissionPence: Pence; freePasses: number; chargedPasses: number } {
+export function complimentaryCommission(items: LineItem[], commissionBps: number): Pence {
   assertBps(commissionBps, "commissionBps");
-  if (!Number.isInteger(freeLeft) || freeLeft < 0) throw new Error(`freeLeft must be a non-negative integer, got ${freeLeft}`);
-  const prices = items.flatMap((i) => Array.from({ length: i.qty }, () => i.unitPricePence)).sort((a, b) => b - a);
-  const freePasses = Math.min(freeLeft, prices.length);
-  const chargeable = prices.slice(freePasses).reduce((s, p) => s + p, 0);
-  return { commissionPence: applyBps(chargeable, commissionBps), freePasses, chargedPasses: prices.length - freePasses };
+  return applyBps(items.reduce((s, i) => s + i.unitPricePence * i.qty, 0), commissionBps);
 }
 
 function assertBps(v: number, label: string) {
