@@ -139,6 +139,16 @@ Do these in Stripe test mode first, then again in live mode (each mode has its o
 Testing locally: `stripe listen --forward-to localhost:3001/api/webhooks/stripe --forward-connect-to localhost:3001/api/webhooks/stripe`
 prints one signing secret; put it in both `STRIPE_WEBHOOK_SECRET` and `STRIPE_CONNECT_WEBHOOK_SECRET`.
 
+## Check the settings
+After creating or editing `.env.local`, run from the project folder:
+```bash
+pnpm check:env
+```
+It checks every setting (URLs, secrets, QR key pair, database connection and super admin, Stripe keys and which
+Stripe account they belong to, the Resend key and sending domain, the media folder) without printing any secret.
+✗ must be fixed; ! is worth a look. It only reads; nothing is changed. `pnpm check:env -- --offline` skips the network
+checks.
+
 ## Live server: first-time database setup
 The demo seeds refuse to run on a live server (`NODE_ENV=production` without `DEPLOY_ENV=staging`). Instead, on a
 new, empty live database run, once, from the project folder:

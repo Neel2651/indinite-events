@@ -14,7 +14,8 @@
     "sync-indexes": "tsx --env-file-if-exists=../../.env.local scripts/sync-indexes.ts",
     "seed": "tsx --env-file-if-exists=../../.env.local scripts/seed.ts",
     "requeue-failed-jobs": "tsx --env-file-if-exists=../../.env.local scripts/requeue-failed-jobs.ts",
-    "backfill-pass-codes": "tsx --env-file-if-exists=../../.env.local scripts/backfill-pass-codes.ts"
+    "backfill-pass-codes": "tsx --env-file-if-exists=../../.env.local scripts/backfill-pass-codes.ts",
+    "check-env": "tsx --env-file-if-exists=../../.env.local scripts/check-env.ts"
   },
   "dependencies": {
     "@indinite/core": "workspace:*",
