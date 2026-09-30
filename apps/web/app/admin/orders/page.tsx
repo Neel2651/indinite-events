@@ -65,15 +65,16 @@ export default async function AdminOrdersPage({ searchParams }: Props) {
           </Link>
         </p>
       )}
-      <form className="mb-4 flex flex-wrap gap-3" role="search">
+      {/* One line on laptops and wider; a tidy two-column grid on smaller screens. */}
+      <form className="mb-4 grid grid-cols-2 gap-3 lg:flex lg:items-center" role="search">
         <label className="sr-only" htmlFor="q">
           Search
         </label>
-        <input id="q" name="q" defaultValue={q} placeholder="Order ref, name or email" className={`${inputClass} mt-0 max-w-xs`} />
+        <input id="q" name="q" defaultValue={q} placeholder="Order ref, name or email" className={`${inputClass} h-11 col-span-2 mt-0! min-w-0 lg:flex-1`} />
         <label className="sr-only" htmlFor="org">
           Organiser
         </label>
-        <select id="org" name="org" defaultValue={org} className={`${inputClass} mt-0 w-auto`}>
+        <select id="org" name="org" defaultValue={org} className={`${inputClass} h-11 mt-0! min-w-0 lg:w-40! lg:shrink-0`}>
           <option value="">All organisers</option>
           {organisers.map((o) => (
             <option key={String(o._id)} value={String(o._id)}>
@@ -84,7 +85,7 @@ export default async function AdminOrdersPage({ searchParams }: Props) {
         <label className="sr-only" htmlFor="event">
           Event
         </label>
-        <select id="event" name="event" defaultValue={event} className={`${inputClass} mt-0 w-auto max-w-xs`}>
+        <select id="event" name="event" defaultValue={event} className={`${inputClass} h-11 mt-0! min-w-0 lg:w-44! lg:shrink-0`}>
           <option value="">All events</option>
           {events.map((e) => (
             <option key={String(e._id)} value={String(e._id)}>
@@ -95,7 +96,7 @@ export default async function AdminOrdersPage({ searchParams }: Props) {
         <label className="sr-only" htmlFor="status">
           Status
         </label>
-        <select id="status" name="status" defaultValue={status} className={`${inputClass} mt-0 w-auto`}>
+        <select id="status" name="status" defaultValue={status} className={`${inputClass} h-11 mt-0! min-w-0 lg:w-36! lg:shrink-0`}>
           <option value="">Any status</option>
           {Object.entries(STATUS).map(([v, l]) => (
             <option key={v} value={v}>
@@ -106,7 +107,7 @@ export default async function AdminOrdersPage({ searchParams }: Props) {
         <label className="sr-only" htmlFor="how">
           How sold
         </label>
-        <select id="how" name="how" defaultValue={how} className={`${inputClass} mt-0 w-auto`}>
+        <select id="how" name="how" defaultValue={how} className={`${inputClass} h-11 mt-0! min-w-0 lg:w-40! lg:shrink-0`}>
           <option value="">Any payment type</option>
           {Object.entries(HOW).map(([v, l]) => (
             <option key={v} value={v}>
@@ -115,7 +116,7 @@ export default async function AdminOrdersPage({ searchParams }: Props) {
           ))}
         </select>
         {review === "1" && <input type="hidden" name="review" value="1" />}
-        <button type="submit" className="rounded-full border border-border bg-card px-5 font-semibold">
+        <button type="submit" className="col-span-2 rounded-full border border-border bg-card h-11 px-5 font-semibold lg:shrink-0">
           Search
         </button>
       </form>

@@ -56,24 +56,25 @@ export default async function OrdersPage({ params, searchParams }: Props) {
           </Link>
         </p>
       )}
-      <form className="mb-4 flex flex-wrap gap-3" role="search">
+      {/* One line on every screen size: search fills the space. */}
+      <form className="mb-4 flex items-center gap-2 sm:gap-3" role="search">
         {couponCode && <input type="hidden" name="coupon" value={couponCode} />}
         <label htmlFor="orders-q" className="sr-only">
           Search orders
         </label>
-        <input id="orders-q" name="q" type="search" defaultValue={q} placeholder="Search by order ref, name or email" className={`${inputClass} mt-0 max-w-sm`} />
+        <input id="orders-q" name="q" type="search" defaultValue={q} placeholder="Ref, name or email" className={`${inputClass} h-11 mt-0! min-w-0 flex-1`} />
         <label htmlFor="orders-how" className="sr-only">
           Payment type
         </label>
-        <select id="orders-how" name="how" defaultValue={how} className={`${inputClass} mt-0 w-auto`}>
-          <option value="">All payment types</option>
+        <select id="orders-how" name="how" defaultValue={how} className={`${inputClass} h-11 mt-0! w-32! shrink-0 sm:w-48!`}>
+          <option value="">All payments</option>
           {Object.entries(HOW).map(([v, l]) => (
             <option key={v} value={v}>
               {l}
             </option>
           ))}
         </select>
-        <button type="submit" className="rounded-full border border-border bg-card px-5 font-semibold">
+        <button type="submit" className="shrink-0 rounded-full border border-border bg-card h-11 px-4 font-semibold sm:px-5">
           Search
         </button>
       </form>
