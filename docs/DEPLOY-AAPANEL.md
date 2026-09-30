@@ -139,6 +139,15 @@ Do these in Stripe test mode first, then again in live mode (each mode has its o
 Testing locally: `stripe listen --forward-to localhost:3001/api/webhooks/stripe --forward-connect-to localhost:3001/api/webhooks/stripe`
 prints one signing secret; put it in both `STRIPE_WEBHOOK_SECRET` and `STRIPE_CONNECT_WEBHOOK_SECRET`.
 
+## Organiser owners
+Organiser owners create and manage their own events (organiser panel → Events). Permissions come from each person's
+role, so existing owners need no database change. To check every organiser has an owner:
+```bash
+pnpm owners
+```
+To make someone an owner (an existing member is promoted; anyone else is emailed an owner invitation; it asks
+first and is audited): `pnpm owners -- --make-owner name@example.com organiser-slug`.
+
 ## Check the settings
 After creating or editing `.env.local`, run from the project folder:
 ```bash

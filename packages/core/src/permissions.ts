@@ -34,12 +34,11 @@ export const PERMISSIONS = [
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
-/** Permissions only the platform (Indinite) super admin holds. */
+/**
+ * Permissions only the platform (Indinite) super admin holds. Events and pass types moved to organiser owners on
+ * 1 Oct 2026; organiser settings, Indinite's fee and tax, and the global audit log stay here.
+ */
 const PLATFORM_ONLY: ReadonlySet<Permission> = new Set([
-  "event.create",
-  "event.delete",
-  "event.update",
-  "ticketType.manage",
   "organizer.manage",
   "finance.manage",
   "audit.readGlobal",
@@ -47,6 +46,10 @@ const PLATFORM_ONLY: ReadonlySet<Permission> = new Set([
 
 export const ROLE_PERMISSIONS: Record<OrgRole, ReadonlySet<Permission>> = {
   owner: new Set<Permission>([
+    "event.create",
+    "event.update",
+    "event.delete",
+    "ticketType.manage",
     "event.read",
     "event.manageCharges",
     "event.manageSales",

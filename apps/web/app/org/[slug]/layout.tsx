@@ -11,6 +11,7 @@ export default async function OrgLayout({ children, params }: { children: React.
   const { user, organizer, role, can } = await requireOrg(slug);
   const base = `/org/${organizer.slug}`;
   const nav: { href: string; label: string; exact?: boolean }[] = [{ href: base, label: "Dashboard", exact: true }];
+  if (can("event.update")) nav.push({ href: `${base}/events`, label: "Events" });
   if (can("order.read")) nav.push({ href: `${base}/orders`, label: "Orders" });
   if (can("order.issueOffline")) nav.push({ href: `${base}/bookings/new`, label: "New booking" });
   if (can("coupon.manage")) nav.push({ href: `${base}/coupons`, label: "Coupons" });

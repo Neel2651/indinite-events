@@ -17,3 +17,14 @@ export function askHidden(question: string): Promise<string> {
     muted = true;
   });
 }
+
+/** Ask a visible question (e.g. "y/N"). */
+export function ask(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}

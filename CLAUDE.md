@@ -37,7 +37,9 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
 - Demo videos: `pnpm --filter @indinite/e2e demo:videos [booking|organiser|scanning]` → `e2e/demo-videos/out/`.
 - `apps/web/lib/queries.ts`: public read models for events.
 - Installable staff app: `public/app.webmanifest` + `lib/app-meta.ts` (org, admin, scan layouts), one service worker
-  `public/scan-sw.js` (scanner offline, `/offline` page for staff screens), phone tabs `components/staff/mobile-nav.tsx`.
+  `public/scan-sw.js` (scanner offline, `/offline` page for staff screens; not registered under `next dev`), phone tabs `components/staff/mobile-nav.tsx`.
+- Events: one editor (`components/staff/event-editor.tsx`) for Admin → Events and the organiser panel (`/org/[slug]/events`,
+  owners). Event actions (`app/admin/events/actions.ts`) check permission against the event's organiser from the DB.
 
 ## Commands
 - `pnpm dev` — web + worker
@@ -46,6 +48,7 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
 - `pnpm --filter @indinite/db seed` / `sync-indexes`; `seed -- --update` adds and updates demo data in place (keeps orders), `--reset` replaces it.
   Seeds refuse on a live server (`NODE_ENV=production` without `DEPLOY_ENV=staging`)
 - `pnpm setup:production <email>` — live database: collections, indexes and the first super admin (asks for the password)
+- `pnpm owners` — each organiser's owners (they manage their own events); `-- --make-owner <email> <slug>`
 - `pnpm check:env` — checks this server's settings (formats, database, Stripe, Resend, QR key pair); never prints secrets. `-- --offline` skips network calls
 - `LOAD_BASE_URL=… pnpm --filter @indinite/e2e test:load` — load test (sales rush) against a demo server; see `e2e/tests/load.ts`
 - `pnpm lint` — ESLint (TypeScript, Next.js, jsx-a11y accessibility rules); must have no errors

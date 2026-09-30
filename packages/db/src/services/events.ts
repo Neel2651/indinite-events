@@ -14,8 +14,9 @@ import { quota, QuotaTooLowError } from "../quota";
 import { withTransaction } from "../transaction";
 
 /**
- * Super admin event management (SPEC §1, M2): events, nights, ticket types and media. Callers check
- * `event.create` / `event.update` / `event.delete` / `ticketType.manage` (super admin only) first.
+ * Event management (SPEC §1, M2): events, nights, ticket types and media. Callers check `event.create` /
+ * `event.update` / `event.delete` / `ticketType.manage` first: super admins, and organiser owners for their own
+ * organiser's events (1 Oct 2026).
  */
 
 export class EventAdminError extends Error {

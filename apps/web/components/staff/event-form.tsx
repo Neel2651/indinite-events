@@ -46,7 +46,23 @@ function nextNight(prev: NightRow | undefined, n: number): NightRow {
   return { label: `Night ${n}`, start: bump(prev?.start ?? ""), end: bump(prev?.end ?? "") };
 }
 
-export function EventForm({ eventId, organisers, initial }: { eventId?: string; organisers?: { id: string; name: string }[]; initial?: EventFormValues }) {
+/**
+ * `organisers`: admin chooses the organiser. `organizerId`: fixed (an owner creating an event in their panel).
+ * `returnTo`: the events list the new event's page lives under (admin or this organiser's panel).
+ */
+export function EventForm({
+  eventId,
+  organisers,
+  organizerId,
+  returnTo = "/admin/events",
+  initial,
+}: {
+  eventId?: string;
+  organisers?: { id: string; name: string }[];
+  organizerId?: string;
+  returnTo?: string;
+  initial?: EventFormValues;
+}) {
   const [state, action, pending] = useActionState<ActionState, FormData>(eventId ? updateEventAction.bind(null, eventId) : createEventAction, null);
   const [title, setTitle] = useState(initial?.title ?? "");
   const [slug, setSlug] = useState(initial?.slug ?? "");
@@ -57,8 +73,10 @@ export function EventForm({ eventId, organisers, initial }: { eventId?: string; 
 
   return (
     <form action={action} className="space-y-6">
+      <input type="hidden" name="returnTo" value={returnTo} />
+      {organizerId && <input type="hidden" name="organizerId" value={organizerId} />}
       <div className="grid gap-4 sm:grid-cols-2">
-        {organisers && (
+        {organisers && !organizerId && (
           <label className="block text-sm sm:col-span-2">
             Organiser
             <select name="organizerId" required className={inputClass} defaultValue="">

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ZodError } from "zod";
-import { londonLocalToUtc } from "@indinite/core";
+import { can, londonLocalToUtc, type Permission } from "@indinite/core";
 import {
   addEventImage,
   addEventVideo,
@@ -13,8 +13,11 @@ import {
   deleteDayPass,
   deleteEvent,
   deleteTicketType,
+  Event,
   EventAdminError,
+  Organizer,
   removeEventMedia,
+  TicketType,
   reorderEventMedia,
   setBookingsClosed,
   setEventStatus,
@@ -22,13 +25,57 @@ import {
   updateEvent,
   updateTicketType,
 } from "@indinite/db";
-import { asStaff, requireSuperAdmin } from "@/lib/staff";
+import { asStaff, requireStaff } from "@/lib/staff";
 
 export type ActionState = { error?: string; ok?: string } | null;
+
+/**
+ * Event actions are shared by Admin → Events and the organiser panel (owners manage their own events, 1 Oct 2026).
+ * Every action checks the permission against the event's organiser, read from the database, never from the form.
+ */
+class NotAllowed extends Error {}
+
+async function authorizeEvent(eventId: string, permission: Permission) {
+  const user = await requireStaff();
+  const event = /^[a-f0-9]{24}$/.test(eventId) ? await Event.findOne({ _id: eventId, deletedAt: null }, { organizerId: 1 }).lean() : null;
+  if (!event) throw new EventAdminError("Event not found.", 404);
+  const organizerId = String(event.organizerId);
+  if (!can(user, permission, { organizerId })) throw new NotAllowed();
+  const org = await Organizer.findById(organizerId, { slug: 1 }).lean();
+  return { user, organizerId, slug: org?.slug ?? null };
+}
+
+/** A pass type (or day pass group) id from the browser must belong to the event the user was authorised for. */
+async function assertOnEvent(eventId: string, query: { ticketTypeId?: string; groupId?: string }) {
+  const id = query.ticketTypeId ?? query.groupId ?? "";
+  if (!/^[a-f0-9]{24}$/.test(id)) throw new EventAdminError("Pass type not found.", 404);
+  const found = await TicketType.exists(query.ticketTypeId ? { _id: id, eventId } : { "dayPass.groupId": id, eventId });
+  if (!found) throw new NotAllowed();
+}
+
+/** Refresh every page that shows this event: admin, the organiser panel and the public site. */
+function revalidateEvent(eventId: string, slug: string | null) {
+  revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/admin/events");
+  if (slug) {
+    revalidatePath(`/org/${slug}/events/${eventId}`);
+    revalidatePath(`/org/${slug}/events`);
+    revalidatePath(`/org/${slug}`);
+  }
+  revalidatePath("/");
+}
+
+/** Where to go after creating or deleting: the admin list (super admin) or this organiser's events list. */
+function safeReturn(returnTo: string, user: { isSuperAdmin: boolean }, slug: string | null): string {
+  if (slug && returnTo === `/org/${slug}/events`) return returnTo;
+  if (user.isSuperAdmin && returnTo === "/admin/events") return returnTo;
+  return user.isSuperAdmin ? "/admin/events" : slug ? `/org/${slug}/events` : "/org";
+}
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 
 function failure(e: unknown, fallback: string): ActionState {
+  if (e instanceof NotAllowed) return { error: "You don't have permission to change this event." };
   if (e instanceof EventAdminError) return { error: e.message };
   if (e instanceof ZodError) return { error: e.issues[0]?.message ?? fallback };
   console.error("[admin events]", e instanceof Error ? e.message : e);
@@ -79,103 +126,105 @@ function eventFields(form: FormData) {
 }
 
 export async function createEventAction(_: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireSuperAdmin();
+  const user = await requireStaff();
+  const organizerId = text(form, "organizerId");
+  if (!/^[a-f0-9]{24}$/.test(organizerId)) return { error: "Choose an organiser." };
+  // Owners can create events only for an organiser they own; super admins for any.
+  if (!can(user, "event.create", { organizerId })) return { error: "You don't have permission to create events for this organiser." };
+  const slug = (await Organizer.findById(organizerId, { slug: 1 }).lean())?.slug ?? null;
   let id: string;
   try {
-    const organizerId = text(form, "organizerId");
     const event = await asStaff(user, () => createEvent({ organizerId, status: "draft", ...eventFields(form) }), organizerId);
     id = String(event._id);
   } catch (e) {
     return failure(e, "Couldn't create the event.");
   }
-  revalidatePath("/admin/events");
-  redirect(`/admin/events/${id}?created=1`);
+  revalidateEvent(id, slug);
+  redirect(`${safeReturn(text(form, "returnTo"), user, slug)}/${id}?created=1`);
 }
 
 export async function updateEventAction(eventId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   try {
-    await asStaff(user, () => updateEvent(eventId, eventFields(form)));
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "event.update");
+    await asStaff(user, () => updateEvent(eventId, eventFields(form)), organizerId);
+    revalidateEvent(eventId, slug);
   } catch (e) {
     return failure(e, "Couldn't save the event.");
   }
-  revalidatePath(`/admin/events/${eventId}`);
-  revalidatePath("/");
   return { ok: "Event saved." };
 }
 
 export async function setEventStatusAction(eventId: string, status: "draft" | "published" | "archived"): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   try {
-    await asStaff(user, () => setEventStatus(eventId, status));
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "event.update");
+    await asStaff(user, () => setEventStatus(eventId, status), organizerId);
+    revalidateEvent(eventId, slug);
   } catch (e) {
     return failure(e, "Couldn't change the status.");
   }
-  revalidatePath(`/admin/events/${eventId}`);
-  revalidatePath("/admin/events");
-  revalidatePath("/");
   return { ok: status === "published" ? "Published. It's now on the public site." : status === "draft" ? "Unpublished. It's hidden from the public site." : "Archived." };
 }
 
 export async function deleteEventAction(eventId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   if (text(form, "confirm") !== "DELETE") return { error: "Type DELETE to confirm." };
+  let back: string;
   try {
-    await asStaff(user, () => deleteEvent(eventId, text(form, "reason")));
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "event.delete");
+    await asStaff(user, () => deleteEvent(eventId, text(form, "reason")), organizerId);
+    revalidateEvent(eventId, slug);
+    back = safeReturn(text(form, "returnTo"), user, slug);
   } catch (e) {
     return failure(e, "Couldn't delete the event.");
   }
-  revalidatePath("/admin/events");
-  revalidatePath("/");
-  redirect("/admin/events?deleted=1");
+  redirect(`${back}?deleted=1`);
 }
 
 // ─── Media ───
 
 export async function uploadImageAction(eventId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   const file = form.get("image");
   if (!(file instanceof File) || file.size === 0) return { error: "Choose an image to upload." };
   try {
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "event.update");
     const bytes = new Uint8Array(await file.arrayBuffer());
-    await asStaff(user, () => addEventImage(eventId, { bytes, alt: text(form, "alt") }));
+    await asStaff(user, () => addEventImage(eventId, { bytes, alt: text(form, "alt") }), organizerId);
+    revalidateEvent(eventId, slug);
   } catch (e) {
     return failure(e, "Couldn't upload that image.");
   }
-  revalidatePath(`/admin/events/${eventId}`);
   return { ok: "Image added." };
 }
 
 export async function addVideoAction(eventId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   try {
-    await asStaff(user, () => addEventVideo(eventId, text(form, "url"), text(form, "alt")));
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "event.update");
+    await asStaff(user, () => addEventVideo(eventId, text(form, "url"), text(form, "alt")), organizerId);
+    revalidateEvent(eventId, slug);
   } catch (e) {
     return failure(e, "Couldn't add that video.");
   }
-  revalidatePath(`/admin/events/${eventId}`);
   return { ok: "Video added." };
 }
 
 export async function removeMediaAction(eventId: string, url: string): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   try {
-    await asStaff(user, () => removeEventMedia(eventId, url));
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "event.update");
+    await asStaff(user, () => removeEventMedia(eventId, url), organizerId);
+    revalidateEvent(eventId, slug);
   } catch (e) {
     return failure(e, "Couldn't remove it.");
   }
-  revalidatePath(`/admin/events/${eventId}`);
   return { ok: "Removed." };
 }
 
 export async function reorderMediaAction(eventId: string, urls: string[]): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   try {
-    await asStaff(user, () => reorderEventMedia(eventId, urls));
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "event.update");
+    await asStaff(user, () => reorderEventMedia(eventId, urls), organizerId);
+    revalidateEvent(eventId, slug);
   } catch (e) {
     return failure(e, "Couldn't change the order.");
   }
-  revalidatePath(`/admin/events/${eventId}`);
   return { ok: "Order saved." };
 }
 
@@ -206,32 +255,34 @@ function ticketTypeFields(form: FormData) {
 }
 
 export async function createTicketTypeAction(eventId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   try {
-    await asStaff(user, () => createTicketType({ eventId, ...ticketTypeFields(form) }));
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "ticketType.manage");
+    await asStaff(user, () => createTicketType({ eventId, ...ticketTypeFields(form) }), organizerId);
+    revalidateEvent(eventId, slug);
   } catch (e) {
     return failure(e, "Couldn't add the pass type.");
   }
-  revalidatePath(`/admin/events/${eventId}`);
   return { ok: "Pass type added." };
 }
 
 export async function updateTicketTypeAction(eventId: string, ticketTypeId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   try {
-    await asStaff(user, () => updateTicketType(ticketTypeId, ticketTypeFields(form)));
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "ticketType.manage");
+    await assertOnEvent(eventId, { ticketTypeId });
+    await asStaff(user, () => updateTicketType(ticketTypeId, ticketTypeFields(form)), organizerId);
+    revalidateEvent(eventId, slug);
   } catch (e) {
     return failure(e, "Couldn't save the pass type.");
   }
-  revalidatePath(`/admin/events/${eventId}`);
   return { ok: "Pass type saved. New bookings use these details; existing bookings keep theirs." };
 }
 
 export async function deleteTicketTypeAction(eventId: string, ticketTypeId: string): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   try {
-    const { mode } = await asStaff(user, () => deleteTicketType(ticketTypeId));
-    revalidatePath(`/admin/events/${eventId}`);
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "ticketType.manage");
+    await assertOnEvent(eventId, { ticketTypeId });
+    const { mode } = await asStaff(user, () => deleteTicketType(ticketTypeId), organizerId);
+    revalidateEvent(eventId, slug);
     return { ok: mode === "deleted" ? "Pass type deleted." : "Passes of this type have been sold, so it's been switched off instead of deleted." };
   } catch (e) {
     return failure(e, "Couldn't delete the pass type.");
@@ -273,32 +324,34 @@ function dayPassFields(form: FormData, sessionIds: string[]) {
 }
 
 export async function createDayPassAction(eventId: string, sessionIds: string[], _: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   try {
-    await asStaff(user, () => createDayPass(eventId, dayPassFields(form, sessionIds)));
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "ticketType.manage");
+    await asStaff(user, () => createDayPass(eventId, dayPassFields(form, sessionIds)), organizerId);
+    revalidateEvent(eventId, slug);
   } catch (e) {
     return failure(e, "Couldn't add the day pass.");
   }
-  revalidatePath(`/admin/events/${eventId}`);
   return { ok: "Day pass added: one pass per night, each with its own price and quota." };
 }
 
 export async function updateDayPassAction(eventId: string, groupId: string, sessionIds: string[], _: ActionState, form: FormData): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   try {
-    await asStaff(user, () => updateDayPass(groupId, dayPassFields(form, sessionIds)));
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "ticketType.manage");
+    await assertOnEvent(eventId, { groupId });
+    await asStaff(user, () => updateDayPass(groupId, dayPassFields(form, sessionIds)), organizerId);
+    revalidateEvent(eventId, slug);
   } catch (e) {
     return failure(e, "Couldn't save the day pass.");
   }
-  revalidatePath(`/admin/events/${eventId}`);
   return { ok: "Day pass saved. New bookings use these prices; existing bookings keep theirs." };
 }
 
 export async function deleteDayPassAction(eventId: string, groupId: string): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   try {
-    const r = await asStaff(user, () => deleteDayPass(groupId));
-    revalidatePath(`/admin/events/${eventId}`);
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "ticketType.manage");
+    await assertOnEvent(eventId, { groupId });
+    const r = await asStaff(user, () => deleteDayPass(groupId), organizerId);
+    revalidateEvent(eventId, slug);
     return { ok: r.deactivated ? `Deleted ${r.deleted} night(s); ${r.deactivated} with bookings were switched off instead.` : "Day pass deleted." };
   } catch (e) {
     return failure(e, "Couldn't delete the day pass.");
@@ -306,13 +359,12 @@ export async function deleteDayPassAction(eventId: string, groupId: string): Pro
 }
 
 export async function adminSetBookingsClosedAction(eventId: string, sessionId: string | null, closed: boolean, reason: string): Promise<ActionState> {
-  const user = await requireSuperAdmin();
   try {
-    await asStaff(user, () => setBookingsClosed(eventId, { sessionId, closed, reason, by: user.id }));
+    const { user, organizerId, slug } = await authorizeEvent(eventId, "event.manageSales");
+    await asStaff(user, () => setBookingsClosed(eventId, { sessionId, closed, reason, by: user.id }), organizerId);
+    revalidateEvent(eventId, slug);
   } catch (e) {
     return failure(e, "Couldn't change bookings.");
   }
-  revalidatePath(`/admin/events/${eventId}`);
-  revalidatePath("/");
   return { ok: closed ? "Bookings closed. Box office can still issue passes." : "Bookings reopened." };
 }

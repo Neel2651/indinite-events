@@ -14,7 +14,8 @@
     "seed": "pnpm --filter @indinite/db seed && pnpm --filter @indinite/auth seed-users",
     "format": "prettier --write .",
     "setup:production": "pnpm --filter @indinite/db sync-indexes && pnpm --filter @indinite/auth sync-indexes && pnpm --filter @indinite/auth create-super-admin",
-    "check:env": "pnpm --filter @indinite/db check-env"
+    "check:env": "pnpm --filter @indinite/db check-env",
+    "owners": "pnpm --filter @indinite/auth owners"
   },
   "devDependencies": {
     "@eslint/js": "^9",

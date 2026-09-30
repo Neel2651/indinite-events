@@ -21,13 +21,21 @@ describe("can()", () => {
     expect(can(user("owner"), "order.read")).toBe(false);
   });
 
-  it("keeps event and ticket management platform-only", () => {
+  it("keeps organiser settings, Indinite's fee and the global audit log platform-only", () => {
     for (const role of ORG_ROLES) {
-      for (const p of ["event.create", "event.update", "event.delete", "ticketType.manage", "organizer.manage", "audit.readGlobal"] as const) {
+      for (const p of ["organizer.manage", "finance.manage", "audit.readGlobal"] as const) {
         expect(can(user(role), p, ORG_A)).toBe(false);
       }
     }
     expect(can(superAdmin, "event.create")).toBe(true);
+  });
+
+  it("organiser owners manage their own events and pass types; no other role does (1 Oct 2026)", () => {
+    for (const p of ["event.create", "event.update", "event.delete", "ticketType.manage"] as const) {
+      for (const role of ORG_ROLES) expect(can(user(role), p, ORG_A)).toBe(role === "owner");
+      expect(can(user("owner"), p, ORG_B)).toBe(false);
+      expect(can(superAdmin, p, ORG_B)).toBe(true);
+    }
   });
 
   it("matches the SPEC matrix for key actions", () => {

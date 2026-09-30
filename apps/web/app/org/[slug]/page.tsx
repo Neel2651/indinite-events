@@ -73,16 +73,41 @@ export default async function OrgDashboard({ params }: { params: Promise<{ slug:
       ))}
 
       <section className="mt-8 rounded-lg border border-border bg-card p-6">
-        <h2 className="text-xl">Events</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl">Events</h2>
+          {can("event.update") && (
+            <Link href={`/org/${organizer.slug}/events`} className="text-sm font-semibold text-brand-orange-strong hover:underline">
+              Manage events
+            </Link>
+          )}
+        </div>
         {events.length === 0 ? (
-          <p className="mt-2 text-muted-foreground">No events yet. Indinite sets up events for you.</p>
+          <p className="mt-2 text-muted-foreground">
+            {can("event.create") ? (
+              <>
+                No events yet.{" "}
+                <Link href={`/org/${organizer.slug}/events/new`} className="font-semibold text-brand-orange-strong hover:underline">
+                  Create your first event
+                </Link>
+                .
+              </>
+            ) : (
+              "No events yet."
+            )}
+          </p>
         ) : (
           <ul className="mt-4 divide-y divide-border">
             {events.map((e) => (
               <li key={String(e._id)} className="py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>
-                    <span className="font-semibold">{e.title}</span>
+                    {can("event.update") ? (
+                      <Link href={`/org/${organizer.slug}/events/${String(e._id)}`} className="font-semibold hover:underline">
+                        {e.title}
+                      </Link>
+                    ) : (
+                      <span className="font-semibold">{e.title}</span>
+                    )}
                     <span className="block text-sm text-muted-foreground">
                       {formatDateRange(e.startsAt, e.endsAt)} · {e.sessions.length} nights
                     </span>

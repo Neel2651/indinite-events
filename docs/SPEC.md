@@ -31,10 +31,10 @@ Platform role: `super_admin` (Indinite staff). Organizer roles (per organization
 
 | Permission | super_admin | owner | manager | box_office | scanner | finance |
 |---|---|---|---|---|---|---|
-| event.create / event.delete | ✓ | | | | | |
-| event.update | ✓ | | | | | |
+| event.create / event.delete (own org) | ✓ | ✓ | | | | |
+| event.update, incl. publish (own org) | ✓ | ✓ | | | | |
 | event.read (own org) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| ticketType.manage (price, quota) | ✓ | | | | | |
+| ticketType.manage (price, quota, own org) | ✓ | ✓ | | | | |
 | organizer.manage (create org, commission) | ✓ | | | | | |
 | org.members.manage (invite, change role) | ✓ | ✓ | | | | |
 | stripe.onboard | ✓ | ✓ | | | | |
@@ -42,6 +42,7 @@ Platform role: `super_admin` (Indinite staff). Organizer roles (per organization
 | order.createPaymentLink | ✓ | ✓ | ✓ | ✓ | | |
 | order.applyDiscount | ✓ | ✓ | ✓ | | | |
 | order.issueOffline (already paid) | ✓ | ✓ | ✓ | ✓ | | |
+| order.issueComplimentary | ✓ | ✓ | | | | |
 | order.resendTickets | ✓ | ✓ | ✓ | ✓ | | |
 | order.refund / order.cancel | ✓ | ✓ | | | | |
 | scan.perform | ✓ | ✓ | ✓ | | ✓ | |
@@ -49,6 +50,11 @@ Platform role: `super_admin` (Indinite staff). Organizer roles (per organization
 | reports.read / export | ✓ | ✓ | ✓ | | | ✓ |
 | audit.read (own org) | ✓ | ✓ | | | | |
 | audit.read (global) | ✓ | | | | | |
+
+**Events (agreed 1 Oct 2026):** organiser owners create, edit, publish, delete (no orders) or archive (has orders)
+their own organiser's events, nights, images, pass types and day passes, in the organiser panel (`/org/[slug]/events`),
+with the same screens as Admin → Events. Every action checks the permission against the event's organiser read from
+the database. Indinite's platform fee and tax, organiser settings and card-fee settings stay super admin only.
 
 Refunds: organiser owner and super admin only (confirmed 28 Sep 2026).
 Discount limit for `box_office`: none (cannot apply). `manager`: max percent configurable per org (default 50%).

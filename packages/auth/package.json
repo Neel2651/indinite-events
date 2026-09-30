@@ -14,7 +14,8 @@
     "seed-users": "tsx --env-file-if-exists=../../.env.local scripts/seed-users.ts",
     "sync-indexes": "tsx --env-file-if-exists=../../.env.local scripts/sync-indexes.ts",
     "set-password": "tsx --env-file-if-exists=../../.env.local scripts/set-password.ts",
-    "create-super-admin": "tsx --env-file-if-exists=../../.env.local scripts/create-super-admin.ts"
+    "create-super-admin": "tsx --env-file-if-exists=../../.env.local scripts/create-super-admin.ts",
+    "owners": "tsx --env-file-if-exists=../../.env.local scripts/owners.ts"
   },
   "dependencies": {
     "@indinite/core": "workspace:^",

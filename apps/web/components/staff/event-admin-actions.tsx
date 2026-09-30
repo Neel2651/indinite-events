@@ -33,10 +33,12 @@ export function EventStatusActions({ eventId, status }: { eventId: string; statu
   );
 }
 
-export function DeleteEventForm({ eventId, hasOrders }: { eventId: string; hasOrders: boolean }) {
+/** `returnTo`: the events list to go back to afterwards (admin or this organiser's panel). */
+export function DeleteEventForm({ eventId, hasOrders, returnTo = "/admin/events" }: { eventId: string; hasOrders: boolean; returnTo?: string }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(deleteEventAction.bind(null, eventId), null);
   return (
     <form action={action} className="space-y-3">
+      <input type="hidden" name="returnTo" value={returnTo} />
       <p className="text-sm text-muted-foreground">
         {hasOrders
           ? "This event has bookings, so it will be hidden and kept for finance and audit records (soft delete). Passes already sold stop being bookable but orders stay."
