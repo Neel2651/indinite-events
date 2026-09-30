@@ -1,41 +1,52 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage } from "@/components/legal-page";
-import { LEGAL } from "@/lib/legal";
 
-export const metadata: Metadata = { title: "Refund policy", description: "When you can get a refund on passes booked through Indinite Events, and how." };
+export const metadata: Metadata = { title: "Refund policy", description: "Passes booked through Indinite Events are non-refundable. Refund requests go to the event organiser." };
 
-/** Matches SPEC §4.6 (ticket price only, before the event, unused passes) plus event cancellation. Review with a solicitor before launch. */
+/**
+ * Agreed 1 Oct 2026: passes are non-refundable; the organiser is the only point of contact for refunds (they decide
+ * and make them). Event cancellation still gets a full refund (consumer law). Review with a solicitor before launch.
+ */
 export default function RefundPolicyPage() {
   return (
-    <LegalPage title="Refund policy" intro="When you can get your money back, how much, and how long it takes.">
+    <LegalPage title="Refund policy" intro="Passes are non-refundable. If you need a refund, contact the organiser of your event.">
       <section>
-        <h2>If the event is cancelled</h2>
+        <h2>No refunds</h2>
         <p>
-          You&apos;ll get a full refund of everything you paid, including fees. If the event is postponed or significantly changed, you can choose a full refund instead of going. We or
-          the organiser will email you about how to claim; you don&apos;t need to do anything until then.
+          Passes are non-refundable once booked, including if you can&apos;t go. The only exceptions are an event that&apos;s cancelled or significantly changed (below), or a refund
+          the organiser agrees to.
         </p>
       </section>
 
       <section>
-        <h2>If you can&apos;t go</h2>
+        <h2>Who to contact about a refund</h2>
+        <p>
+          <strong>Contact the organiser of your event.</strong> The organiser runs the event and is the only point of contact for refunds: they decide whether to give one and they
+          make it. Indinite sells passes on the organiser&apos;s behalf and can&apos;t give refunds or decide on refund requests.
+        </p>
+        <p>When you contact the organiser, give your order reference, the email you booked with, and which passes you&apos;re asking about.</p>
+      </section>
+
+      <section>
+        <h2>If the event is cancelled or significantly changed</h2>
+        <p>
+          If the event is cancelled you&apos;re entitled to a full refund of what you paid, including fees. If it&apos;s postponed or significantly changed, you can choose a full
+          refund instead of going. The organiser will contact you about how it works.
+        </p>
+      </section>
+
+      <section>
+        <h2>If the organiser agrees to a refund</h2>
         <ul>
-          <li>Refunds are at the organiser&apos;s discretion. Ask as soon as you can.</li>
-          <li>Refunds close when the event starts. A pass that has been used at the gate can&apos;t be refunded.</li>
+          <li>Refunds can only be made before the event starts, and not for a pass that has been used at the gate.</li>
           <li>
-            We refund the price you paid for each refunded pass, after any discount. The platform fee, organiser charges, tax and any card processing fee aren&apos;t refunded, because
-            the booking service has already been provided.
+            You get back the price you paid for each refunded pass, after any discount. The platform fee, organiser charges, tax and any card processing fee aren&apos;t refunded,
+            because the booking service has already been provided.
           </li>
-          <li>You can refund some of the passes on a booking and keep the rest. Refunded passes stop working straight away.</li>
+          <li>Some of the passes on a booking can be refunded and the rest kept. Refunded passes stop working straight away.</li>
+          <li>We&apos;ll email you when a refund has been made.</li>
         </ul>
-      </section>
-
-      <section>
-        <h2>How to ask</h2>
-        <p>
-          Email <a href={`mailto:${LEGAL.supportEmail}`}>{LEGAL.supportEmail}</a> (or the organiser) with your order reference, the email you booked with, and which passes you want to
-          refund. We&apos;ll email you when it&apos;s done.
-        </p>
       </section>
 
       <section>
@@ -51,7 +62,7 @@ export default function RefundPolicyPage() {
         <h2>If your payment arrived too late</h2>
         <p>
           We hold your passes while you pay. If your payment only completes after the hold ended and the passes have sold out in the meantime, we refund you in full automatically,
-          including fees, and email you.
+          including fees, and email you. You don&apos;t need to contact anyone.
         </p>
       </section>
 

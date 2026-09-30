@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { resolvePaymentsMode, embedUrlFor } from "@indinite/core";
 import { BookingForm } from "@/components/booking-form";
@@ -108,6 +109,12 @@ export default async function EventPage({ params }: Props) {
 
         <aside className="card-brand h-fit space-y-5">
           <h2 className="text-xl">Book passes</h2>
+          <p className="rounded-md border border-border bg-muted/50 px-3 py-2 text-sm">
+            <strong>No refunds.</strong> If the event is cancelled, or for any refund request, contact the organiser.{" "}
+            <Link href="/refund-policy" className="font-semibold text-brand-orange-strong hover:underline">
+              Refund policy
+            </Link>
+          </p>
           {event.ticketTypes.length === 0 && <p className="text-muted-foreground">Passes aren&apos;t on sale yet.</p>}
           {event.bookingsOpen && !event.onlinePaymentsAvailable ? (
             <div className="space-y-3">

@@ -127,8 +127,9 @@ the customer returns to `/checkout/success`, which waits for the webhook.
 
 ### 4.3 Organizer offline issue (already paid)
 Customer details, items, method (cash / bank transfer / complimentary), required note. Transaction: reserve
-quota → sold, create paid order (source offline), tickets, ledger entry for commission owed (not for
-complimentary unless configured), audit `order.issued_offline`. Enqueue `send-tickets`.
+quota → sold, create paid order (source offline), tickets, ledger entry for commission owed (complimentary too:
+the platform fee on each pass's normal price), audit `order.issued_offline`. Enqueue `send-tickets`.
+Complimentary passes can only be issued by the organiser owner or a super admin (`order.issueComplimentary`).
 
 ### 4.4 Ticket delivery and viewing
 **PDFs are generated on demand from the pass records and never stored** (refunded or cancelled passes never
@@ -156,6 +157,10 @@ result (strictly once per pass per night). Offline (or no server answer within 2
 **5 scans**; the 6th is refused ("Reconnect to keep scanning") until it's back online and those scans have synced.
 
 ### 4.6 Refund
+**Customer-facing (agreed 1 Oct 2026):** passes are non-refundable; the event page says "No refunds. If the event is
+cancelled, or for any refund request, contact the organiser." The organiser is the only point of contact for
+refunds; Indinite doesn't take refund requests (refund policy page). The organiser's contact details aren't shown.
+
 Owner/super-admin: full or per-ticket refund, before the event starts, passes not yet scanned. Only the ticket
 price actually paid (after coupon) is refunded; platform fee, organiser charges, tax and card processing fee are
 kept. Card orders: Stripe refund with `reverse_transfer` (Indinite keeps its fee: `refund_application_fee: false`);
@@ -172,7 +177,7 @@ stay valid for staff to decide.
 box office, super admin); the Stripe Checkout Session is expired first, and the cancel is refused if it has just
 completed. Seats and the coupon use come back. Paid cash / account / complimentary bookings: owner or super admin
 (`order.cancel`), only if no pass has been scanned; passes → cancelled, quota returned, coupon use given back,
-commission reversed (`offline_sale_reversed`), customer emailed. The complimentary allowance isn't given back.
+commission reversed (`offline_sale_reversed`), customer emailed.
 Card bookings are refunded instead. A card payment that completes after a cancel is refunded in full.
 
 **Reconciliation:** the worker runs every 15 min: pending card orders whose session is paid → fulfilled (missed
@@ -196,10 +201,9 @@ Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 
   the rest (tickets, charges, tax). *Assumption to confirm: all tax goes to the organiser.*
 - **Organiser bookings** (`/org/.../bookings/new`), four options: **Cash**, **Organiser's account** (bank transfer),
   **Complimentary**, **Generate payment link**. Cash/account: customer pays the full total to the organiser; the
-  organiser owes Indinite the platform fee. Complimentary: £0 to the customer. Each event has a
-  commission-free allowance (default **5** passes, set per event by the admin); beyond it the organiser owes the
-  platform fee on each extra pass's normal price. The allowance covers the highest-priced passes first, is counted
-  atomically, and isn't given back when a complimentary pass is refunded (agreed 28 Sep 2026). Payment link: pending booking held 1–24 h, customer emailed a link to `/pay/<ref>`
+  organiser owes Indinite the platform fee. Complimentary: £0 to the customer; **no limit** on how many, and **no
+  free allowance**: the organiser owes Indinite the platform fee on every complimentary pass's normal price.
+  Organiser owner or super admin only (agreed 1 Oct 2026; replaces the 5-pass allowance). Payment link: pending booking held 1–24 h, customer emailed a link to `/pay/<ref>`
   (demo mode approves instantly; Stripe Checkout once connected). Box office bookings ignore public sales windows
   and per-order limits but never exceed quota.
 - **Admin finance** (`/admin/finance`), per event: total sales; organiser direct (cash / account) and commission

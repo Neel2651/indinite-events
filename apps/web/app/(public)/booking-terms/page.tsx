@@ -12,12 +12,13 @@ export default function BookingTermsPage() {
       <section>
         <h2>1. Who you&apos;re dealing with</h2>
         <p>
-          Indinite Events is run by {LEGAL.legalName} (company number {LEGAL.companyNumber}, registered office {LEGAL.registeredAddress}), &ldquo;Indinite&rdquo;, &ldquo;we&rdquo; or
+          Indinite Events is run by {LEGAL.legalName}, &ldquo;Indinite&rdquo;, &ldquo;we&rdquo; or
           &ldquo;us&rdquo;. We sell passes as an agent for the event organiser named on the event page. The organiser runs the event and is responsible for it: the venue, the
           programme, safety and entry. Indinite provides the booking service, takes payment on the organiser&apos;s behalf and sends your passes.
         </p>
         <p>
-          Contact us at <a href={`mailto:${LEGAL.supportEmail}`}>{LEGAL.supportEmail}</a>.
+          Contact us at <a href={`mailto:${LEGAL.supportEmail}`}>{LEGAL.supportEmail}</a>. For refunds, contact the organiser: they&apos;re the only point of contact for
+          refunds (see our <Link href="/refund-policy">refund policy</Link>).
         </p>
       </section>
 
@@ -47,7 +48,8 @@ export default function BookingTermsPage() {
         <h2>4. No 14-day cancellation period</h2>
         <p>
           Passes are for leisure events on specific dates, so the usual 14-day right to cancel online purchases doesn&apos;t apply (regulation 28(1)(b) of the Consumer Contracts
-          (Information, Cancellation and Additional Charges) Regulations 2013). You can still ask for a refund under our <Link href="/refund-policy">refund policy</Link>.
+          (Information, Cancellation and Additional Charges) Regulations 2013). Passes are non-refundable unless the event is cancelled or the organiser agrees to a refund: see
+          our <Link href="/refund-policy">refund policy</Link>.
         </p>
       </section>
 
@@ -68,10 +70,10 @@ export default function BookingTermsPage() {
       <section>
         <h2>6. If the event changes or is cancelled</h2>
         <ul>
-          <li>If the event is cancelled, you&apos;ll get a full refund of what you paid, including fees.</li>
+          <li>If the event is cancelled, you&apos;ll get a full refund of what you paid, including fees. The organiser will contact you about it.</li>
           <li>
-            If it&apos;s moved to another date or venue, or changed in a significant way, you can keep your passes for the new arrangements or ask for a full refund within the time
-            we tell you.
+            If it&apos;s moved to another date or venue, or changed in a significant way, you can keep your passes for the new arrangements or ask the organiser for a full refund
+            within the time they tell you.
           </li>
           <li>Minor changes to the programme or line-up don&apos;t give a right to a refund.</li>
         </ul>
@@ -96,7 +98,8 @@ export default function BookingTermsPage() {
       <section>
         <h2>9. Complaints and law</h2>
         <p>
-          If you&apos;re unhappy, email <a href={`mailto:${LEGAL.supportEmail}`}>{LEGAL.supportEmail}</a> with your order reference and we&apos;ll try to put it right. These terms are
+          If you&apos;re unhappy with the booking service, email <a href={`mailto:${LEGAL.supportEmail}`}>{LEGAL.supportEmail}</a> with your order reference and we&apos;ll try to
+          put it right. Refunds and anything about the event itself are for the organiser. These terms are
           governed by the law of England and Wales. If you live in Scotland or Northern Ireland, you can also bring proceedings there, and you keep the protection of your local
           consumer law.
         </p>

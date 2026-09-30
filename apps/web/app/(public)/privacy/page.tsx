@@ -12,8 +12,8 @@ export default function PrivacyPage() {
       <section>
         <h2>Who we are</h2>
         <p>
-          Indinite Events (events.indinite.co.uk) is run by {LEGAL.legalName}, a company registered in England and Wales (company number {LEGAL.companyNumber}), registered office{" "}
-          {LEGAL.registeredAddress}. We&apos;re registered with the Information Commissioner&apos;s Office (ICO) under number {LEGAL.icoNumber}.
+          Indinite Events (events.indinite.co.uk) is run by {LEGAL.legalName}, a company registered in England and Wales. You can contact us at{" "}
+          <a href={`mailto:${LEGAL.supportEmail}`}>{LEGAL.supportEmail}</a>. We&apos;re registered with the Information Commissioner&apos;s Office (ICO) under number {LEGAL.icoNumber}.
         </p>
         <p>
           We sell tickets on behalf of event organisers. For your booking, we and the organiser of your event each decide how we use your details, so we are each a separate
