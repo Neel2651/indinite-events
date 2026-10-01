@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { londonLocalToUtc } from "@indinite/core";
 import { createCoupon, endCoupon, SettingsError } from "@indinite/db";
+import { ZodError } from "zod";
+import { fieldFailure, zodFailure, type FormState } from "@/lib/form-state";
 import { asStaff, requireOrg } from "@/lib/staff";
 
-export type State = { ok?: string; error?: string } | null;
+export type State = FormState;
 
 export async function createCouponAction(slug: string, _: State, form: FormData): Promise<State> {
   const { user, organizer, can } = await requireOrg(slug);
@@ -45,8 +47,12 @@ export async function createCouponAction(slug: string, _: State, form: FormData)
       organizer.id,
     );
   } catch (e) {
-    if (e instanceof SettingsError) return { error: e.message };
-    if (e instanceof Error && "issues" in e) return { error: (e as unknown as { issues: { message: string }[] }).issues[0]?.message ?? "Check the details." };
+    if (e instanceof SettingsError) {
+      // Point at the field the message is about.
+      const field = /already exists/.test(e.message) ? "code" : /maximum discount/i.test(e.message) ? "maxDiscount" : null;
+      return field ? fieldFailure(field, e.message) : { error: e.message };
+    }
+    if (e instanceof ZodError) return zodFailure(e, { value: "amount", maxDiscountPence: "maxDiscount", minSubtotalPence: "minSpend" });
     return { error: "Couldn't create the coupon." };
   }
   revalidatePath(`/org/${slug}/coupons`);

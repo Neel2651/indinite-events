@@ -1,20 +1,22 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useTransition } from "react";
-import { createCouponAction, endCouponAction, type State } from "@/app/org/[slug]/coupons/actions";
-import { FormError, inputClass } from "./ui";
+import { useEffect, useRef, useTransition } from "react";
+import { createCouponAction, endCouponAction } from "@/app/org/[slug]/coupons/actions";
+import { FieldError, FormError, inputClass } from "./ui";
+import { useFormAction } from "@/lib/use-form-action";
 
 export function CouponForm({ slug, events }: { slug: string; events: { id: string; title: string }[] }) {
-  const [state, action, pending] = useActionState<State, FormData>(createCouponAction.bind(null, slug), null);
+  const [state, action, pending] = useFormAction(createCouponAction.bind(null, slug), null);
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (state?.ok) ref.current?.reset();
   }, [state]);
   return (
-    <form ref={ref} action={action} className="grid gap-4 sm:grid-cols-3">
+    <form ref={ref} onSubmit={action} className="grid gap-4 sm:grid-cols-3">
       <label className="block text-sm">
         Code
         <input name="code" required minLength={3} maxLength={40} placeholder="e.g. EARLYBIRD" className={`${inputClass} uppercase`} />
+        <FieldError state={state} name="code" />
       </label>
       <label className="block text-sm">
         Discount
@@ -26,6 +28,7 @@ export function CouponForm({ slug, events }: { slug: string; events: { id: strin
       <label className="block text-sm">
         Amount
         <input name="amount" required inputMode="decimal" placeholder="10" className={inputClass} />
+        <FieldError state={state} name="amount" />
       </label>
       <label className="block text-sm">
         Event
@@ -41,14 +44,17 @@ export function CouponForm({ slug, events }: { slug: string; events: { id: strin
       <label className="block text-sm">
         Maximum uses (optional)
         <input name="maxUses" type="number" min={1} className={inputClass} />
+        <FieldError state={state} name="maxUses" />
       </label>
       <label className="block text-sm">
         Max discount £ (optional, % codes)
         <input name="maxDiscount" inputMode="decimal" placeholder="e.g. 10.00" className={inputClass} />
+        <FieldError state={state} name="maxDiscount" />
       </label>
       <label className="block text-sm">
         Minimum ticket spend £ (optional)
         <input name="minSpend" inputMode="decimal" placeholder="e.g. 30.00" className={inputClass} />
+        <FieldError state={state} name="minSpend" />
       </label>
       <div className="grid grid-cols-2 gap-2 sm:col-span-2">
         <label className="block text-sm">

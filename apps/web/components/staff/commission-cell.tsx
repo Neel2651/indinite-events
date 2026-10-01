@@ -1,13 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
-import { organizerCommissionAction, type ActionState } from "@/app/admin/organisers/actions";
+import { organizerCommissionAction } from "@/app/admin/organisers/actions";
+import { useFormAction } from "@/lib/use-form-action";
 
 /** Inline edit of an organiser's platform fee / commission %. */
 export function CommissionCell({ organizerId, percent }: { organizerId: string; percent: number }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(organizerCommissionAction.bind(null, organizerId), null);
+  const [state, action, pending] = useFormAction(organizerCommissionAction.bind(null, organizerId), null);
   return (
-    <form action={action} className="flex items-center gap-1">
+    <form onSubmit={action} className="flex items-center gap-1">
       <label className="sr-only" htmlFor={`c-${organizerId}`}>
         Commission %
       </label>

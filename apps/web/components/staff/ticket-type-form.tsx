@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { createTicketTypeAction, deleteTicketTypeAction, updateTicketTypeAction, type ActionState } from "@/app/admin/events/actions";
-import { FormError, inputClass } from "./ui";
+import { FieldError, FormError, inputClass } from "./ui";
+import { useFormAction } from "@/lib/use-form-action";
 
 export interface TicketTypeValues {
   id?: string;
@@ -23,7 +24,7 @@ export interface TicketTypeValues {
 
 export function TicketTypeForm({ eventId, nights, initial }: { eventId: string; nights: { id: string; label: string }[]; initial?: TicketTypeValues }) {
   const editing = Boolean(initial?.id);
-  const [state, action, pending] = useActionState<ActionState, FormData>(
+  const [state, action, pending] = useFormAction(
     editing ? updateTicketTypeAction.bind(null, eventId, initial!.id!) : createTicketTypeAction.bind(null, eventId),
     null,
   );
@@ -35,14 +36,16 @@ export function TicketTypeForm({ eventId, nights, initial }: { eventId: string; 
   const idp = v?.id ?? "new";
 
   return (
-    <form ref={formRef} action={action} className="grid gap-4 sm:grid-cols-2">
+    <form ref={formRef} onSubmit={action} className="grid gap-4 sm:grid-cols-2">
       <label className="block text-sm">
         Name
         <input name="name" required maxLength={80} defaultValue={v?.name} className={inputClass} placeholder="e.g. Season pass – adult" />
+        <FieldError state={state} name="name" />
       </label>
       <label className="block text-sm">
         Price (£)
         <input name="price" required inputMode="decimal" pattern="\d+(\.\d{1,2})?" defaultValue={v?.price} className={inputClass} placeholder="45.00" />
+        <FieldError state={state} name="price" />
       </label>
       <label className="block text-sm sm:col-span-2">
         Description (optional)
@@ -62,6 +65,7 @@ export function TicketTypeForm({ eventId, nights, initial }: { eventId: string; 
       <label className="block text-sm">
         Quota (total passes)
         <input name="quota" type="number" required min={v?.committed ?? 0} max={100000} defaultValue={v?.quota} className={inputClass} aria-describedby={`quota-help-${idp}`} />
+        <FieldError state={state} name="quota" />
         {v?.committed ? (
           <span id={`quota-help-${idp}`} className="mt-1 block text-xs text-muted-foreground">
             {v.committed} already sold or being paid for.
@@ -71,6 +75,7 @@ export function TicketTypeForm({ eventId, nights, initial }: { eventId: string; 
       <label className="block text-sm">
         Most per online booking
         <input name="maxPerOrder" type="number" required min={1} max={50} defaultValue={v?.maxPerOrder ?? 10} className={inputClass} />
+        <FieldError state={state} name="maxPerOrder" />
       </label>
       <label className="block text-sm">
         Online sales start (optional, UK time)

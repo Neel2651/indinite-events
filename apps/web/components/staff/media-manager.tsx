@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { embedUrlFor } from "@indinite/core";
 import { addVideoAction, removeMediaAction, reorderMediaAction, uploadImageAction, type ActionState } from "@/app/admin/events/actions";
 import { FormError, inputClass } from "./ui";
+import { useFormAction } from "@/lib/use-form-action";
 
 export interface MediaItem {
   type: "image" | "video";
@@ -79,13 +80,13 @@ export function MediaManager({ eventId, media }: { eventId: string; media: Media
 }
 
 function UploadImage({ eventId }: { eventId: string }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(uploadImageAction.bind(null, eventId), null);
+  const [state, action, pending] = useFormAction(uploadImageAction.bind(null, eventId), null);
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (state?.ok) ref.current?.reset();
   }, [state]);
   return (
-    <form ref={ref} action={action} className="space-y-3 rounded-md border border-border p-4">
+    <form ref={ref} onSubmit={action} className="space-y-3 rounded-md border border-border p-4">
       <h3 className="font-display font-semibold">Upload an image</h3>
       <label className="block text-sm">
         Image (JPEG, PNG, WebP or AVIF, up to 5 MB)
@@ -105,13 +106,13 @@ function UploadImage({ eventId }: { eventId: string }) {
 }
 
 function AddVideo({ eventId }: { eventId: string }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(addVideoAction.bind(null, eventId), null);
+  const [state, action, pending] = useFormAction(addVideoAction.bind(null, eventId), null);
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (state?.ok) ref.current?.reset();
   }, [state]);
   return (
-    <form ref={ref} action={action} className="space-y-3 rounded-md border border-border p-4">
+    <form ref={ref} onSubmit={action} className="space-y-3 rounded-md border border-border p-4">
       <h3 className="font-display font-semibold">Add a video</h3>
       <label className="block text-sm">
         YouTube or Vimeo link

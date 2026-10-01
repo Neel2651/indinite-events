@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { createDayPassAction, deleteDayPassAction, updateDayPassAction, type ActionState } from "@/app/admin/events/actions";
 import { FormError, inputClass } from "./ui";
+import { useFormAction } from "@/lib/use-form-action";
 
 export interface DayPassNightRow {
   sessionId: string;
@@ -37,7 +38,7 @@ export interface DayPassValues {
 export function DayPassForm({ eventId, initial }: { eventId: string; initial: DayPassValues }) {
   const editing = Boolean(initial.groupId);
   const ids = initial.nights.map((n) => n.sessionId);
-  const [state, action, pending] = useActionState<ActionState, FormData>(
+  const [state, action, pending] = useFormAction(
     editing ? updateDayPassAction.bind(null, eventId, initial.groupId!, ids) : createDayPassAction.bind(null, eventId, ids),
     null,
   );
@@ -48,7 +49,7 @@ export function DayPassForm({ eventId, initial }: { eventId: string; initial: Da
   const set = (i: number, patch: Partial<DayPassNightRow>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
   return (
-    <form action={action} className="space-y-4">
+    <form onSubmit={action} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm">
           Name

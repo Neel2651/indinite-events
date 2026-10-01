@@ -25,9 +25,22 @@ import {
   updateEvent,
   updateTicketType,
 } from "@indinite/db";
+import { zodFailure, type FormState } from "@/lib/form-state";
 import { asStaff, requireStaff } from "@/lib/staff";
 
-export type ActionState = { error?: string; ok?: string } | null;
+export type ActionState = FormState;
+
+/** Zod paths (event, venue, pass type) → the form field names, so the right field is highlighted. */
+const FIELD_NAMES: Record<string, string> = {
+  "venue.name": "venueName",
+  "venue.address": "venueAddress",
+  "venue.postcode": "postcode",
+  "venue.mapUrl": "mapUrl",
+  "venue.lat": "lat",
+  "venue.lng": "lng",
+  pricePence: "price",
+  validSessionIds: "nights",
+};
 
 /**
  * Event actions are shared by Admin → Events and the organiser panel (owners manage their own events, 1 Oct 2026).
@@ -76,8 +89,13 @@ const text = (form: FormData, key: string) => String(form.get(key) ?? "").trim()
 
 function failure(e: unknown, fallback: string): ActionState {
   if (e instanceof NotAllowed) return { error: "You don't have permission to change this event." };
-  if (e instanceof EventAdminError) return { error: e.message };
-  if (e instanceof ZodError) return { error: e.issues[0]?.message ?? fallback };
+  if (e instanceof EventAdminError) {
+    // Point at the field the message is about, where there is one.
+    const m = e.message;
+    const field = /web address/i.test(m) ? "slug" : /latitude/i.test(m) ? "lat" : /longitude/i.test(m) ? "lng" : /^Enter the price/.test(m) ? "price" : /quota/i.test(m) ? "quota" : null;
+    return field ? { error: m, fields: { [field]: m } } : { error: m };
+  }
+  if (e instanceof ZodError) return zodFailure(e, FIELD_NAMES);
   console.error("[admin events]", e instanceof Error ? e.message : e);
   return { error: fallback };
 }

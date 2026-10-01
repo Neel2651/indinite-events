@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { ORG_ROLES, type OrgRole } from "@indinite/core";
 import {
   cancelInvitationAction,
@@ -10,6 +10,7 @@ import {
   type ActionState,
 } from "@/app/org/[slug]/members/actions";
 import { FormError, inputClass } from "./ui";
+import { useFormAction } from "@/lib/use-form-action";
 
 const LABELS: Record<OrgRole, string> = { owner: "Owner", manager: "Manager", box_office: "Box office", scanner: "Scanner", finance: "Finance" };
 const HELP: Record<OrgRole, string> = {
@@ -32,13 +33,13 @@ function Notice({ state }: { state: ActionState }) {
 }
 
 export function InviteForm({ slug }: { slug: string }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(inviteAction.bind(null, slug), null);
+  const [state, action, pending] = useFormAction(inviteAction.bind(null, slug), null);
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (state?.ok) ref.current?.reset();
   }, [state]);
   return (
-    <form ref={ref} action={action} className="space-y-4">
+    <form ref={ref} onSubmit={action} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-[1fr_220px]">
         <label className="block text-sm">
           Email address

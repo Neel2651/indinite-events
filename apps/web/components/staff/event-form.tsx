@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { createEventAction, updateEventAction, type ActionState } from "@/app/admin/events/actions";
-import { FormError, inputClass } from "./ui";
+import { useState } from "react";
+import { createEventAction, updateEventAction } from "@/app/admin/events/actions";
+import { FieldError, FormError, inputClass } from "./ui";
+import { useFormAction } from "@/lib/use-form-action";
 
 export interface NightRow {
   id?: string;
@@ -63,7 +64,7 @@ export function EventForm({
   returnTo?: string;
   initial?: EventFormValues;
 }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(eventId ? updateEventAction.bind(null, eventId) : createEventAction, null);
+  const [state, action, pending] = useFormAction(eventId ? updateEventAction.bind(null, eventId) : createEventAction, null);
   const [title, setTitle] = useState(initial?.title ?? "");
   const [slug, setSlug] = useState(initial?.slug ?? "");
   const [slugTouched, setSlugTouched] = useState(Boolean(initial));
@@ -72,7 +73,7 @@ export function EventForm({
   const update = (i: number, patch: Partial<NightRow>) => setNights((ns) => ns.map((n, j) => (j === i ? { ...n, ...patch } : n)));
 
   return (
-    <form action={action} className="space-y-6">
+    <form onSubmit={action} className="space-y-6">
       <input type="hidden" name="returnTo" value={returnTo} />
       {organizerId && <input type="hidden" name="organizerId" value={organizerId} />}
       <div className="grid gap-4 sm:grid-cols-2">
@@ -106,6 +107,7 @@ export function EventForm({
             className={inputClass}
             placeholder="e.g. Navratri 2026 — London Garba Nights"
           />
+          <FieldError state={state} name="title" />
         </label>
         <label className="block text-sm">
           Web address
@@ -125,6 +127,7 @@ export function EventForm({
               aria-describedby="slug-help"
             />
           </span>
+          <FieldError state={state} name="slug" />
           <span id="slug-help" className="mt-1 block text-xs text-muted-foreground">
             Lowercase letters, numbers and hyphens.{eventId ? " Changing it breaks links already shared." : ""}
           </span>
@@ -140,26 +143,32 @@ export function EventForm({
         <label className="block text-sm">
           Name
           <input name="venueName" required maxLength={120} defaultValue={initial?.venueName} className={inputClass} />
+          <FieldError state={state} name="venueName" />
         </label>
         <label className="block text-sm">
           Postcode
           <input name="postcode" required maxLength={10} defaultValue={initial?.postcode} className={`${inputClass} uppercase`} />
+          <FieldError state={state} name="postcode" />
         </label>
         <label className="block text-sm sm:col-span-2">
           Address
           <input name="venueAddress" required maxLength={300} defaultValue={initial?.venueAddress} className={inputClass} />
+          <FieldError state={state} name="venueAddress" />
         </label>
         <label className="block text-sm sm:col-span-2">
           Map link (optional)
           <input name="mapUrl" type="url" defaultValue={initial?.mapUrl} className={inputClass} placeholder="https://maps.google.com/…" />
+          <FieldError state={state} name="mapUrl" />
         </label>
         <label className="block text-sm">
           Latitude (optional)
           <input name="lat" inputMode="decimal" defaultValue={initial?.lat} className={inputClass} placeholder="51.5072" />
+          <FieldError state={state} name="lat" />
         </label>
         <label className="block text-sm">
           Longitude (optional)
           <input name="lng" inputMode="decimal" defaultValue={initial?.lng} className={inputClass} placeholder="-0.1276" />
+          <FieldError state={state} name="lng" />
           <span className="mt-1 block text-xs text-muted-foreground">Used for the &ldquo;Get directions&rdquo; link on the event page.</span>
         </label>
       </fieldset>

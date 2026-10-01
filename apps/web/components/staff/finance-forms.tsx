@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { eventPricingAction, recordPaymentAction, type State } from "@/app/admin/finance/[eventId]/actions";
 import { FormError, inputClass } from "./ui";
+import { useFormAction } from "@/lib/use-form-action";
 
 function Ok({ state }: { state: State }) {
   if (!state?.ok) return null;
@@ -14,13 +15,13 @@ function Ok({ state }: { state: State }) {
 }
 
 export function RecordPaymentForm({ eventId, outstandingPounds }: { eventId: string; outstandingPounds: string }) {
-  const [state, action, pending] = useActionState<State, FormData>(recordPaymentAction.bind(null, eventId), null);
+  const [state, action, pending] = useFormAction(recordPaymentAction.bind(null, eventId), null);
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (state?.ok) ref.current?.reset();
   }, [state]);
   return (
-    <form ref={ref} action={action} className="space-y-3">
+    <form ref={ref} onSubmit={action} className="space-y-3">
       <label className="block text-sm">
         Amount received (£)
         <input name="amount" inputMode="decimal" required defaultValue={outstandingPounds} className={inputClass} />
@@ -39,9 +40,9 @@ export function RecordPaymentForm({ eventId, outstandingPounds }: { eventId: str
 }
 
 export function EventPricingForm({ eventId, commission, tax, organiserRate, compsIssued }: { eventId: string; commission: string; tax: string; organiserRate: string; compsIssued: number }) {
-  const [state, action, pending] = useActionState<State, FormData>(eventPricingAction.bind(null, eventId), null);
+  const [state, action, pending] = useFormAction(eventPricingAction.bind(null, eventId), null);
   return (
-    <form action={action} className="space-y-3">
+    <form onSubmit={action} className="space-y-3">
       <label className="block text-sm">
         Platform fee / commission (%)
         <input name="commission" type="number" min={0} max={100} step={0.01} defaultValue={commission} placeholder={`${organiserRate} (organiser's rate)`} className={inputClass} />

@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { deleteEventAction, setEventStatusAction, type ActionState } from "@/app/admin/events/actions";
 import { FormError, inputClass } from "./ui";
+import { useFormAction } from "@/lib/use-form-action";
 
 export function EventStatusActions({ eventId, status }: { eventId: string; status: string }) {
   const [pending, start] = useTransition();
@@ -35,9 +36,9 @@ export function EventStatusActions({ eventId, status }: { eventId: string; statu
 
 /** `returnTo`: the events list to go back to afterwards (admin or this organiser's panel). */
 export function DeleteEventForm({ eventId, hasOrders, returnTo = "/admin/events" }: { eventId: string; hasOrders: boolean; returnTo?: string }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(deleteEventAction.bind(null, eventId), null);
+  const [state, action, pending] = useFormAction(deleteEventAction.bind(null, eventId), null);
   return (
-    <form action={action} className="space-y-3">
+    <form onSubmit={action} className="space-y-3">
       <input type="hidden" name="returnTo" value={returnTo} />
       <p className="text-sm text-muted-foreground">
         {hasOrders
