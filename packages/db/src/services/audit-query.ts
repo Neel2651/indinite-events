@@ -14,6 +14,11 @@ export interface AuditQuery {
   entityType?: string;
   entityId?: string;
   actorId?: string;
+  /**
+   * Organiser panel (1 Oct 2026): only what the organiser's own team did. Hides entries by Indinite super admins,
+   * the system (worker, scripts), Stripe and customers.
+   */
+  teamOnly?: boolean;
   from?: Date;
   to?: Date;
   before?: string;
@@ -42,6 +47,7 @@ export async function listAuditLogs(q: AuditQuery): Promise<{ entries: AuditEntr
   if (q.entityType) filter["entity.type"] = q.entityType;
   if (q.entityId) filter["entity.id"] = q.entityId;
   if (q.actorId) filter["actor.id"] = q.actorId;
+  if (q.teamOnly) Object.assign(filter, TEAM_ONLY);
   const created: Record<string, Date> = {};
   if (q.from) created.$gte = q.from;
   if (q.to) created.$lt = q.to;
@@ -75,7 +81,10 @@ export async function listAuditLogs(q: AuditQuery): Promise<{ entries: AuditEntr
 }
 
 /** Distinct action names, for the filter dropdown. */
-export async function auditActions(organizerId?: string): Promise<string[]> {
-  const actions = await AuditLog.distinct("action", organizerId ? { organizerId: new Types.ObjectId(organizerId) } : {});
+/** Entries made by an organiser's own team (signed-in staff who aren't Indinite super admins). */
+const TEAM_ONLY = { "actor.type": "user", "actor.role": { $ne: "super_admin" } } as const;
+
+export async function auditActions(organizerId?: string, opts: { teamOnly?: boolean } = {}): Promise<string[]> {
+  const actions = await AuditLog.distinct("action", { ...(organizerId ? { organizerId: new Types.ObjectId(organizerId) } : {}), ...(opts.teamOnly ? TEAM_ONLY : {}) });
   return (actions as string[]).sort();
 }

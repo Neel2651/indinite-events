@@ -6,6 +6,7 @@ import { linkSecret, verifyOrderLink } from "@indinite/core/links";
 import { AutoRefresh } from "@/components/staff/auto-refresh";
 import { getOrderConfirmation } from "@/lib/queries";
 import { formatDateRange, price } from "@/lib/format";
+import { SpamNote } from "@/components/spam-note";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Your booking", robots: { index: false }, referrer: "no-referrer" };
@@ -97,6 +98,7 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
             )}
 
             {view.note && <p className="text-muted-foreground">{view.note}</p>}
+            {hasPasses && <SpamNote />}
 
             <div className="flex flex-wrap items-center gap-4">
               {hasPasses && canView && (

@@ -5,6 +5,7 @@ import { normalisePublicId, passCode } from "@indinite/core";
 import { linkSecret, verifyOrderLink } from "@indinite/core/links";
 import { getOrderTickets } from "@/lib/queries";
 import { formatDateRange, formatDayTime, price } from "@/lib/format";
+import { SpamNote } from "@/components/spam-note";
 
 export const dynamic = "force-dynamic";
 // The URL carries a bearer token: keep it out of search engines and Referer headers.
@@ -41,6 +42,7 @@ export default async function OrderTicketsPage({ params, searchParams }: Props) 
 
       <section className="bg-brand-cream">
         <div className="mx-auto max-w-3xl space-y-8 px-5 py-10">
+          {(view.status === "paid" || view.status === "partially_refunded") && <SpamNote />}
           <div className="card-brand space-y-5">
             <h2 className="text-xl">Booking details</h2>
             <dl className="grid gap-4 sm:grid-cols-3">

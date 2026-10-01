@@ -804,14 +804,14 @@ function ResultScreen({
   } else if (d.result === "cancelled") {
     title = "Pass cancelled";
     detail = "This pass was refunded or cancelled";
+  } else if (d.reason === "unknown_ticket") {
+    // A genuine pass, but not one of this event's (e.g. another organiser's event): passes are only ever
+    // accepted at their own event.
+    title = "Not for this event";
+    detail = "This pass is for a different event. Check the event name and night on their pass.";
   } else {
     title = "Not a valid pass";
-    detail =
-      d.reason === "unreadable"
-        ? "This QR code isn't an Indinite pass"
-        : d.reason === "bad_signature"
-          ? "This pass has been altered or is fake"
-          : "This pass isn't for this event";
+    detail = d.reason === "unreadable" ? "This QR code isn't an Indinite pass" : "This pass has been altered or is fake";
   }
 
   const ticket = "ticket" in d ? d.ticket : null;

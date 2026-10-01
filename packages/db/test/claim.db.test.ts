@@ -5,7 +5,7 @@ import { MongoMemoryReplSet } from "mongodb-memory-server";
 import mongoose from "mongoose";
 import { generateQrKeyPair, passCode, signTicket } from "@indinite/core";
 import { runWithContext, systemActor } from "@indinite/core/context";
-import { Event, Organizer, Scan, Ticket, TicketType, claimScan, createCheckoutOrder, fulfilOrder, syncScans } from "../src";
+import { Event, Organizer, Scan, Ticket, TicketType, claimScan, createCheckoutOrder, fulfilOrder, getScanManifest, syncScans } from "../src";
 
 let replSet: MongoMemoryReplSet;
 const keys = generateQrKeyPair();
@@ -128,5 +128,36 @@ describe("gate claims", () => {
       syncScans({ eventId, scannerUserId: "u1", canManualAdmit: true, scans: [{ clientScanId: randomUUID(), ticketId: String(t!._id), sessionId: night3, gate: "Gate A", deviceId: "d1", result: "manual_admit", reason: "Manager said ok", scannedAt: new Date().toISOString() }] }),
     );
     expect(synced.results[0]!.result).toBe("too_early");
+  });
+
+  it("never admits another organiser's pass, online, by code or on sync (1 Oct 2026)", async () => {
+    // Organiser B, with its own event and a paid pass. QR codes share Indinite's signing key, so its signature is valid.
+    const orgB = await Organizer.create({ name: "Other Org", slug: "other", contactEmail: "b@example.com", authOrgId: "b1" });
+    const eventB = await Event.create({
+      organizerId: orgB._id,
+      slug: "other-event",
+      title: "Other event",
+      venue: { name: "Hall B", address: "2 Road", postcode: "E2 2BB" },
+      sessions: [{ label: "Night 1", startsAt: new Date(Date.now() + 30 * 60_000), endsAt: new Date(Date.now() + 4 * 3_600_000) }],
+      status: "published",
+    });
+    const ttB = await TicketType.create({ eventId: eventB._id, name: "Night 1", pricePence: 1000, quota: 5, validSessionIds: [eventB.sessions[0]!._id] });
+    const orderB = await runWithContext({ actor: { type: "customer" } }, () =>
+      createCheckoutOrder({ eventId: String(eventB._id), customer: { name: "B", email: "b@example.com" }, items: [{ ticketTypeId: String(ttB._id), qty: 1 }] }),
+    );
+    await runWithContext({ actor: systemActor }, () => fulfilOrder(orderB._id, { mode: "demo" }));
+    const passB = (await Ticket.findOne({ orderId: orderB._id }).lean())!;
+
+    // At organiser A's event: refused as "not for this event".
+    expect(await claim({ token: passB.qrToken })).toMatchObject({ result: "invalid", reason: "unknown_ticket" });
+    if (passB.passCode) expect((await claim({ code: passB.passCode })).result).toBe("invalid");
+    const synced = await runWithContext({ actor: { type: "user", id: "u1" } }, () =>
+      syncScans({ eventId, scannerUserId: "u1", canManualAdmit: true, scans: [{ clientScanId: randomUUID(), ticketId: String(passB._id), sessionId: night1, gate: "Gate A", deviceId: "d1", result: "manual_admit", reason: "Manager said ok", scannedAt: new Date().toISOString() }] }),
+    );
+    expect(synced.results[0]!.result).toBe("invalid");
+    expect(await Scan.countDocuments({ ticketId: passB._id, result: { $in: ["admitted", "manual_admit"] } })).toBe(0);
+    // Organiser A's offline pass list doesn't contain it.
+    const manifest = (await getScanManifest(eventId))!;
+    expect(JSON.stringify(manifest)).not.toContain(String(passB._id));
   });
 });
