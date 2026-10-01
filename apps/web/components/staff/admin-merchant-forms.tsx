@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   adminConnectExistingAction,
   adminDisconnectExistingAction,
@@ -13,16 +13,17 @@ import {
   type ActionState,
 } from "@/app/admin/organisers/actions";
 import { CopyLinkButton } from "./copy-link-button";
-import { FormError, inputClass } from "./ui";
+import { FieldError, FormError, inputClass } from "./ui";
+import { useFormAction } from "@/lib/use-form-action";
 
 function Ok({ state }: { state: ActionState }) {
   return state?.ok ? <p role="status" className="text-sm text-success">{state.ok}</p> : null;
 }
 
 export function SalesPausedForm({ organizerId, paused }: { organizerId: string; paused: boolean }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(salesPausedAction.bind(null, organizerId), null);
+  const [state, action, pending] = useFormAction(salesPausedAction.bind(null, organizerId), null);
   return (
-    <form action={action} className="space-y-3">
+    <form onSubmit={action} className="space-y-3">
       <input type="hidden" name="paused" value={paused ? "false" : "true"} />
       <label className="block text-sm">
         Reason (recorded in the audit log)
@@ -38,9 +39,9 @@ export function SalesPausedForm({ organizerId, paused }: { organizerId: string; 
 }
 
 export function CardFeeForm({ organizerId, payer, percent, fixed, ownAccount = false }: { organizerId: string; payer: string; percent: number; fixed: number; ownAccount?: boolean }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(cardFeeAction.bind(null, organizerId), null);
+  const [state, action, pending] = useFormAction(cardFeeAction.bind(null, organizerId), null);
   return (
-    <form action={action} className="space-y-3">
+    <form onSubmit={action} className="space-y-3">
       <fieldset className="space-y-2">
         <legend className="text-sm font-semibold">Who pays Stripe&apos;s card fee?</legend>
         {ownAccount ? (
@@ -187,25 +188,28 @@ export function AdminOnboardingActions({
 }
 
 export function OrganizerDetailsForm({ organizerId, name, contactEmail, orderPrefix, status, maxDiscountPercent }: { organizerId: string; name: string; contactEmail: string; orderPrefix: string; status: string; maxDiscountPercent: number }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(updateOrganizerAction.bind(null, organizerId), null);
+  const [state, action, pending] = useFormAction(updateOrganizerAction.bind(null, organizerId), null);
   return (
-    <form action={action} className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={action} className="grid gap-4 sm:grid-cols-2">
       <label className="block text-sm">
         Name
         <input name="name" required maxLength={120} defaultValue={name} className={inputClass} />
+        <FieldError state={state} name="name" />
       </label>
       <label className="block text-sm">
         Contact email
         <input name="contactEmail" type="email" required defaultValue={contactEmail} className={inputClass} />
+        <FieldError state={state} name="contactEmail" />
       </label>
-      <label className="block text-sm">
-        Order reference prefix
-        <input name="orderPrefix" required minLength={2} maxLength={5} pattern="[A-Za-z]{2,5}" defaultValue={orderPrefix} className={`${inputClass} uppercase`} aria-describedby="prefix-help" />
-        <span id="prefix-help" className="mt-1 block text-xs text-muted-foreground">New bookings only; existing references don&apos;t change.</span>
-      </label>
+      <div className="text-sm">
+        <span className="block">Order reference prefix</span>
+        <span className="mt-1 block rounded-md border border-border bg-muted px-3 py-2.5 font-mono font-semibold">{orderPrefix}</span>
+        <span className="mt-1 block text-xs text-muted-foreground">Set when the organiser was created and unique to them; it can&apos;t be changed.</span>
+      </div>
       <label className="block text-sm">
         Managers can give up to (% off)
         <input name="maxDiscountPercent" type="number" required min={0} max={100} step={0.5} defaultValue={maxDiscountPercent} className={inputClass} aria-describedby="discount-help" />
+        <FieldError state={state} name="maxDiscountPercent" />
         <span id="discount-help" className="mt-1 block text-xs text-muted-foreground">Discounts on payment links. Owners have no limit; box office can&apos;t give discounts.</span>
       </label>
       <fieldset className="sm:col-span-2">

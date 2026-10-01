@@ -169,7 +169,8 @@ beforeEach(async () => {
   stripe = new FakeStripe();
   setStripeGateway(stripe);
   await Promise.all(["organizers", "events", "tickettypes", "orders", "holds", "tickets", "jobs", "scans", "webhookevents"].map((c) => mongoose.connection.db!.collection(c).deleteMany({})));
-  const org = await Organizer.create({ name: "Demo Garba", slug: "demo", contactEmail: "owner@example.com", authOrgId: "a1", merchantPrefill: { businessType: "company", legalName: "Demo Garba Ltd", website: "https://demo.example" } });
+  // 6% set explicitly (new organisers default to 10% since 1 Oct 2026); these tests' fee maths uses 6%.
+  const org = await Organizer.create({ name: "Demo Garba", slug: "demo", contactEmail: "owner@example.com", authOrgId: "a1", commissionBps: 600, merchantPrefill: { businessType: "company", legalName: "Demo Garba Ltd", website: "https://demo.example" } });
   orgId = String(org._id);
   const event = await Event.create({
     organizerId: org._id,

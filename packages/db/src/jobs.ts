@@ -20,6 +20,7 @@ export interface SendTicketsJob {
 export type SendAuthEmailJob =
   | { kind: "invitation"; to: string; url: string; organizationName: string; role: string; inviterName: string }
   | { kind: "reset-password"; to: string; url: string; name: string }
+  | { kind: "verify-email"; to: string; url: string; name: string }
   | { kind: "merchant-setup"; to: string; url: string; organizationName: string }
   | { kind: "merchant-active"; to: string; url: string; organizationName: string };
 

@@ -44,9 +44,21 @@ export function createAuth(extraPlugins: BetterAuthPlugin[] = []) {
         await enqueueSendAuthEmail({ kind: "reset-password", to: user.email, url, name: user.name });
       },
     },
+    // Only self-registered organisers must verify their email before signing in (mustVerifyEmail, checked in the
+    // before-hook). Invited staff proved their email by opening the invitation and aren't affected.
+    emailVerification: {
+      sendOnSignUp: false,
+      autoSignInAfterVerification: true,
+      expiresIn: 60 * 60 * 24,
+      sendVerificationEmail: async ({ user, url }) => {
+        await enqueueSendAuthEmail({ kind: "verify-email", to: user.email, url, name: user.name });
+      },
+    },
     user: {
       additionalFields: {
         isSuperAdmin: { type: "boolean", defaultValue: false, input: false, required: false },
+        /** Self-registered organiser owners: can't sign in until their email is verified (1 Oct 2026). */
+        mustVerifyEmail: { type: "boolean", defaultValue: false, input: false, required: false },
       },
     },
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
@@ -58,7 +70,9 @@ export function createAuth(extraPlugins: BetterAuthPlugin[] = []) {
       customRules: {
         // No limit on sign-in attempts (decided 1 Oct 2026): `false` also turns off Better Auth's built-in sign-in limit.
         "/sign-in/email": false,
-        "/request-password-reset": { window: 300, max: 3 },
+        // 1-minute windows everywhere (1 Oct 2026); the forms show "Try again in N seconds" from X-Retry-After.
+        "/request-password-reset": { window: 60, max: 5 },
+        "/send-verification-email": { window: 60, max: 5 },
       },
     },
     hooks: {
@@ -78,6 +92,15 @@ export function createAuth(extraPlugins: BetterAuthPlugin[] = []) {
         if (!invitation || new Date(invitation.expiresAt) <= new Date()) {
           throw new APIError("FORBIDDEN", { message: "Accounts are by invitation only." });
         }
+      }),
+      // Self-registered organisers sign in only after verifying their email. Checked after the password, so it
+      // never reveals whether an email is registered; the session just created is removed again.
+      after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/sign-in/email") return;
+        const created = ctx.context.newSession as { session: { token: string }; user: { mustVerifyEmail?: boolean | null; emailVerified?: boolean } } | null;
+        if (!created?.user.mustVerifyEmail || created.user.emailVerified) return;
+        await ctx.context.internalAdapter.deleteSession(created.session.token);
+        throw new APIError("FORBIDDEN", { code: "EMAIL_NOT_VERIFIED", message: "Check your inbox and click the link we sent to verify your email." });
       }),
     },
     plugins: [

@@ -15,7 +15,8 @@
     "format": "prettier --write .",
     "setup:production": "pnpm --filter @indinite/db sync-indexes && pnpm --filter @indinite/auth sync-indexes && pnpm --filter @indinite/auth create-super-admin",
     "check:env": "pnpm --filter @indinite/db check-env",
-    "owners": "pnpm --filter @indinite/auth owners"
+    "owners": "pnpm --filter @indinite/auth owners",
+    "migrate:registration": "pnpm --filter @indinite/auth migrate:registration"
   },
   "devDependencies": {
     "@eslint/js": "^9",

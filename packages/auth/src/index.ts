@@ -14,4 +14,4 @@ export {
   type MemberRow,
   type InvitationRow,
 } from "./staff";
-export { createOrganizer, createOrganizerSchema, type CreateOrganizerInput } from "./organizers";
+export { createOrganizer, createOrganizerSchema, registerOrganizer, uniqueOrganizerSlug, orderPrefixCandidates, type CreateOrganizerInput } from "./organizers";

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { claimScan, connectDb, hitRateLimit } from "@indinite/db";
+import { claimScan, connectDb } from "@indinite/db";
 import { json, scanAccess } from "@/lib/scan-access";
 
 export const runtime = "nodejs";
@@ -23,10 +23,7 @@ export async function POST(req: Request) {
   await connectDb();
   const access = await scanAccess(parsed.data.eventId);
   if ("error" in access) return access.error;
-  // Typed codes are the only guessable input; cap them per staff member.
-  if (parsed.data.code && !(await hitRateLimit(`scan-code:${access.user.id}`, 30, 60_000)).allowed) {
-    return json({ error: "Too many codes typed. Wait a minute." }, 429);
-  }
+  // Typed codes: no rate limit (decided 1 Oct 2026); only signed-in staff of the event's organiser get here.
   const publicKeyHex = process.env.NEXT_PUBLIC_QR_PUBLIC_KEY;
   if (!publicKeyHex) return json({ error: "Scanner isn't configured." }, 500);
   const result = await claimScan({ ...parsed.data, scannerUserId: access.user.id, publicKeyHex });

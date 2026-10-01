@@ -107,6 +107,12 @@ else {
     if (collections === 0) warn("Collections", "empty database: run pnpm setup:production <admin email>");
     if (admins === 0) warn("Super admin", "no super admin yet: run pnpm setup:production <admin email>");
     else ok("Super admin", `${admins} account${admins === 1 ? "" : "s"}`);
+    // Self-registration release (1 Oct 2026): unique order prefixes and the verification flag on every account.
+    const dupes = await db.collection("organizers").aggregate<{ _id: string; n: number }>([{ $group: { _id: "$orderPrefix", n: { $sum: 1 } } }, { $match: { n: { $gt: 1 } } }]).toArray();
+    if (dupes.length) fail("Order prefixes", `shared by several organisers: ${dupes.map((d) => d._id).join(", ")}. Run pnpm migrate:registration`);
+    else ok("Order prefixes", "unique");
+    const unflagged = await db.collection("user").countDocuments({ mustVerifyEmail: { $exists: false } });
+    if (unflagged) warn("Accounts", `${unflagged} without the email-verification flag: run pnpm migrate:registration`);
   } catch (e) {
     fail("MONGODB_URI", `can't connect: ${e instanceof Error ? e.message.replace(/mongodb(\+srv)?:\/\/[^\s]+/g, "[address]") : "error"}`);
   } finally {
@@ -220,7 +226,6 @@ for (const name of ["LEGAL_ENTITY_NAME", "LEGAL_ICO_NUMBER"]) {
   else (live ? warn : ok)(name, live ? "not set: the policies show a [placeholder]" : "not set (placeholder shown; fine before launch)");
 }
 ok("LEGAL_SUPPORT_EMAIL", val("LEGAL_SUPPORT_EMAIL") || "contact@indinite.co.uk (default)");
-if (live && val("LOAD_TEST_CHECKOUT_LIMIT")) warn("LOAD_TEST_CHECKOUT_LIMIT", "set on the live server: remove it (it's ignored with real payments, but shouldn't be here)");
 if (live && val("SEED_PASSWORD")) warn("SEED_PASSWORD", "set on the live server: not needed there, remove it");
 if (live && val("ADMIN_PASSWORD")) warn("ADMIN_PASSWORD", "is in the settings: pass it only for the setup command, then remove it");
 

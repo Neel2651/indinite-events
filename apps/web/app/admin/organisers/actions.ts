@@ -7,30 +7,33 @@ import { appUrl } from "@indinite/auth";
 import { CARD_FEE_PAYERS } from "@indinite/core";
 import { connectExistingAccountUrl, disconnectExistingAccount, MerchantError, merchantDashboardLink, saveMerchantPrefill, sendMerchantSetupEmail, setCardFeeSettings, startMerchantOnboarding, stripeErrorMessage, StripeNotConfiguredError, setOnlineSalesPaused, setOrganizerCommission, SettingsError, updateOrganizer } from "@indinite/db";
 import { auth } from "@/lib/auth";
+import { fieldFailure, zodFailure, type FormState } from "@/lib/form-state";
 import { asStaff, requireSuperAdmin } from "@/lib/staff";
+import { ZodError } from "zod";
 
-export type ActionState = { error?: string; ok?: string } | null;
+export type ActionState = FormState;
 
 export async function createOrganizerAction(_: ActionState, form: FormData): Promise<ActionState> {
   const user = await requireSuperAdmin();
   const commissionPercent = Number(form.get("commissionPercent"));
+  // The web address and order prefix are made from the name (1 Oct 2026).
   const parsed = createOrganizerSchema.safeParse({
     name: form.get("name"),
-    slug: String(form.get("slug") ?? "").toLowerCase(),
     contactEmail: form.get("contactEmail"),
     commissionBps: Number.isFinite(commissionPercent) ? Math.round(commissionPercent * 100) : NaN,
-    orderPrefix: String(form.get("orderPrefix") ?? "").toUpperCase(),
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the details and try again." };
+  if (!parsed.success) return zodFailure(parsed.error, { commissionBps: "commissionPercent" });
 
   const ownerEmail = String(form.get("ownerEmail") ?? "").trim();
+  // Checked before anything is created, so a typo doesn't leave an organiser without its owner.
+  if (ownerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) return fieldFailure("ownerEmail", "Enter a valid email address for the owner, or leave it empty.");
   // Optional payment details (SPEC §4.8): prefill Stripe; bank details + ID are entered by the owner on Stripe.
   const addPayments = form.get("addPayments") === "on";
   const businessType = form.get("businessType") === "individual" ? "individual" : "company";
   const legalName = String(form.get("legalName") ?? "").trim();
   const website = String(form.get("website") ?? "").trim();
-  if (addPayments && legalName.length < 2) return { error: "Enter the business's legal name for payments, or untick payment details." };
-  if (addPayments && website && !/^https?:\/\/\S+\.\S+/.test(website)) return { error: "Enter the website as a full address, e.g. https://example.com" };
+  if (addPayments && legalName.length < 2) return fieldFailure("legalName", "Enter the business's legal name for payments, or untick payment details.");
+  if (addPayments && website && !/^https?:\/\/\S+\.\S+/.test(website)) return fieldFailure("website", "Enter the website as a full address, e.g. https://example.com");
   try {
     const org = await asStaff(user, () => createOrganizer(auth, user, parsed.data));
     if (ownerEmail) await asStaff(user, () => inviteMember(auth, user, org.id, ownerEmail, "owner"), org.id);
@@ -43,9 +46,9 @@ export async function createOrganizerAction(_: ActionState, form: FormData): Pro
       } else paymentsNote = " Payment details saved.";
     }
     revalidatePath("/admin/organisers");
-    return { ok: (ownerEmail ? `Created ${parsed.data.name} and invited ${ownerEmail} as owner.` : `Created ${parsed.data.name}.`) + paymentsNote };
+    return { ok: (ownerEmail ? `Created ${parsed.data.name} (web address /org/${org.slug}, order references ${org.orderPrefix}-…) and invited ${ownerEmail} as owner.` : `Created ${parsed.data.name} (web address /org/${org.slug}, order references ${org.orderPrefix}-…).`) + paymentsNote };
   } catch (e) {
-    if (e instanceof MembershipError) return { error: e.message };
+    if (e instanceof MembershipError) return e.field ? fieldFailure(e.field, e.message) : { error: e.message };
     console.error("[admin] create organiser failed", e instanceof Error ? e.message : e);
     return { error: "Couldn't create the organiser. Please try again." };
   }
@@ -155,11 +158,11 @@ export async function adminSendSetupEmailAction(organizerId: string): Promise<Ac
   }
 }
 
-/** Super admin: organiser name, contact, order prefix, status (suspend / reactivate) and manager discount limit. */
+/** Super admin: organiser name, contact, status (suspend / reactivate) and manager discount limit. The order prefix is fixed. */
 export async function updateOrganizerAction(organizerId: string, _: ActionState, form: FormData): Promise<ActionState> {
   const user = await requireSuperAdmin();
   const maxPercent = Number(String(form.get("maxDiscountPercent") ?? "").trim());
-  if (!Number.isFinite(maxPercent) || maxPercent < 0 || maxPercent > 100) return { error: "Enter the managers' discount limit as a percentage between 0 and 100." };
+  if (!Number.isFinite(maxPercent) || maxPercent < 0 || maxPercent > 100) return fieldFailure("maxDiscountPercent", "Enter the managers' discount limit as a percentage between 0 and 100.");
   const status = form.get("status") === "suspended" ? "suspended" : "active";
   try {
     await asStaff(
@@ -168,7 +171,6 @@ export async function updateOrganizerAction(organizerId: string, _: ActionState,
         updateOrganizer(organizerId, {
           name: String(form.get("name") ?? ""),
           contactEmail: String(form.get("contactEmail") ?? ""),
-          orderPrefix: String(form.get("orderPrefix") ?? ""),
           status,
           maxDiscountBpsForManager: Math.round(maxPercent * 100),
         }),
@@ -176,7 +178,7 @@ export async function updateOrganizerAction(organizerId: string, _: ActionState,
     );
   } catch (e) {
     if (e instanceof SettingsError) return { error: e.message };
-    if (e instanceof Error && "issues" in e) return { error: (e as unknown as { issues: { message: string }[] }).issues[0]?.message ?? "Check the details." };
+    if (e instanceof ZodError) return zodFailure(e);
     return { error: "Couldn't save." };
   }
   revalidatePath(`/admin/organisers/${organizerId}`);

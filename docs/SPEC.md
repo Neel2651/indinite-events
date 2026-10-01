@@ -219,6 +219,41 @@ Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 
   timelines (generated, emailed, each scan with time, night, gate and scanner name, overrides) and order history
   (how it was sold, by whom, payment method and note).
 
+### 4.9 Organiser self-registration (agreed 1 Oct 2026)
+- **`/register`:**
+  - Asks for: organisation name, your name, email (login and contact), password, and agreeing to the terms.
+  - Doesn't ask for payment details; payments are set up later from the Payments page.
+  - Creates the organiser at the default **10%** platform fee, its Better Auth organisation, and the person as
+    **owner**. Audited as `organizer.self_registered`.
+  - Abuse protection: a honeypot field, and limits of 5 per IP and 3 per email per minute.
+- **Email verification:**
+  - Self-registered owners (`mustVerifyEmail`) **can't sign in until they've clicked the link** we email
+    (`verify-email` job, valid 24 h).
+  - The link signs them in and opens their dashboard with "Next steps".
+  - The sign-in check runs after the password is checked, so it never reveals whether an email is registered.
+  - The sign-in page offers "Resend verification email" (5 per minute).
+  - Invited staff aren't affected.
+- **No approval:** none is needed. Super admins can suspend any organiser.
+- **Sign-in page:** "Organiser login", with a "Register your organisation" link.
+- **Web address and order reference prefix:** both are **generated from the name** (`slugify` / `suggestOrderPrefixes` in
+  core), for self-registration and for super admins creating organisers.
+  - The prefix is **unique** (unique index) and **can't be changed**.
+  - Existing data is fixed up by `pnpm migrate:registration`.
+
+### 4.10 Other rules (agreed 1 Oct 2026)
+- **Forms:** a server error never clears the form. The fields concerned are highlighted, with their message
+  underneath.
+- **Scanning:** a pass is only ever accepted at its own event. Another event's pass, including another organiser's,
+  shows "Not for this event", online and offline.
+- **Organiser audit log:** shows only the organiser's own team's actions. Admin → Audit log shows everything.
+- **Rate limits:** 1-minute windows. Messages say when to try again ("Try again in 30 seconds").
+  - None on checkout, coupon checks or typed gate codes.
+  - Find my tickets: 5 per minute per IP and per email.
+  - Password reset and verification email: 5 per minute.
+  - Sign-in: none.
+- **After booking:** the confirmation and passes pages remind customers to check spam or junk for the passes
+  email.
+
 ### 4.8 Merchant onboarding and card fees (agreed 28 Sep 2026)
 - Indinite's Stripe platform account is held by a UK-registered entity. Organisers are **Express** connected
   accounts (GB, GBP).

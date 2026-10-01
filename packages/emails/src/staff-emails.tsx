@@ -84,6 +84,29 @@ export function ResetPasswordEmail(d: ResetPasswordEmailData) {
   );
 }
 
+export interface VerifyEmailData {
+  name: string;
+  url: string;
+}
+
+export const verifyEmailSubject = () => "Verify your email for Indinite Events";
+
+/** Self-registered organisers (1 Oct 2026): they can sign in once they've clicked this. */
+export function VerifyEmail(d: VerifyEmailData) {
+  return (
+    <Shell preview="Verify your email to finish registering" title="Verify your email">
+      <Text style={p}>Hi {d.name.split(" ")[0]},</Text>
+      <Text style={p}>Thanks for registering your organisation on Indinite Events. Click the button to verify your email address and sign in.</Text>
+      <Button href={d.url} style={button}>
+        Verify my email
+      </Button>
+      <Text style={{ ...p, fontSize: "13px", marginTop: "16px" }}>
+        The link works for 24 hours. If you didn&apos;t register, you can ignore this email and no account will be activated.
+      </Text>
+    </Shell>
+  );
+}
+
 export interface PaymentLinkEmailData {
   customerName: string;
   eventTitle: string;

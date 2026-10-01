@@ -1,11 +1,12 @@
 import { headers } from "next/headers";
-import { normalisePublicId, orderLookupSchema } from "@indinite/core";
+import { normalisePublicId, orderLookupSchema, retryAfterText } from "@indinite/core";
 import { linkSecret, signOrderLink } from "@indinite/core/links";
 import { connectDb, hitRateLimit, Order } from "@indinite/db";
 
 export const runtime = "nodejs";
 
-const HOUR = 3_600_000;
+// 5 tries a minute per IP and per email (1-minute windows, 1 Oct 2026).
+const MINUTE = 60_000;
 const LIMIT = 5;
 
 /**
@@ -21,11 +22,15 @@ export async function POST(req: Request) {
   const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   await connectDb();
   const [byIp, byEmail] = await Promise.all([
-    hitRateLimit(`lookup:ip:${ip}`, LIMIT, HOUR),
-    hitRateLimit(`lookup:email:${email}`, LIMIT, HOUR),
+    hitRateLimit(`lookup:ip:${ip}`, LIMIT, MINUTE),
+    hitRateLimit(`lookup:email:${email}`, LIMIT, MINUTE),
   ]);
   if (!byIp.allowed || !byEmail.allowed) {
-    return Response.json({ error: "Too many attempts. Please try again in an hour." }, { status: 429 });
+    const resetAt = Math.max(byIp.allowed ? 0 : byIp.resetAt.getTime(), byEmail.allowed ? 0 : byEmail.resetAt.getTime());
+    return Response.json(
+      { error: `Too many attempts. ${retryAfterText(resetAt)}` },
+      { status: 429, headers: { "Retry-After": String(Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))) } },
+    );
   }
 
   const order = await Order.findOne(

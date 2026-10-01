@@ -123,3 +123,16 @@ export type SessionInput = z.infer<typeof sessionSchema>;
 /** What callers pass in (before defaults and transforms). */
 export type EventUpsertRaw = z.input<typeof eventUpsertSchema>;
 export type TicketTypeUpsertRaw = z.input<typeof ticketTypeUpsertSchema>;
+
+/** Self-registration on /register (1 Oct 2026): the basic details a super admin would enter, no payment details. */
+export const registerOrganizerSchema = z
+  .object({
+    organisationName: z.string().trim().min(2, "Enter your organisation's name").max(120),
+    name: z.string().trim().min(1, "Enter your name").max(120),
+    email: z.email("Enter a valid email address").transform((e) => e.toLowerCase()),
+    password: z.string().min(10, "Use at least 10 characters").max(128),
+    confirm: z.string(),
+    acceptTerms: z.literal(true, { error: "Tick the box to agree to the terms" }),
+  })
+  .refine((v) => v.password === v.confirm, { message: "The passwords don't match", path: ["confirm"] });
+export type RegisterOrganizerInput = Omit<z.input<typeof registerOrganizerSchema>, "acceptTerms"> & { acceptTerms: boolean };

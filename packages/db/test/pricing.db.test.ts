@@ -16,7 +16,8 @@ beforeAll(async () => {
   replSet = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: "wiredTiger" } });
   await mongoose.connect(replSet.getUri());
   await Promise.all(mongoose.modelNames().map((n) => mongoose.model(n).init()));
-  const org = await Organizer.create({ name: "Org", slug: "org", contactEmail: "o@example.com", authOrgId: "a1" }); // default 6%
+  // 6% set explicitly (the default for new organisers is 10% since 1 Oct 2026); these tests' maths uses 6%.
+  const org = await Organizer.create({ name: "Org", slug: "org", contactEmail: "o@example.com", authOrgId: "a1", commissionBps: 600 });
   orgId = String(org._id);
   const event = await Event.create({
     organizerId: org._id,

@@ -1,13 +1,13 @@
 import { render } from "@react-email/components";
 import { createElement } from "react";
-import { InvitationEmail, invitationSubject, MerchantActiveEmail, merchantActiveSubject, MerchantSetupEmail, merchantSetupSubject, type MerchantEmailData, PaymentLinkEmail, paymentLinkSubject, RefundEmail, refundSubject, type RefundEmailData, ResetPasswordEmail, resetPasswordSubject, type InvitationEmailData, type PaymentLinkEmailData, type ResetPasswordEmailData } from "./staff-emails";
+import { InvitationEmail, invitationSubject, MerchantActiveEmail, merchantActiveSubject, MerchantSetupEmail, merchantSetupSubject, type MerchantEmailData, PaymentLinkEmail, paymentLinkSubject, RefundEmail, refundSubject, type RefundEmailData, ResetPasswordEmail, resetPasswordSubject, VerifyEmail, verifyEmailSubject, type VerifyEmailData, type InvitationEmailData, type PaymentLinkEmailData, type ResetPasswordEmailData } from "./staff-emails";
 import { TicketsEmail, subjectFor } from "./tickets-email";
 import type { TicketsEmailData } from "./types";
 
 export type { PassData, TicketsEmailData } from "./types";
 export { renderPassesPdf } from "./pass-pdf";
 export { buildPassesData, groupPassesByNight, nightsLabel, passNight, type PassGroup, type EventForPasses, type OrderForPasses, type TicketForPasses } from "./order-passes";
-export type { InvitationEmailData, PaymentLinkEmailData, RefundEmailData, ResetPasswordEmailData } from "./staff-emails";
+export type { InvitationEmailData, PaymentLinkEmailData, RefundEmailData, ResetPasswordEmailData, VerifyEmailData } from "./staff-emails";
 
 export interface RenderedEmail {
   subject: string;
@@ -28,6 +28,11 @@ export async function renderInvitationEmail(d: InvitationEmailData): Promise<Ren
 export async function renderResetPasswordEmail(d: ResetPasswordEmailData): Promise<RenderedEmail> {
   const el = createElement(ResetPasswordEmail, d);
   return { subject: resetPasswordSubject(), html: await render(el), text: await render(el, { plainText: true }) };
+}
+
+export async function renderVerifyEmail(d: VerifyEmailData): Promise<RenderedEmail> {
+  const el = createElement(VerifyEmail, d);
+  return { subject: verifyEmailSubject(), html: await render(el), text: await render(el, { plainText: true }) };
 }
 
 export async function renderPaymentLinkEmail(d: PaymentLinkEmailData): Promise<RenderedEmail> {

@@ -38,6 +38,11 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
 - `apps/web/lib/queries.ts`: public read models for events.
 - Installable staff app: `public/app.webmanifest` + `lib/app-meta.ts` (org, admin, scan layouts), one service worker
   `public/scan-sw.js` (scanner offline, `/offline` page for staff screens; not registered under `next dev`), phone tabs `components/staff/mobile-nav.tsx`.
+- Self-registration: `/register` → `registerOrganizer` (`packages/auth/src/organizers.ts`); web address and order prefix
+  are generated (`slugify`, `suggestOrderPrefixes` in core; prefix unique, not editable); `mustVerifyEmail` users can't
+  sign in until verified (after-hook in `packages/auth/src/auth.ts`).
+- Forms: `useFormAction` (`apps/web/lib/use-form-action.ts`) keeps values on error; actions return `FormState`
+  (`lib/form-state.ts`: `zodFailure`, `fieldFailure`) and forms show `<FieldError state name>`.
 - Events: one editor (`components/staff/event-editor.tsx`) for Admin → Events and the organiser panel (`/org/[slug]/events`,
   owners). Event actions (`app/admin/events/actions.ts`) check permission against the event's organiser from the DB.
 
@@ -48,6 +53,7 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
 - `pnpm --filter @indinite/db seed` / `sync-indexes`; `seed -- --update` adds and updates demo data in place (keeps orders), `--reset` replaces it.
   Seeds refuse on a live server (`NODE_ENV=production` without `DEPLOY_ENV=staging`)
 - `pnpm setup:production <email>` — live database: collections, indexes and the first super admin (asks for the password)
+- `pnpm migrate:registration` — live DB update for self-registration (flags, unique order prefixes); run before deploying it
 - `pnpm owners` — each organiser's owners (they manage their own events); `-- --make-owner <email> <slug>`
 - `pnpm check:env` — checks this server's settings (formats, database, Stripe, Resend, QR key pair); never prints secrets. `-- --offline` skips network calls
 - `LOAD_BASE_URL=… pnpm --filter @indinite/e2e test:load` — load test (sales rush) against a demo server; see `e2e/tests/load.ts`

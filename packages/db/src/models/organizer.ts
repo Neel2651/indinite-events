@@ -1,4 +1,5 @@
 import { Schema, type InferSchemaType } from "mongoose";
+import { DEFAULT_COMMISSION_BPS, randomOrderPrefix } from "@indinite/core";
 import { defineModel } from "./_util";
 
 const organizerSchema = new Schema(
@@ -37,10 +38,16 @@ const organizerSchema = new Schema(
       bps: { type: Number, min: 0, max: 1000, default: 150 },
       fixedPence: { type: Number, min: 0, max: 500, default: 20 },
     },
-    /** Platform fee = Indinite commission, charged on top of ticket prices (600 = 6%). Events can override. */
-    commissionBps: { type: Number, required: true, min: 0, max: 10000, default: 600 },
+    /** Platform fee = Indinite commission, charged on top of ticket prices (1000 = 10%). Events can override. */
+    commissionBps: { type: Number, required: true, min: 0, max: 10000, default: DEFAULT_COMMISSION_BPS },
     maxDiscountBpsForManager: { type: Number, min: 0, max: 10000, default: 5000 },
-    orderPrefix: { type: String, default: "NAV", match: /^[A-Z]{2,5}$/ },
+    /**
+     * Order reference prefix ("OMB" in OMB-7K3F9Q). Generated from the name and unique across organisers (1 Oct 2026);
+     * not editable. The random default only applies to records created without one (tests, old data).
+     */
+    orderPrefix: { type: String, default: () => randomOrderPrefix(), match: /^[A-Z]{2,5}$/, unique: true },
+    /** Registered themselves on /register (not created by a super admin). */
+    selfRegistered: { type: Boolean, default: false },
     status: { type: String, enum: ["active", "suspended"], default: "active" },
   },
   { timestamps: true },

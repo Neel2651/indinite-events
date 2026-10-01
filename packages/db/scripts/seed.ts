@@ -288,8 +288,9 @@ async function updateOne(d: SeedOrganizer, media: Media): Promise<string[]> {
   if (!org) throw new Error(`${d.organizer.slug} not found`);
   const orgId = String(org._id);
 
-  const details = { name: d.organizer.name, contactEmail: d.organizer.contactEmail, orderPrefix: d.organizer.orderPrefix };
-  if (!same(details, { name: org.name, contactEmail: org.contactEmail, orderPrefix: org.orderPrefix })) {
+  // The order prefix is fixed once created (1 Oct 2026), so --update never changes it.
+  const details = { name: d.organizer.name, contactEmail: d.organizer.contactEmail };
+  if (!same(details, { name: org.name, contactEmail: org.contactEmail })) {
     await updateOrganizer(orgId, { ...details, status: org.status ?? "active", maxDiscountBpsForManager: org.maxDiscountBpsForManager ?? 0 });
     changes.push("updated organiser details");
   }

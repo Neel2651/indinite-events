@@ -37,7 +37,9 @@ interface BaInvitation {
 export class MembershipError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 404 | 409 = 400,
+    readonly status: 400 | 404 | 409 | 429 = 400,
+    /** The form field the message is about, so the form can highlight it. */
+    readonly field?: string,
   ) {
     super(message);
   }

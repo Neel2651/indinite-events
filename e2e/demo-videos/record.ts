@@ -140,10 +140,10 @@ async function signIn(page: Page, email: string) {
 async function organiserFlow(page: Page) {
   await resetNewStaff();
   await page.goto(BASE);
-  await caption(page, "Organiser teams sign in from the Staff sign in link", 2000);
+  await caption(page, "Organiser teams sign in from the Organiser login link", 2000);
   await page.evaluate("window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })");
   await pause(page, 1000);
-  await click(page, page.getByRole("link", { name: "Staff sign in" }), 1000);
+  await click(page, page.getByRole("link", { name: "Organiser login" }), 1000);
 
   await caption(page, "Owners sign in with email and password. There's no public sign-up", 2400);
   await signIn(page, "owner@demo-garba.test");

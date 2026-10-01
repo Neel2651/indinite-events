@@ -36,6 +36,7 @@ export default async function OrganisersPage() {
               <tr key={String(o._id)}>
                 <td className="px-4 py-3">
                   <span className="font-semibold">{o.name}</span>
+                  {o.selfRegistered && <span className="ml-2 rounded-full bg-brand-yellow px-2 py-0.5 text-xs font-semibold text-brand-navy">Self-registered</span>}
                   <span className="block text-xs text-muted-foreground">
                     {o.slug} · {o.orderPrefix}-
                   </span>

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { appUrl } from "@indinite/auth";
 import { cardFeeOf, merchantStatus, MERCHANT_STATUS_LABELS } from "@indinite/core";
 import { merchantSetupUrl, Organizer, refreshMerchantAccount, stripeConfigured, stripeConnectConfigured } from "@indinite/db";
@@ -28,6 +28,9 @@ export default async function AdminOrganiserPage({ params, searchParams }: Props
   const org = await Organizer.findById(id).lean();
   if (!org) notFound();
   const status = merchantStatus(org);
+  // Self-registered organisers: has the owner clicked the verification link yet? (They can't sign in until then.)
+  const ownerUser = org.selfRegistered ? await mongoose.connection.db!.collection("user").findOne({ email: org.contactEmail }, { projection: { emailVerified: 1 } }) : null;
+  const ownerVerified = org.selfRegistered ? Boolean(ownerUser?.emailVerified) : null;
   const own = Boolean(org.stripeAccountId) && org.stripeAccountType === "standard";
   const fee = cardFeeOf(org);
   const outcome = connectOutcomeText(stripe, await connectMessage());
@@ -36,7 +39,7 @@ export default async function AdminOrganiserPage({ params, searchParams }: Props
     <>
       <PageHeader
         title={org.name}
-        description={`${org.slug} · ${org.contactEmail}`}
+        description={`${org.slug} · ${org.contactEmail} · order references ${org.orderPrefix}-…${org.selfRegistered ? ` · Self-registered${ownerVerified === null ? "" : ownerVerified ? ", email verified" : ", email not verified yet"}` : ""}`}
         actions={
           <div className="flex gap-3 text-sm">
             <Link href={`/org/${org.slug}`} className="font-semibold text-brand-orange-strong hover:underline">Open panel</Link>

@@ -49,7 +49,7 @@ let laterId: string;
 
 beforeEach(async () => {
   await Promise.all(mongoose.modelNames().filter((n) => n !== "AuditLog").map((n) => mongoose.model(n).deleteMany({})));
-  const org = await Organizer.create({ name: "Org", slug: `org-${Date.now()}`, contactEmail: "o@example.com", authOrgId: `a-${Date.now()}`, commissionBps: 800 });
+  const org = await Organizer.create({ name: "Org", slug: `org-${Date.now()}`, contactEmail: "o@example.com", authOrgId: `a-${Date.now()}`, commissionBps: 800, orderPrefix: "NAV" });
   const event = await Event.create({
     organizerId: org._id,
     slug: `e-${Date.now()}`,

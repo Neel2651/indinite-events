@@ -1,42 +1,54 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
-import { createOrganizerAction, type ActionState } from "@/app/admin/organisers/actions";
-import { FormError, inputClass } from "./ui";
+import { useEffect, useRef, useState } from "react";
+import { createOrganizerAction } from "@/app/admin/organisers/actions";
+import { DEFAULT_COMMISSION_BPS, slugify, suggestOrderPrefixes } from "@indinite/core";
+import { FieldError, FormError, inputClass } from "./ui";
+import { useFormAction } from "@/lib/use-form-action";
 
 export function CreateOrganizerForm() {
-  const [state, action, pending] = useActionState<ActionState, FormData>(createOrganizerAction, null);
+  const [state, action, pending] = useFormAction(createOrganizerAction, null);
   const formRef = useRef<HTMLFormElement>(null);
   const [payments, setPayments] = useState(false);
+  const [name, setName] = useState("");
+  // A new result: clear the name (and its preview) after a successful create, during render rather than in an effect.
+  const [seen, setSeen] = useState(state);
+  if (seen !== state) {
+    setSeen(state);
+    if (state?.ok) setName("");
+  }
   useEffect(() => {
     if (state?.ok) formRef.current?.reset();
   }, [state]);
+  // The web address and order prefix are made from the name on the server (unique, not editable).
+  const likelyPrefix = name.trim().length >= 2 ? suggestOrderPrefixes(name)[0] : null;
 
   return (
-    <form ref={formRef} action={action} className="grid gap-4 sm:grid-cols-2">
-      <label className="block text-sm">
+    <form ref={formRef} onSubmit={action} className="grid gap-4 sm:grid-cols-2">
+      <label className="block text-sm sm:col-span-2">
         Organiser name
-        <input name="name" required maxLength={120} className={inputClass} placeholder="e.g. Shree Garba Events Ltd" />
-      </label>
-      <label className="block text-sm">
-        Short name for web addresses
-        <input name="slug" required maxLength={60} pattern="[a-z0-9]+(-[a-z0-9]+)*" className={inputClass} placeholder="e.g. shree-garba" />
+        <input name="name" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} className={inputClass} placeholder="e.g. Shree Garba Events Ltd" />
+        <FieldError state={state} name="name" />
+        <span className="mt-1 block text-xs text-muted-foreground">
+          {likelyPrefix
+            ? `Web address /org/${slugify(name) || "…"} and order references like ${likelyPrefix}-7K3F9Q (a different code is used if it's taken). Both are set from the name and can't be changed.`
+            : "The web address and order reference code are made from the name."}
+        </span>
       </label>
       <label className="block text-sm">
         Contact email
         <input name="contactEmail" type="email" required className={inputClass} />
+        <FieldError state={state} name="contactEmail" />
       </label>
       <label className="block text-sm">
         Owner to invite (optional)
         <input name="ownerEmail" type="email" className={inputClass} placeholder="They'll get an email to set up their account" />
+        <FieldError state={state} name="ownerEmail" />
       </label>
       <label className="block text-sm">
         Commission (%)
-        <input name="commissionPercent" type="number" required min={0} max={100} step={0.01} defaultValue={6} className={inputClass} />
-      </label>
-      <label className="block text-sm">
-        Order reference prefix
-        <input name="orderPrefix" required minLength={2} maxLength={5} pattern="[A-Za-z]{2,5}" defaultValue="NAV" className={`${inputClass} uppercase`} />
+        <input name="commissionPercent" type="number" required min={0} max={100} step={0.01} defaultValue={DEFAULT_COMMISSION_BPS / 100} className={inputClass} />
+        <FieldError state={state} name="commissionPercent" />
       </label>
       <fieldset className="space-y-3 rounded-md border border-border p-4 sm:col-span-2">
         <label className="flex items-center gap-2 font-semibold">
@@ -58,10 +70,12 @@ export function CreateOrganizerForm() {
             <label className="block text-sm">
               Legal name
               <input name="legalName" maxLength={120} className={inputClass} placeholder="As registered, e.g. Shree Garba Events Ltd" />
+              <FieldError state={state} name="legalName" />
             </label>
             <label className="block text-sm">
               Website (optional)
               <input name="website" type="url" className={inputClass} placeholder="https://" />
+              <FieldError state={state} name="website" />
             </label>
             <label className="flex items-center gap-2 text-sm sm:col-span-3">
               <input type="checkbox" name="sendSetup" defaultChecked className="accent-[var(--brand-orange)]" />

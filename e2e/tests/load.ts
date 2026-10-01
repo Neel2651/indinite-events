@@ -7,9 +7,7 @@
  * Demo checkouts go through the real hold → order → fulfilment path, so this loads MongoDB exactly like
  * paid bookings (minus Stripe).
  *
- * Before running against staging:
- *   - Set LOAD_TEST_CHECKOUT_LIMIT=100000 in the server's .env.local and `pm2 reload`. Every request comes from
- *     this machine's IP, and checkout normally allows 20 per IP per 10 minutes. Remove it afterwards.
+ * Before running against staging (checkout has no rate limit, so nothing needs changing on the server):
  *   - Stop the worker (`pm2 stop indinite-worker`) unless you want to load it too. Bookings go to
  *     delivered+…@resend.dev (Resend's test inbox, no bounces) but still count against the Resend quota.
  *   - The test sells real (demo) passes and can sell the event out. Reset staging afterwards:
@@ -200,7 +198,7 @@ for (const [label, s] of steps) {
 const errorRate = total ? serverErrors / total : 0;
 console.log(`\n${total} requests in ${secs.toFixed(0)}s (${(total / secs).toFixed(1)}/s). Bookings: ${ordersOk} (${(ordersOk / secs).toFixed(2)}/s), ${passesSold} passes.`);
 if (soldOut) console.log(`${soldOut} bookings refused as sold out (expected once nights fill up).`);
-if (rateLimited) console.log(`${rateLimited} bookings rate limited (429): set LOAD_TEST_CHECKOUT_LIMIT on the server.`);
+if (rateLimited) console.log(`${rateLimited} bookings rate limited (429).`);
 console.log(`Server errors and timeouts: ${serverErrors} (${(errorRate * 100).toFixed(2)}%).`);
 if (errorRate > 0.01) exit("✗ More than 1% of requests failed.");
 console.log("✓ Passed.");

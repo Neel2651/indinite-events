@@ -78,8 +78,10 @@ describe("staff auth", () => {
   it("super admin creates an organiser and invites its owner, who signs up and accepts", async () => {
     const admin = (await lib.loadStaffUser(auth, headersFor(superAdminCookie)))!;
     const org = await asUser(admin.id, () =>
-      lib.createOrganizer(auth, admin, { name: "Test Garba", slug: "test-garba", contactEmail: "hello@test.example", commissionBps: 800, orderPrefix: "TST" }),
+      lib.createOrganizer(auth, admin, { name: "Test Garba", contactEmail: "hello@test.example", commissionBps: 800 }),
     );
+    // Web address and order prefix come from the name.
+    expect(org).toMatchObject({ slug: "test-garba", orderPrefix: "TG" });
     organizerId = org.id;
     const { invitationId } = await asUser(admin.id, () => lib.inviteMember(auth, admin, organizerId, "Owner@Example.com", "owner"));
 
@@ -127,5 +129,72 @@ describe("staff auth", () => {
     const scanSession = await call("/sign-in/email", { email: "scan@example.com", password: PASSWORD });
     const accept = await call("/organization/accept-invitation", { invitationId }, scanSession.cookie);
     expect(accept.status).toBeGreaterThanOrEqual(400);
+  });
+});
+
+describe("organiser self-registration (1 Oct 2026)", () => {
+  const input = (over: Record<string, unknown> = {}) => ({
+    organisationName: "Test Garba Co",
+    name: "Reena Register",
+    email: "reena@example.com",
+    password: PASSWORD,
+    confirm: PASSWORD,
+    acceptTerms: true,
+    ...over,
+  });
+
+  it("creates the organiser (10% fee, owner, generated web address and prefix) and audits it", async () => {
+    const r = await lib.registerOrganizer(auth, input(), "test-register");
+    // "TG" (the initials; "Co" is skipped) is already used by "Test Garba" above, so the next candidate is taken.
+    expect(r).toMatchObject({ slug: "test-garba-co", orderPrefix: "TES", email: "reena@example.com" });
+    const { Organizer, AuditLog } = await import("@indinite/db");
+    const org = (await Organizer.findById(r.organizerId).lean())!;
+    expect(org).toMatchObject({ name: "Test Garba Co", commissionBps: 1000, selfRegistered: true, contactEmail: "reena@example.com" });
+    expect(await AuditLog.findOne({ action: "organizer.self_registered", "entity.id": r.organizerId }).lean()).toMatchObject({ actor: { type: "user", id: r.userId } });
+    const db = (await auth.$context).adapter;
+    expect(await db.findOne({ model: "member", where: [{ field: "userId", value: r.userId }] })).toMatchObject({ role: "owner" });
+  });
+
+  it("can't sign in until the email is verified, even with the right password; then can", async () => {
+    const before = await call("/sign-in/email", { email: "reena@example.com", password: PASSWORD });
+    expect(before.status).toBe(403);
+    expect(before.json?.code).toBe("EMAIL_NOT_VERIFIED");
+    // A wrong password gets the normal answer: the hook never reveals that the email is registered.
+    expect((await call("/sign-in/email", { email: "reena@example.com", password: "wrong-password-123" })).status).toBe(401);
+
+    await auth.api.sendVerificationEmail({ body: { email: "reena@example.com", callbackURL: "/org/test-garba-co?welcome=1" } });
+    const job = await Job.findOne({ queue: "send-auth-email", "data.kind": "verify-email", "data.to": "reena@example.com" }).lean();
+    const link = new URL(String((job?.data as { url: string }).url));
+    expect(link.pathname).toBe("/api/auth/verify-email");
+    const verify = await auth.handler(new Request(link.toString().replace(link.origin, BASE)));
+    expect(verify.status).toBeGreaterThanOrEqual(200);
+
+    const after = await call("/sign-in/email", { email: "reena@example.com", password: PASSWORD });
+    expect(after.status).toBe(200);
+    const me = (await lib.loadStaffUser(auth, headersFor(after.cookie)))!;
+    expect(me.organizers).toEqual([expect.objectContaining({ slug: "test-garba-co", role: "owner" })]);
+  });
+
+  it("a second organiser with the same name gets a different web address and prefix", async () => {
+    const r = await lib.registerOrganizer(auth, input({ email: "second@example.com" }), "test-register-2");
+    expect(r.slug).toBe("test-garba-co-2");
+    expect(r.orderPrefix).not.toBe("TES");
+    expect(r.orderPrefix).toMatch(/^[A-Z]{2,5}$/);
+  });
+
+  it("refuses an email that already has an account, and leaves nothing behind", async () => {
+    const { Organizer } = await import("@indinite/db");
+    const count = await Organizer.countDocuments();
+    await expect(lib.registerOrganizer(auth, input({ organisationName: "Another Co" }), "test-register-3")).rejects.toMatchObject({ field: "email" });
+    expect(await Organizer.countDocuments()).toBe(count);
+  });
+
+  it("checks the form: matching passwords and the terms", async () => {
+    await expect(lib.registerOrganizer(auth, input({ email: "x1@example.com", confirm: "different-pass-1" }), "t")).rejects.toThrow(/don't match/);
+    await expect(lib.registerOrganizer(auth, input({ email: "x2@example.com", acceptTerms: false }), "t")).rejects.toThrow(/agree to the terms/);
+  });
+
+  it("invited staff aren't affected: the invited owner still signs in without verifying", async () => {
+    expect((await call("/sign-in/email", { email: "owner@example.com", password: PASSWORD })).status).toBe(200);
   });
 });

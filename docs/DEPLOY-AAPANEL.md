@@ -139,6 +139,22 @@ Do these in Stripe test mode first, then again in live mode (each mode has its o
 Testing locally: `stripe listen --forward-to localhost:3001/api/webhooks/stripe --forward-connect-to localhost:3001/api/webhooks/stripe`
 prints one signing secret; put it in both `STRIPE_WEBHOOK_SECRET` and `STRIPE_CONNECT_WEBHOOK_SECRET`.
 
+## Updating to organiser self-registration (1 Oct 2026)
+This release adds `/register`, unique order prefixes and email verification for self-registered organisers. On each
+server, in this order:
+```bash
+cd /www/wwwroot/events.neelshah.co/indinite-events   # your project folder
+git pull && pnpm install
+pnpm migrate:registration     # reports, asks, then updates existing accounts and organisers
+bash scripts/deploy.sh
+```
+`migrate:registration`:
+- marks existing accounts so they sign in as before
+- gives any organisers sharing an order prefix their own (only new bookings use it)
+- creates the unique index
+
+Run `pnpm check:env` afterwards: "Order prefixes: unique" should show ✓.
+
 ## Organiser owners
 Organiser owners create and manage their own events (organiser panel → Events). Permissions come from each person's
 role, so existing owners need no database change. To check every organiser has an owner:

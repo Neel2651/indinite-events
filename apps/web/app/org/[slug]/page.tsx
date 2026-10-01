@@ -11,8 +11,10 @@ import { requireOrg } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-export default async function OrgDashboard({ params }: { params: Promise<{ slug: string }> }) {
+export default async function OrgDashboard({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ welcome?: string }> }) {
   const { organizer, can } = await requireOrg((await params).slug);
+  // Just verified a self-registration (the email link lands here with ?welcome=1).
+  const welcome = Boolean((await searchParams).welcome);
   const organizerId = new Types.ObjectId(organizer.id);
   const canSeeMoney = can("order.read");
 
@@ -36,6 +38,38 @@ export default async function OrgDashboard({ params }: { params: Promise<{ slug:
   return (
     <>
       <PageHeader title="Dashboard" description={`Everything for ${organizer.name}.`} />
+      {welcome && (
+        <section role="status" className="mb-6 rounded-lg border border-brand-orange/40 bg-brand-orange/10 p-6">
+          <h2 className="text-xl">Welcome to Indinite Events</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Your email is verified and your organisation is ready. Next steps:</p>
+          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm">
+            {can("event.create") && (
+              <li>
+                <Link href={`/org/${organizer.slug}/events/new`} className="font-semibold text-brand-orange-strong hover:underline">
+                  Create your first event
+                </Link>
+                : nights, passes, prices and images. Publish it when you&apos;re ready.
+              </li>
+            )}
+            {can("stripe.onboard") && (
+              <li>
+                <Link href={`/org/${organizer.slug}/payments`} className="font-semibold text-brand-orange-strong hover:underline">
+                  Set up payments
+                </Link>{" "}
+                so customers can pay by card. Ticket money goes into your bank account.
+              </li>
+            )}
+            {can("org.members.manage") && (
+              <li>
+                <Link href={`/org/${organizer.slug}/members`} className="font-semibold text-brand-orange-strong hover:underline">
+                  Invite your team
+                </Link>{" "}
+                (box office, gate staff) when you need them.
+              </li>
+            )}
+          </ol>
+        </section>
+      )}
       <InstallAppCard />
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <StatCard label="Passes sold" value={passes} />

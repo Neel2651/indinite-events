@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { authClient } from "@/lib/auth-client";
+import { authClient, retryTracker } from "@/lib/auth-client";
 import { FormError, inputClass } from "./ui";
 import { PasswordInput } from "./password-input";
 
@@ -81,8 +81,9 @@ export function AcceptInvite({ invitationId, email, signedInAsInvitee, signedInA
     const password = String(form.get("password"));
     await run(async () => {
       if (hasAccount) {
-        const { error } = await authClient.signIn.email({ email, password });
-        if (error) throw new Error(error.status === 429 ? "Too many attempts. Wait a minute and try again." : "That password isn't right.");
+        const retry = retryTracker();
+        const { error } = await authClient.signIn.email({ email, password, fetchOptions: retry.fetchOptions });
+        if (error) throw new Error(error.status === 429 ? retry.message() : "That password isn't right.");
       } else {
         if (password !== String(form.get("confirm"))) throw new Error("The passwords don't match.");
         const { error } = await authClient.signUp.email({ email, password, name: String(form.get("name")).trim() });

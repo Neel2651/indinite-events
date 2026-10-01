@@ -111,9 +111,11 @@ describe("audit views", () => {
 describe("organiser details", () => {
   it("updates, audits and suspending stops new bookings", async () => {
     await runWithContext({ actor: { type: "user", id: "admin-1", role: "super_admin" } }, () =>
-      updateOrganizer(ids.b, { name: "Org B Ltd", contactEmail: "Hello@B.example", orderPrefix: "obl", status: "suspended", maxDiscountBpsForManager: 1500 }),
+      updateOrganizer(ids.b, { name: "Org B Ltd", contactEmail: "Hello@B.example", status: "suspended", maxDiscountBpsForManager: 1500 }),
     );
-    expect(await Organizer.findById(ids.b).lean()).toMatchObject({ name: "Org B Ltd", contactEmail: "hello@b.example", orderPrefix: "OBL", status: "suspended", maxDiscountBpsForManager: 1500 });
+    const prefixBefore = (await Organizer.findById(ids.b).lean())!.orderPrefix;
+    // The order prefix isn't editable (1 Oct 2026): it stays what it was.
+    expect(await Organizer.findById(ids.b).lean()).toMatchObject({ name: "Org B Ltd", contactEmail: "hello@b.example", orderPrefix: prefixBefore, status: "suspended", maxDiscountBpsForManager: 1500 });
     expect(await AuditLog.findOne({ action: "organizer.suspended", "entity.id": ids.b }).lean()).toBeTruthy();
     await expect(
       runWithContext({ actor: { type: "customer", id: "c" } }, () => createCheckoutOrder({ eventId: ids.eventB, customer: { name: "A", email: "a@example.com" }, items: [{ ticketTypeId: ids.typeB, qty: 1 }] })),
@@ -131,5 +133,26 @@ describe("gate sheets keep a surname letter together", () => {
     expect(list.sheets).toHaveLength(1);
     expect(list.sheets[0]).toMatchObject({ from: "A", to: "Z" });
     expect(list.sheets[0]!.rows).toHaveLength(4);
+  });
+});
+
+describe("organiser audit log: own team only (1 Oct 2026)", () => {
+  it("shows the organiser's team's actions, not Indinite's, the system's, Stripe's or another organiser's", async () => {
+    const orgId = new mongoose.Types.ObjectId();
+    const otherOrg = new mongoose.Types.ObjectId();
+    const entity = { type: "organizer", id: String(orgId) };
+    await AuditLog.create([
+      { actor: { type: "user", id: "owner-1" }, organizerId: orgId, action: "event.updated", entity, requestId: "r1" },
+      { actor: { type: "user", id: "box-1", role: undefined }, organizerId: orgId, action: "order.issued_offline", entity, requestId: "r2" },
+      { actor: { type: "user", id: "admin-1", role: "super_admin" }, organizerId: orgId, action: "organizer.commission_changed", entity, requestId: "r3" },
+      { actor: { type: "system", id: "system" }, organizerId: orgId, action: "order.expired", entity, requestId: "r4" },
+      { actor: { type: "stripe", id: "stripe" }, organizerId: orgId, action: "merchant.status_changed", entity, requestId: "r5" },
+      { actor: { type: "customer" }, organizerId: orgId, action: "order.created", entity, requestId: "r6" },
+      { actor: { type: "user", id: "owner-2" }, organizerId: otherOrg, action: "event.updated", entity, requestId: "r7" },
+    ]);
+    const { entries } = await listAuditLogs({ organizerId: String(orgId), teamOnly: true });
+    expect(entries.map((e) => e.action).sort()).toEqual(["event.updated", "order.issued_offline"]);
+    // Without the filter (Admin → Audit log), everything for the organiser is there.
+    expect((await listAuditLogs({ organizerId: String(orgId) })).entries).toHaveLength(6);
   });
 });

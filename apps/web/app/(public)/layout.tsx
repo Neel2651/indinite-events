@@ -41,7 +41,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
               Privacy policy
             </Link>
             <Link href="/sign-in" className="hover:text-foreground hover:underline">
-              Staff sign in
+              Organiser login
             </Link>
           </nav>
         </div>

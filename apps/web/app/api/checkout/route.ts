@@ -1,23 +1,13 @@
 import { publicCheckoutSchema, resolvePaymentsMode } from "@indinite/core";
 import { systemActor } from "@indinite/core/context";
 import { linkSecret, signOrderLink } from "@indinite/core/links";
-import { headers } from "next/headers";
 import { appUrl } from "@indinite/auth";
-import { CheckoutError, connectDb, createCheckoutOrder, Event, fulfilOrder, hitRateLimit, startCardCheckout, StripeNotConfiguredError } from "@indinite/db";
+import { CheckoutError, connectDb, createCheckoutOrder, Event, fulfilOrder, startCardCheckout, StripeNotConfiguredError } from "@indinite/db";
 import { withRequestContext } from "@/lib/request-context";
 
 export const runtime = "nodejs";
 
 const error = (message: string, status: number) => Response.json({ error: message }, { status });
-
-/**
- * 20 checkouts per IP per 10 minutes. A load test comes from one IP, so a demo server can raise it with
- * LOAD_TEST_CHECKOUT_LIMIT; demo mode is refused on the live site, so this never loosens real checkout.
- */
-function checkoutLimitPerIp(mode: "stripe" | "demo"): number {
-  const override = Number(process.env.LOAD_TEST_CHECKOUT_LIMIT);
-  return mode === "demo" && Number.isInteger(override) && override > 0 ? override : 20;
-}
 
 /**
  * SPEC §4.1: POST { eventId, customer, items, couponCode? } → { redirectUrl }.
@@ -32,14 +22,7 @@ export async function POST(req: Request) {
 
   try {
     await connectDb();
-    // Each checkout holds seats: stop scripts from holding the whole event.
-    const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-    const [byIp, byEmail] = await Promise.all([
-      hitRateLimit(`checkout:ip:${ip}`, checkoutLimitPerIp(mode), 10 * 60_000),
-      hitRateLimit(`checkout:email:${parsed.data.customer.email}`, 8, 10 * 60_000),
-    ]);
-    if (!byIp.allowed || !byEmail.allowed) return error("Too many bookings in a short time. Please wait a few minutes and try again.", 429);
-
+    // No rate limit on checkout (decided 1 Oct 2026). Unpaid holds expire on their own and the sweeper releases them.
     const order = await withRequestContext({ type: "customer" }, () => createCheckoutOrder(parsed.data, new Date(), { requireCardPayments: mode === "stripe" }));
     // Only the buyer's browser gets this signed link, so the confirmation page can show their passes straight away.
     const t = signOrderLink(order.publicId, linkSecret());

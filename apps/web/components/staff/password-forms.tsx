@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { authClient } from "@/lib/auth-client";
+import { authClient, retryTracker } from "@/lib/auth-client";
 import { FormError, inputClass } from "./ui";
 import { PasswordInput } from "./password-input";
 
@@ -15,12 +15,14 @@ export function ForgotPasswordForm() {
     e.preventDefault();
     setState("sending");
     setError(null);
+    const retry = retryTracker();
     const { error } = await authClient.requestPasswordReset({
       email: String(new FormData(e.currentTarget).get("email")),
       redirectTo: "/reset-password",
+      fetchOptions: retry.fetchOptions,
     });
     if (error?.status === 429) {
-      setError("Too many requests. Wait a few minutes and try again.");
+      setError(retry.message());
       setState("idle");
       return;
     }

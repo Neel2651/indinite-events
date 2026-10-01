@@ -29,7 +29,7 @@ async function check(p: Page, label: string) {
 
 let failures = 0;
 try {
-  const pages = ["/", "/orders/lookup", "/privacy", "/booking-terms", "/refund-policy", "/sign-in"];
+  const pages = ["/", "/orders/lookup", "/privacy", "/booking-terms", "/refund-policy", "/sign-in", "/register"];
   await page.goto(`${BASE}/`);
   const eventHref = await page.locator('a[href^="/e/"]').first().getAttribute("href");
   if (eventHref) pages.splice(1, 0, eventHref);
