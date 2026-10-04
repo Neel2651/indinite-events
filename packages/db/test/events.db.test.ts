@@ -98,6 +98,22 @@ describe("events", () => {
     expect((await Event.findById(e._id).lean())!.sessions.map((s) => String(s._id))).toEqual([n2]);
   });
 
+  it("saves, audits and clears the Meta pixel ID, refusing anything but digits", async () => {
+    const e = await newEvent();
+    const edit = (metaPixelId: string) => asAdmin(() => updateEvent(String(e._id), { title: e.title, slug: e.slug, description: "", venue, metaPixelId, sessions: e.sessions.map((s) => ({ id: String(s._id), label: s.label, startsAt: s.startsAt, endsAt: s.endsAt })) }));
+
+    await edit("1862558248490935");
+    expect((await Event.findById(e._id).lean())!.metaPixelId).toBe("1862558248490935");
+    const log = await AuditLog.findOne({ action: "event.updated", "entity.id": String(e._id) }).sort({ _id: -1 }).lean();
+    expect(JSON.stringify(log)).toContain("1862558248490935");
+
+    for (const bad of ["abc", "<script>alert(1)</script>"]) await expect(edit(bad)).rejects.toThrow(/numbers only/);
+    expect((await Event.findById(e._id).lean())!.metaPixelId).toBe("1862558248490935");
+
+    await edit("");
+    expect((await Event.findById(e._id).lean())!.metaPixelId).toBeUndefined();
+  });
+
   it("only publishes with an active pass type", async () => {
     const e = await newEvent();
     await expect(asAdmin(() => setEventStatus(String(e._id), "published"))).rejects.toThrow(/at least one pass type/);

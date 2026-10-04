@@ -19,6 +19,7 @@ export interface EventFormValues {
   title: string;
   slug: string;
   description: string;
+  metaPixelId: string;
   venueName: string;
   venueAddress: string;
   postcode: string;
@@ -135,6 +136,14 @@ export function EventForm({
         <label className="block text-sm sm:col-span-2">
           Description
           <textarea name="description" rows={5} maxLength={20000} defaultValue={initial?.description} className={inputClass} placeholder="What's on, dress code, food, parking…" />
+        </label>
+        <label className="block text-sm sm:col-span-2">
+          Meta Pixel ID (optional)
+          <input name="metaPixelId" inputMode="numeric" maxLength={20} defaultValue={initial?.metaPixelId} className={inputClass} placeholder="e.g. 1862558248490935" aria-describedby="metaPixelId-help" />
+          <FieldError state={state} name="metaPixelId" />
+          <span id="metaPixelId-help" className="mt-1 block text-xs text-muted-foreground">
+            The pixel or dataset ID from Meta Events Manager. Only this event&apos;s page and its booking confirmation load it.
+          </span>
         </label>
       </div>
 

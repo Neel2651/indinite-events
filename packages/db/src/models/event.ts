@@ -43,6 +43,8 @@ const eventSchema = new Schema(
     /** End of the last session — tickets stop displaying the QR after this. */
     endsAt: { type: Date, required: true },
     status: { type: String, enum: ["draft", "published", "archived"], default: "draft", index: true },
+    /** Organiser's Meta pixel / dataset ID, loaded only on this event's page and its confirmation page (SPEC §4.11). */
+    metaPixelId: { type: String, match: /^\d{10,20}$/, default: undefined },
     /** Overrides the organiser's commission / platform fee for this event (bps). Admin only. */
     commissionBps: { type: Number, min: 0, max: 10000, default: null },
     /** Tax on tickets + platform fee + charges (bps, 2000 = 20%). Admin only. */

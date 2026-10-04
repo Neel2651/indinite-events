@@ -9,5 +9,5 @@ export const LEGAL = {
   icoNumber: process.env.LEGAL_ICO_NUMBER || "[ICO registration number]",
   supportEmail: process.env.LEGAL_SUPPORT_EMAIL || "contact@indinite.co.uk",
   privacyEmail: process.env.LEGAL_PRIVACY_EMAIL || "privacy@indinite.co.uk",
-  lastUpdated: "1 October 2026",
+  lastUpdated: "4 October 2026",
 } as const;

@@ -12,13 +12,13 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       )}
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
-          <Link href="/" className="flex items-center gap-2.5 font-display text-xl font-bold tracking-tight text-brand-orange" aria-label="Indinite events, home">
+          <Link href="/" data-pixel-button="home" className="flex items-center gap-2.5 font-display text-xl font-bold tracking-tight text-brand-orange" aria-label="Indinite events, home">
             <img src="/brand/indinite-mark.png" alt="" width={37} height={32} className="h-8 w-auto" />
             <span aria-hidden>
               INDINITE <span className="font-sans font-normal text-muted-foreground">events</span>
             </span>
           </Link>
-          <Link href="/orders/lookup" className="text-sm font-semibold text-brand-orange-strong hover:underline">
+          <Link href="/orders/lookup" data-pixel-button="find_my_tickets" className="text-sm font-semibold text-brand-orange-strong hover:underline">
             Find my tickets
           </Link>
         </div>
@@ -31,16 +31,16 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             <p className="mt-2">© {new Date().getFullYear()} Indinite</p>
           </div>
           <nav aria-label="Policies and staff" className="flex flex-wrap gap-x-5 gap-y-2">
-            <Link href="/booking-terms" className="hover:text-foreground hover:underline">
+            <Link href="/booking-terms" data-pixel-button="booking_terms" className="hover:text-foreground hover:underline">
               Booking terms
             </Link>
-            <Link href="/refund-policy" className="hover:text-foreground hover:underline">
+            <Link href="/refund-policy" data-pixel-button="refund_policy" className="hover:text-foreground hover:underline">
               Refund policy
             </Link>
-            <Link href="/privacy" className="hover:text-foreground hover:underline">
+            <Link href="/privacy" data-pixel-button="privacy_policy" className="hover:text-foreground hover:underline">
               Privacy policy
             </Link>
-            <Link href="/sign-in" className="hover:text-foreground hover:underline">
+            <Link href="/sign-in" data-pixel-button="organiser_login" className="hover:text-foreground hover:underline">
               Organiser login
             </Link>
           </nav>

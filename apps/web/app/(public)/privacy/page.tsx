@@ -71,6 +71,10 @@ export default function PrivacyPage() {
           <li>
             <strong>To keep the service secure, prevent fraud and duplicate entry, and keep an audit trail of changes:</strong> our legitimate interests.
           </li>
+          <li>
+            <strong>To help organisers measure their adverts</strong> on events that use a Meta pixel (see Cookies below): the organiser&apos;s and our legitimate interest in
+            promoting events.
+          </li>
         </ul>
         <p>
           We don&apos;t send marketing emails from Indinite Events, and we don&apos;t sell your data. We only email you about your booking (for example your passes, a payment link,
@@ -91,6 +95,10 @@ export default function PrivacyPage() {
             <strong>Resend</strong>, which sends our emails.
           </li>
           <li>
+            <strong>Meta (Facebook and Instagram)</strong>, on events whose organiser uses a Meta pixel: which pages you view and the booking steps you take, with amounts (see
+            Cookies below). The organiser, Indinite and Meta are joint controllers for this; Meta uses it under its own privacy policy.
+          </li>
+          <li>
             <strong>MongoDB Atlas</strong>, which hosts our database in London, and the provider that hosts our web server in the UK.
           </li>
           <li>Professional advisers, and the police, regulators or courts where the law requires it.</li>
@@ -101,7 +109,7 @@ export default function PrivacyPage() {
       <section>
         <h2>Transfers outside the UK</h2>
         <p>
-          Some of our providers (including Stripe and Resend) may process data in the United States or elsewhere outside the UK. Where they do, the transfer is protected by
+          Some of our providers (including Stripe, Resend and Meta) may process data in the United States or elsewhere outside the UK. Where they do, the transfer is protected by
           safeguards recognised under UK law, such as the UK Extension to the EU–US Data Privacy Framework or the UK International Data Transfer Addendum to standard contractual
           clauses.
         </p>
@@ -137,8 +145,24 @@ export default function PrivacyPage() {
         <h2>Cookies and similar technology</h2>
         <p>
           Customers don&apos;t need a cookie to book: links to your passes are signed and expire after 30 minutes. We use one strictly necessary cookie to keep staff signed in, and the
-          gate scanner stores the pass list and the gate name on the scanning phone so it works without signal. None of these are used for tracking or advertising, so we don&apos;t
-          ask for consent.
+          gate scanner stores the pass list and the gate name on the scanning phone so it works without signal. None of these are used for tracking or advertising.
+        </p>
+        <p>
+          <strong>Meta pixel.</strong> Some organisers advertise their event on Facebook and Instagram. On those events, the event page and the booking confirmation load the
+          organiser&apos;s Meta pixel. It sets cookies and tells Meta that you viewed the page, added or removed passes, started checkout, pressed pay and completed a booking,
+          with the passes&apos; ticket types and amounts, and the order reference. We never send your name, email or phone number. Meta may link this to your Facebook or
+          Instagram account to show the organiser how their adverts perform and to show adverts to people likely to be interested. No other pages load it.
+        </p>
+        <p>
+          To stop this, change your{" "}
+          <a href="https://www.facebook.com/adpreferences/ad_settings" target="_blank" rel="noopener noreferrer">
+            Meta ad settings
+          </a>
+          , block third-party cookies in your browser, or use a content blocker. Booking works the same either way. See{" "}
+          <a href="https://www.facebook.com/privacy/policy/" target="_blank" rel="noopener noreferrer">
+            Meta&apos;s privacy policy
+          </a>
+          .
         </p>
         <p>
           Event pages may include YouTube or Vimeo videos. We use YouTube&apos;s privacy-enhanced mode; YouTube or Vimeo may store data on your device when you play a video. See

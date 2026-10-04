@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { META_PIXEL_ID_RE } from "./meta-pixel";
 
 const objectId = z.string().regex(/^[a-f0-9]{24}$/, "Invalid id");
 const pence = z.number().int().nonnegative();
@@ -85,6 +86,13 @@ export const eventUpsertSchema = z
     venue: venueSchema,
     sessions: z.array(sessionSchema).min(1, "Add at least one night").max(15),
     status: z.enum(["draft", "published", "archived"]).default("draft"),
+    /** Organiser's Meta pixel / dataset ID for this event's pages (SPEC §4.11). Digits only; empty means none. */
+    metaPixelId: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => v || undefined)
+      .refine((v) => v === undefined || META_PIXEL_ID_RE.test(v), "Enter the pixel / dataset ID: numbers only, e.g. 1862558248490935"),
   })
   .refine((e) => e.sessions.every((s) => s.endsAt > s.startsAt), {
     message: "Each night must end after it starts",

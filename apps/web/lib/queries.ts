@@ -43,6 +43,8 @@ export interface PublicEvent {
   pricing: { commissionBps: number; taxBps: number; charges: OrderCharge[]; cardFee: CardFeeSettings };
   /** Online booking possible now: demo mode, or (Stripe mode) the organiser is an active merchant. */
   onlinePaymentsAvailable: boolean;
+  /** Organiser's Meta pixel for this event's pages (SPEC §4.11), or null. */
+  metaPixelId: string | null;
 }
 
 const PUBLIC_FILTER = { status: "published", deletedAt: null } as const;
@@ -109,6 +111,7 @@ async function withTicketTypes(events: Awaited<ReturnType<typeof loadEvents>>): 
       pricing: { ...pricingFor(e, orgById.get(String(e.organizerId)) ?? {}), cardFee: cardFeeOf(orgById.get(String(e.organizerId)) ?? {}) },
       onlinePaymentsAvailable: !stripeMode || canTakeCardPayments(orgById.get(String(e.organizerId)) ?? {}),
       bookingsOpenAt: !bookingsOpen && upcoming.length ? new Date(Math.min(...upcoming.map((d) => d.getTime()))) : null,
+      metaPixelId: e.metaPixelId ?? null,
     };
   });
 }
@@ -133,9 +136,9 @@ export interface OrderConfirmation {
   status: string;
   paidAt: Date | null;
   totalPence: number;
-  items: { name: string; qty: number; unitPricePence: number }[];
+  items: { ticketTypeId: string; name: string; qty: number; unitPricePence: number }[];
   lines: { label: string; amountPence: number; negative?: boolean }[];
-  event: { title: string; slug: string; startsAt: Date; endsAt: Date; venue: string };
+  event: { title: string; slug: string; startsAt: Date; endsAt: Date; venue: string; metaPixelId: string | null };
   /** Refunded automatically because the passes sold out while the customer was paying. */
   soldOutRefund: boolean;
   /** Paid bookings: valid passes by night, for per-night PDF downloads. */
@@ -158,9 +161,9 @@ export async function getOrderConfirmation(publicId: string): Promise<OrderConfi
     status: order.status ?? "pending",
     paidAt: order.paidAt ?? null,
     totalPence: order.totalPence,
-    items: order.items.map((i) => ({ name: i.name, qty: i.qty, unitPricePence: i.unitPricePence })),
+    items: order.items.map((i) => ({ ticketTypeId: String(i.ticketTypeId), name: i.name, qty: i.qty, unitPricePence: i.unitPricePence })),
     lines: linesFor(order),
-    event: { title: event.title, slug: event.slug, startsAt: event.startsAt, endsAt: event.endsAt, venue: `${event.venue.name}, ${event.venue.postcode}` },
+    event: { title: event.title, slug: event.slug, startsAt: event.startsAt, endsAt: event.endsAt, venue: `${event.venue.name}, ${event.venue.postcode}`, metaPixelId: event.metaPixelId ?? null },
     soldOutRefund: (order.refunds ?? []).some((r) => r.refundedBy === "system"),
     nightGroups:
       order.status === "paid" || order.status === "partially_refunded"

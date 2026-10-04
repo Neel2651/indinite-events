@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { resolvePaymentsMode, embedUrlFor } from "@indinite/core";
+import { resolvePaymentsMode, embedUrlFor, pixelViewContent } from "@indinite/core";
 import { BookingForm } from "@/components/booking-form";
+import { MetaPixel } from "@/components/meta-pixel";
 import { getEventBySlug } from "@/lib/queries";
 import { formatDateRange, formatDay, formatDayTime, formatTime, price } from "@/lib/format";
 
@@ -27,8 +28,12 @@ export default async function EventPage({ params }: Props) {
     return embed ? [{ ...m, embed }] : [];
   });
 
+  const onSale = event.ticketTypes.filter((t) => t.onSale);
+  const fromPence = onSale.length ? Math.min(...onSale.map((t) => t.pricePence)) : event.fromPence;
+
   return (
     <>
+      {event.metaPixelId && <MetaPixel key={event.slug} pixelId={event.metaPixelId} events={[{ name: "ViewContent", data: pixelViewContent({ slug: event.slug, title: event.title, fromPence }) }]} />}
       <section className="dark relative isolate overflow-hidden bg-background text-foreground">
         {cover && (
           <>
@@ -51,6 +56,7 @@ export default async function EventPage({ params }: Props) {
               href={event.venue.lat != null && event.venue.lng != null ? `https://www.google.com/maps/dir/?api=1&destination=${event.venue.lat},${event.venue.lng}` : event.venue.mapUrl!}
               target="_blank"
               rel="noopener noreferrer"
+              data-pixel-button="get_directions"
               className="btn-outline-pill mt-5 inline-block"
             >
               Get directions<span className="sr-only"> (opens Google Maps)</span>
@@ -98,7 +104,7 @@ export default async function EventPage({ params }: Props) {
           <h2 className="text-xl">Book passes</h2>
           <p className="rounded-md border border-border bg-muted/50 px-3 py-2 text-sm">
             <strong>No refunds.</strong> If the event is cancelled, or for any refund request, contact the organiser.{" "}
-            <Link href="/refund-policy" className="font-semibold text-brand-orange-strong hover:underline">
+            <Link href="/refund-policy" data-pixel-button="refund_policy" className="font-semibold text-brand-orange-strong hover:underline">
               Refund policy
             </Link>
           </p>

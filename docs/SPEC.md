@@ -289,6 +289,25 @@ Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 
     business chose this label. Worth confirming with an adviser.*
 - Finance shows recovered card fees separately; they're not Indinite income.
 
+### 4.11 Meta pixel per event (agreed 4 Oct 2026, OM Events brief)
+- Each event can have a **Meta Pixel ID** (digits only, 10–20), set in the event editor by super admins and owners
+  (audited with `event.updated`). Empty means none; existing events have none.
+- It loads **only** on that event's page and its booking confirmation (`components/meta-pixel.tsx`), never in a layout.
+  Calls use `trackSingle` to that pixel only, and Meta's automatic PageView on in-app navigation is off, so other
+  pages and other organisers' events are never tracked.
+- Events (parameters built in `@indinite/core` `meta-pixel.ts`; pounds as numbers, `GBP`, no personal data):
+  PageView + ViewContent (event page), AddToCart ("+"), RemoveFromCart ("−", custom), InitiateCheckout (step 2 opens),
+  AddPaymentInfo (Pay pressed), **Purchase** (confirmation), ButtonClick (custom; any element with
+  `data-pixel-button`).
+- **Purchase** fires only for a paid order on the buyer's valid 30-minute link, once per browser (localStorage), with
+  the order reference as `eventID` so Meta de-duplicates. Never on Find my tickets.
+- Confirmation links (`/checkout/success?order=…&t=…`) are redirected by `apps/web/proxy.ts`: the 30-minute token
+  moves into an httpOnly cookie for that page only, so the address (which Meta and browser history see) never
+  carries it.
+- No consent banner (business decision, 4 Oct 2026); the privacy policy describes the pixel and how to opt out.
+  *Note: UK PECR normally expects consent before advertising cookies; a banner limited to pixel pages can be added.*
+- Later (phase 2): server-side Conversions API Purchase with the same `eventID`.
+
 ## 5. Routes (indicative)
 
 Public: `/`, `/e/[slug]`, `/checkout/success`, `/orders/lookup`, `/orders/[publicId]?t=<token>`, `/pay/[publicId]`,

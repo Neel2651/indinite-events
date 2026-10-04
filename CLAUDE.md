@@ -43,6 +43,9 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
   sign in until verified (after-hook in `packages/auth/src/auth.ts`).
 - Forms: `useFormAction` (`apps/web/lib/use-form-action.ts`) keeps values on error; actions return `FormState`
   (`lib/form-state.ts`: `zodFailure`, `fieldFailure`) and forms show `<FieldError state name>`.
+- Meta pixel per event (SPEC §4.11): `Event.metaPixelId`, `<MetaPixel>` + `track` / `trackCustom`
+  (`apps/web/components/meta-pixel.tsx`, event page and confirmation only), parameter builders in core `meta-pixel.ts`;
+  mark buttons with `data-pixel-button="name"` for ButtonClick.
 - Events: one editor (`components/staff/event-editor.tsx`) for Admin → Events and the organiser panel (`/org/[slug]/events`,
   owners). Event actions (`app/admin/events/actions.ts`) check permission against the event's organiser from the DB.
 

@@ -2,8 +2,19 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
-import { priceOrder, receiptLines, type CardFeeSettings, type Discount, type OrderCharge } from "@indinite/core";
+import {
+  pixelAddToCart,
+  pixelCheckout,
+  pixelPaymentInfo,
+  pixelRemoveFromCart,
+  priceOrder,
+  receiptLines,
+  type CardFeeSettings,
+  type Discount,
+  type OrderCharge,
+} from "@indinite/core";
 import { price } from "@/lib/format";
+import { track, trackCustom } from "./meta-pixel";
 
 export interface BookableTicketType {
   id: string;
@@ -95,6 +106,7 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const phone = String(form.get("phone") ?? "").trim();
+    track("AddPaymentInfo", pixelPaymentInfo(breakdown?.total ?? 0));
     setSubmitting(true);
     setError(null);
     try {
@@ -121,7 +133,21 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
   const limit = (t: BookableTicketType) => (t.blocked ? 0 : Math.min(t.maxPerOrder, t.available));
   const setFor = (t: BookableTicketType, n: number) => setQty((q) => ({ ...q, [t.id]: Math.max(0, Math.min(limit(t), n)) }));
 
-  const row = (t: BookableTicketType, label: string, sub: string) => {
+  // Meta pixel (SPEC §4.11): every "+" and "−" press, with the night and the pass's price. No-ops without a pixel.
+  const add = (t: BookableTicketType, n: number, pixelName: string) => {
+    setFor(t, n + 1);
+    track("AddToCart", pixelAddToCart({ ticketTypeId: t.id, name: pixelName, unitPricePence: t.pricePence }));
+  };
+  const remove = (t: BookableTicketType, n: number) => {
+    setFor(t, n - 1);
+    trackCustom("RemoveFromCart", pixelRemoveFromCart({ ticketTypeId: t.id, unitPricePence: t.pricePence }));
+  };
+  const toDetails = () => {
+    setStep(2);
+    track("InitiateCheckout", pixelCheckout(chosen.map((t) => ({ ticketTypeId: t.id, qty: qty[t.id]! })), breakdown?.total ?? 0));
+  };
+
+  const row = (t: BookableTicketType, label: string, sub: string, pixelName: string) => {
     const n = qty[t.id] ?? 0;
     return (
       <li key={t.id} className="flex items-start justify-between gap-4 py-3">
@@ -136,13 +162,13 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
         </div>
         {!t.blocked && (
           <div className="flex shrink-0 items-center gap-2" role="group" aria-label={`Number of ${t.name} passes`}>
-            <button type="button" onClick={() => setFor(t, n - 1)} disabled={n === 0} aria-label={`Remove one ${t.name}`} className="size-10 rounded-full border border-border font-bold disabled:opacity-40">
+            <button type="button" onClick={() => remove(t, n)} disabled={n === 0} aria-label={`Remove one ${t.name}`} className="size-10 rounded-full border border-border font-bold disabled:opacity-40">
               −
             </button>
             <span className="w-6 text-center font-display font-semibold tabular-nums" aria-live="polite">
               {n}
             </span>
-            <button type="button" onClick={() => setFor(t, n + 1)} disabled={n >= limit(t)} aria-label={`Add one ${t.name}`} className="size-10 rounded-full border border-border font-bold disabled:opacity-40">
+            <button type="button" onClick={() => add(t, n, pixelName)} disabled={n >= limit(t)} aria-label={`Add one ${t.name}`} className="size-10 rounded-full border border-border font-bold disabled:opacity-40">
               +
             </button>
           </div>
@@ -175,7 +201,7 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
                         </p>
                         {closed && <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold">{types[0]!.blocked}</span>}
                       </div>
-                      {!closed && <ul className="divide-y divide-border">{types.map((t) => row(t, t.dayPassName ?? t.name, ""))}</ul>}
+                      {!closed && <ul className="divide-y divide-border">{types.map((t) => row(t, t.dayPassName ?? t.name, "", types.length > 1 ? `${night.label} – ${night.dayLabel} · ${t.dayPassName ?? t.name}` : `${night.label} – ${night.dayLabel}`))}</ul>}
                       {closed && <div className="pb-3" />}
                     </div>
                   );
@@ -185,10 +211,10 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
             {multiNight.length > 0 && (
               <div className="space-y-1 pt-2">
                 {byNight.length > 0 && <p className="font-display font-semibold">Passes for more than one night</p>}
-                <ul className="divide-y divide-border">{multiNight.map((t) => row(t, t.name, t.nightsLabel))}</ul>
+                <ul className="divide-y divide-border">{multiNight.map((t) => row(t, t.name, t.nightsLabel, t.name))}</ul>
               </div>
             )}
-            <button type="button" disabled={count === 0} onClick={() => setStep(2)} className="btn-cta w-full disabled:opacity-60">
+            <button type="button" disabled={count === 0} onClick={toDetails} className="btn-cta w-full disabled:opacity-60">
               {count ? `Continue with ${count} ${count === 1 ? "pass" : "passes"}` : "Choose at least one pass"}
             </button>
           </>
@@ -220,7 +246,7 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
               </label>
               <div className="mt-1 flex gap-2">
                 <input id="coupon" value={couponInput} onChange={(e) => setCouponInput(e.target.value.toUpperCase())} autoCapitalize="characters" className={`${inputClass} mt-0 uppercase`} />
-                <button type="button" onClick={applyCoupon} disabled={!couponInput.trim() || checking} className="shrink-0 rounded-full border border-border px-4 text-sm font-semibold disabled:opacity-50">
+                <button type="button" onClick={applyCoupon} data-pixel-button="apply_coupon" disabled={!couponInput.trim() || checking} className="shrink-0 rounded-full border border-border px-4 text-sm font-semibold disabled:opacity-50">
                   {checking ? "Checking…" : "Apply"}
                 </button>
               </div>
@@ -272,11 +298,11 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
             {paymentsMode === "demo" && <p className="text-center text-xs text-muted-foreground">Demo mode: no payment is taken and your booking is approved straight away.</p>}
             <p className="text-center text-xs text-muted-foreground">
               By booking you agree to our{" "}
-              <a href="/booking-terms" target="_blank" className="font-semibold underline">
+              <a href="/booking-terms" target="_blank" data-pixel-button="booking_terms" className="font-semibold underline">
                 booking terms
               </a>
               . See how we use your data in our{" "}
-              <a href="/privacy" target="_blank" className="font-semibold underline">
+              <a href="/privacy" target="_blank" data-pixel-button="privacy_policy" className="font-semibold underline">
                 privacy policy
               </a>
               .
@@ -297,7 +323,7 @@ function StepHeader({ step, n, title, done, onEdit }: { step: Step; n: Step; tit
         {title}
       </p>
       {done && step > n && (
-        <button type="button" onClick={onEdit} className="text-right text-sm">
+        <button type="button" onClick={onEdit} data-pixel-button="change_passes" className="text-right text-sm">
           <span className="text-muted-foreground">{done}</span> <span className="font-semibold text-brand-orange-strong">Change</span>
         </button>
       )}

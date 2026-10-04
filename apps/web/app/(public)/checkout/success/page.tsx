@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { resolvePaymentsMode } from "@indinite/core";
+import { pixelPurchase, resolvePaymentsMode } from "@indinite/core";
 import { linkSecret, verifyOrderLink } from "@indinite/core/links";
 import { AutoRefresh } from "@/components/staff/auto-refresh";
 import { getOrderConfirmation } from "@/lib/queries";
+import { orderLinkCookie } from "@/lib/order-link";
 import { formatDateRange, price } from "@/lib/format";
 import { SpamNote } from "@/components/spam-note";
+import { MetaPixel, type PixelEvent } from "@/components/meta-pixel";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Your booking", robots: { index: false }, referrer: "no-referrer" };
@@ -39,20 +42,27 @@ function viewFor(status: string, passes: number, eventTitle: string, soldOutRefu
 }
 
 export default async function CheckoutSuccessPage({ searchParams }: Props) {
-  const { order: ref, t } = await searchParams;
+  const { order: ref, t: fromUrl } = await searchParams;
   const order = ref ? await getOrderConfirmation(ref) : null;
   if (!order) notFound();
+  // proxy.ts moves the link token out of the address into a cookie for this page (kept in the URL only as a fallback).
+  const t = fromUrl ?? (await cookies()).get(orderLinkCookie(order.publicId))?.value;
   const canView = !!t && verifyOrderLink(order.publicId, t, linkSecret()).ok;
 
   const hasPasses = order.status === "paid" || order.status === "partially_refunded";
   const passes = order.items.reduce((n, i) => n + i.qty, 0);
   const view = viewFor(order.status, passes, order.event.title, order.soldOutRefund);
   const tryAgain = order.status === "expired";
+  // Meta pixel Purchase (SPEC §4.11): only for the buyer (valid 30-minute link) once payment is confirmed, once per
+  // browser, with the order reference as eventID so Meta drops any repeat. Never on Find my tickets.
+  const purchase = hasPasses && canView ? pixelPurchase({ publicId: order.publicId, lines: order.items, totalPence: order.totalPence }) : null;
+  const pixelEvents: PixelEvent[] = purchase ? [{ name: "Purchase", data: purchase.data, options: purchase.options, onceKey: `purchase:${order.publicId}` }] : [];
 
   return (
     <>
       {/* Card payments are confirmed by Stripe's webhook, usually within seconds. */}
       {order.status === "pending" && <AutoRefresh seconds={3} />}
+      {order.event.metaPixelId && <MetaPixel key={order.publicId} pixelId={order.event.metaPixelId} events={pixelEvents} />}
       <section className="dark bg-background text-foreground">
         <div className="mx-auto max-w-3xl px-5 py-14" aria-live="polite">
           <span className="badge-pill">{view.badge}</span>
@@ -103,7 +113,7 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
             <div className="flex flex-wrap items-center gap-4">
               {hasPasses && canView && (
                 <>
-                  <Link href={`/orders/${encodeURIComponent(order.publicId)}?t=${encodeURIComponent(t!)}`} className="btn-cta inline-block">
+                  <Link href={`/orders/${encodeURIComponent(order.publicId)}?t=${encodeURIComponent(t!)}`} data-pixel-button="view_my_passes" className="btn-cta inline-block">
                     View my passes
                   </Link>
                   <a href={`/orders/${encodeURIComponent(order.publicId)}/pdf?t=${encodeURIComponent(t!)}`} download className="rounded-full border border-border bg-card px-6 py-3 font-display font-bold">
@@ -123,11 +133,11 @@ export default async function CheckoutSuccessPage({ searchParams }: Props) {
                 </>
               )}
               {hasPasses && !canView && (
-                <Link href="/orders/lookup" className="btn-cta inline-block">
+                <Link href="/orders/lookup" data-pixel-button="find_my_tickets" className="btn-cta inline-block">
                   Find my tickets
                 </Link>
               )}
-              <Link href={`/e/${order.event.slug}`} className={tryAgain ? "btn-cta inline-block" : "font-semibold text-brand-orange-strong hover:underline"}>
+              <Link href={`/e/${order.event.slug}`} data-pixel-button={tryAgain ? "book_again" : "back_to_event"} className={tryAgain ? "btn-cta inline-block" : "font-semibold text-brand-orange-strong hover:underline"}>
                 {tryAgain ? "Book again" : "Back to event"}
               </Link>
             </div>

@@ -131,6 +131,7 @@ function eventFields(form: FormData) {
     title: text(form, "title"),
     slug: text(form, "slug"),
     description: text(form, "description"),
+    metaPixelId: text(form, "metaPixelId"),
     venue: {
       name: text(form, "venueName"),
       address: text(form, "venueAddress"),

@@ -17,3 +17,4 @@ export * from "./csv";
 export * from "./bookability";
 export * from "./day-pass";
 export * from "./organizer-names";
+export * from "./meta-pixel";

@@ -40,10 +40,11 @@ const span = (sessions: { startsAt: Date; endsAt: Date }[]) => ({
 });
 
 /** Plain snapshot for the audit diff. */
-const eventSnapshot = (e: { title: string; slug: string; description?: string | null; venue: unknown; sessions: { _id?: unknown; label: string; startsAt: Date; endsAt: Date }[]; status?: string | null }) => ({
+const eventSnapshot = (e: { title: string; slug: string; description?: string | null; venue: unknown; sessions: { _id?: unknown; label: string; startsAt: Date; endsAt: Date }[]; status?: string | null; metaPixelId?: string | null }) => ({
   title: e.title,
   slug: e.slug,
   description: e.description ?? "",
+  metaPixelId: e.metaPixelId ?? null,
   venue: e.venue,
   sessions: e.sessions.map((s) => ({ id: s._id ? String(s._id) : undefined, label: s.label, startsAt: s.startsAt, endsAt: s.endsAt })),
   status: e.status,
@@ -64,6 +65,7 @@ export async function createEvent(raw: EventUpsertRaw) {
             slug: input.slug,
             description: input.description,
             venue: input.venue,
+            ...(input.metaPixelId ? { metaPixelId: input.metaPixelId } : {}),
             sessions: input.sessions.map((s) => ({ label: s.label, startsAt: s.startsAt, endsAt: s.endsAt })),
             status: "draft", // publish separately, once it has passes
           },
@@ -102,7 +104,11 @@ export async function updateEvent(eventId: string, raw: Omit<EventUpsertRaw, "or
         }
       }
       const set = { title: input.title, slug: input.slug, description: input.description, venue: input.venue, sessions, ...span(sessions) };
-      await Event.updateOne({ _id: before._id, deletedAt: null }, { $set: set }, { session, runValidators: true });
+      await Event.updateOne(
+        { _id: before._id, deletedAt: null },
+        input.metaPixelId ? { $set: { ...set, metaPixelId: input.metaPixelId } } : { $set: set, $unset: { metaPixelId: 1 } },
+        { session, runValidators: true },
+      );
       // Day passes carry their night's date in the name: keep it right if a night moved.
       const members = await TicketType.find({ eventId: before._id, "dayPass.groupId": { $exists: true } }, { name: 1, dayPass: 1, validSessionIds: 1 }, { session }).lean();
       for (const m of members) {
@@ -115,7 +121,7 @@ export async function updateEvent(eventId: string, raw: Omit<EventUpsertRaw, "or
         action: "event.updated",
         entity: { type: "event", id: before._id },
         before: eventSnapshot(before),
-        after: eventSnapshot({ ...set, status: before.status }),
+        after: eventSnapshot({ ...set, status: before.status, metaPixelId: input.metaPixelId }),
         organizerId: before.organizerId,
       });
     });
