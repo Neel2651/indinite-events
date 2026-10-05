@@ -7,6 +7,7 @@ export const QUEUES = {
   sendAuthEmail: "send-auth-email",
   sendPaymentLink: "send-payment-link",
   sendRefundEmail: "send-refund-email",
+  metaPurchase: "meta-purchase",
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
@@ -86,6 +87,15 @@ export function enqueueSendAuthEmail(job: SendAuthEmailJob) {
 
 export function enqueueSendPaymentLink(job: SendPaymentLinkJob, opts: { session?: ClientSession } = {}) {
   return enqueue(QUEUES.sendPaymentLink, `${job.orderId}:payment-link`, job, { maxAttempts: 4, session: opts.session });
+}
+
+/** Server Purchase to Meta (SPEC §4.11). One per order, so webhook retries and the backfill never send twice. */
+export interface MetaPurchaseJob {
+  orderId: string;
+}
+
+export function enqueueMetaPurchase(job: MetaPurchaseJob, opts: { session?: ClientSession } = {}) {
+  return enqueue(QUEUES.metaPurchase, `meta-purchase:${job.orderId}`, job, { maxAttempts: 5, session: opts.session });
 }
 
 export function enqueueSendRefundEmail(job: SendRefundEmailJob, opts: { session?: ClientSession } = {}) {

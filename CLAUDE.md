@@ -45,7 +45,9 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
   (`lib/form-state.ts`: `zodFailure`, `fieldFailure`) and forms show `<FieldError state name>`.
 - Meta pixel per event (SPEC §4.11): `Event.metaPixelId`, `<MetaPixel>` + `track` / `trackCustom`
   (`apps/web/components/meta-pixel.tsx`, event page and confirmation only), parameter builders in core `meta-pixel.ts`;
-  mark buttons with `data-pixel-button="name"` for ButtonClick.
+  mark buttons with `data-pixel-button="name"` for ButtonClick. Server Purchase (CAPI): per-event token encrypted
+  (`@indinite/core/secrets`, `SETTINGS_ENCRYPTION_KEY`), `Order.metaTracking` saved at checkout, `fulfilOrder` queues
+  `meta-purchase`, `sendMetaPurchase` (`packages/db/src/services/meta.ts`), payload in core `meta-capi.ts`.
 - Events: one editor (`components/staff/event-editor.tsx`) for Admin → Events and the organiser panel (`/org/[slug]/events`,
   owners). Event actions (`app/admin/events/actions.ts`) check permission against the event's organiser from the DB.
 
@@ -57,6 +59,9 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
   Seeds refuse on a live server (`NODE_ENV=production` without `DEPLOY_ENV=staging`)
 - `pnpm setup:production <email>` — live database: collections, indexes and the first super admin (asks for the password)
 - `pnpm migrate:registration` — live DB update for self-registration (flags, unique order prefixes); run before deploying it
+- `pnpm funnel <event-slug>` — read-only booking funnel; `pnpm meta:backfill-purchases` — send unsent paid bookings
+  (last 7 days) to Meta's Conversions API (asks first)
+- `pnpm --filter @indinite/core gen:settings-key` — `SETTINGS_ENCRYPTION_KEY` (encrypts per-event Meta tokens)
 - `pnpm owners` — each organiser's owners (they manage their own events); `-- --make-owner <email> <slug>`
 - `pnpm check:env` — checks this server's settings (formats, database, Stripe, Resend, QR key pair); never prints secrets. `-- --offline` skips network calls
 - `LOAD_BASE_URL=… pnpm --filter @indinite/e2e test:load` — load test (sales rush) against a demo server; see `e2e/tests/load.ts`

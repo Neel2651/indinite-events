@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { META_PIXEL_ID_RE } from "./meta-pixel";
+import { META_CAPI_TOKEN_RE, META_PIXEL_ID_RE, META_TEST_EVENT_CODE_RE } from "./meta-pixel";
 
 const objectId = z.string().regex(/^[a-f0-9]{24}$/, "Invalid id");
 const pence = z.number().int().nonnegative();
@@ -93,6 +93,22 @@ export const eventUpsertSchema = z
       .optional()
       .transform((v) => v || undefined)
       .refine((v) => v === undefined || META_PIXEL_ID_RE.test(v), "Enter the pixel / dataset ID: numbers only, e.g. 1862558248490935"),
+    /** New Conversions API token. Write-only: empty keeps the saved one; metaCapiTokenRemove clears it. */
+    metaCapiToken: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => v || undefined)
+      .refine((v) => v === undefined || META_CAPI_TOKEN_RE.test(v), "Paste the whole access token from Events Manager: letters and numbers, no spaces"),
+    metaCapiTokenRemove: z.boolean().optional(),
+    /** Meta test event code; while set, server events go to Test events only. Empty clears it. */
+    metaTestEventCode: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .optional()
+      .transform((v) => v || undefined)
+      .refine((v) => v === undefined || META_TEST_EVENT_CODE_RE.test(v), "Enter the test event code from Events Manager, e.g. TEST96780"),
   })
   .refine((e) => e.sessions.every((s) => s.endsAt > s.startsAt), {
     message: "Each night must end after it starts",

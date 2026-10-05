@@ -300,13 +300,28 @@ Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 
   AddPaymentInfo (Pay pressed), **Purchase** (confirmation), ButtonClick (custom; any element with
   `data-pixel-button`).
 - **Purchase** fires only for a paid order on the buyer's valid 30-minute link, once per browser (localStorage), with
-  the order reference as `eventID` so Meta de-duplicates. Never on Find my tickets.
+  `eventID: purchase_<order ref>` (shared with the server Purchase, so Meta keeps one). Never on Find my tickets.
 - Confirmation links (`/checkout/success?order=…&t=…`) are redirected by `apps/web/proxy.ts`: the 30-minute token
   moves into an httpOnly cookie for that page only, so the address (which Meta and browser history see) never
   carries it.
 - No consent banner (business decision, 4 Oct 2026); the privacy policy describes the pixel and how to opt out.
   *Note: UK PECR normally expects consent before advertising cookies; a banner limited to pixel pages can be added.*
-- Later (phase 2): server-side Conversions API Purchase with the same `eventID`.
+- **Server Purchase (Conversions API, 5 Oct 2026).** Per event: pixel ID, an access token and an optional test event
+  code, set in the editor's Meta section (super admins and owners).
+  - The token is **encrypted** (AES-256-GCM, `SETTINGS_ENCRYPTION_KEY`, `@indinite/core/secrets`), never selected by
+    default (`select: false`), write-only in the editor (hint: last 4), never in audit diffs or logs.
+  - `/api/checkout` (and `/api/pay` for payment links) saves `Order.metaTracking` = `_fbp`, `_fbc`, IP, user agent,
+    only for events with a pixel.
+  - `fulfilOrder` queues a `meta-purchase` job in the same transaction (website orders with passes issued, event with
+    pixel + token). The worker sends `capiPurchasePayload` (core `meta-capi.ts`): `event_id: purchase_<ref>`,
+    `action_source: website`, hashed email / phone (SHA-256; phone as digits with country code), IP / UA / fbp /
+    fbc unhashed, `custom_data` as the browser. Token in the body; `test_event_code` while the event has one.
+  - `recordMetaPurchaseSent` stores `Order.metaCapi` and, for a real (non-test) send, deletes `metaTracking`;
+    audited as `order.meta_purchase_sent` without personal data. Retries: 5 attempts.
+  - `pnpm meta:backfill-purchases` sends paid website orders from the last 7 days not yet sent (or only sent in
+    test mode), taking IP / UA from the `order.created` audit entry when nothing was saved.
+  - `pnpm funnel <slug>`: read-only booking funnel (orders created, Stripe page made, paid, expired). Checkout
+    refusals are logged as `[checkout] refused <status>` (no customer details).
 
 ## 5. Routes (indicative)
 

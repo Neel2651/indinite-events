@@ -51,7 +51,7 @@ describe("Meta pixel parameters", () => {
 
   it("Purchase carries the order reference as eventID", () => {
     const p = pixelPurchase({ publicId: "OME-7K3F9Q", lines: [{ ticketTypeId: "t1", qty: 2 }], totalPence: 4400 });
-    expect(p.options).toEqual({ eventID: "OME-7K3F9Q" });
+    expect(p.options).toEqual({ eventID: "purchase_OME-7K3F9Q" });
     expect(p.data).toEqual({ content_ids: ["t1"], value: 44, currency: "GBP", num_items: 2, content_type: "product" });
   });
 

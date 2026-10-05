@@ -132,6 +132,9 @@ function eventFields(form: FormData) {
     slug: text(form, "slug"),
     description: text(form, "description"),
     metaPixelId: text(form, "metaPixelId"),
+    metaCapiToken: text(form, "metaCapiToken"),
+    metaCapiTokenRemove: form.get("metaCapiTokenRemove") === "on",
+    metaTestEventCode: text(form, "metaTestEventCode"),
     venue: {
       name: text(form, "venueName"),
       address: text(form, "venueAddress"),

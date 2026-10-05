@@ -3,6 +3,7 @@ import { mkdir, rm, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Types } from "mongoose";
 import { dayPassMemberName, dayPassUpsertSchema, embedUrlFor, eventUpsertSchema, ticketTypeUpsertSchema, type BookableEventState, type DayPassRaw, type EventUpsertRaw, type TicketTypeUpsertInput, type TicketTypeUpsertRaw } from "@indinite/core";
+import { encryptSetting } from "@indinite/core/secrets";
 import { audited } from "../audit";
 import { MEDIA_URL_PREFIX, mediaDir, mediaUrl, resolveMediaPath } from "../media";
 import { Event } from "../models/event";
@@ -39,12 +40,48 @@ const span = (sessions: { startsAt: Date; endsAt: Date }[]) => ({
   endsAt: new Date(Math.max(...sessions.map((s) => s.endsAt.getTime()))),
 });
 
-/** Plain snapshot for the audit diff. */
-const eventSnapshot = (e: { title: string; slug: string; description?: string | null; venue: unknown; sessions: { _id?: unknown; label: string; startsAt: Date; endsAt: Date }[]; status?: string | null; metaPixelId?: string | null }) => ({
+type MetaInput = { metaPixelId?: string; metaCapiToken?: string; metaCapiTokenRemove?: boolean; metaTestEventCode?: string };
+
+/**
+ * Meta settings (SPEC §4.11) as a Mongo update. The token is write-only: a new one is encrypted with
+ * SETTINGS_ENCRYPTION_KEY, an empty one keeps what's saved, "remove" clears it. Only the last 4 characters stay
+ * readable (the editor's hint).
+ */
+function metaUpdate(input: MetaInput) {
+  const $set: Record<string, string> = {};
+  const $unset: Record<string, 1> = {};
+  if (input.metaPixelId) $set.metaPixelId = input.metaPixelId;
+  else $unset.metaPixelId = 1;
+  if (input.metaTestEventCode) $set.metaTestEventCode = input.metaTestEventCode;
+  else $unset.metaTestEventCode = 1;
+  if (input.metaCapiTokenRemove) {
+    $unset.metaCapiToken = 1;
+    $unset.metaCapiTokenHint = 1;
+  } else if (input.metaCapiToken) {
+    $set.metaCapiToken = encryptSetting(input.metaCapiToken);
+    $set.metaCapiTokenHint = input.metaCapiToken.slice(-4);
+  }
+  return { $set, $unset };
+}
+
+/** Plain snapshot for the audit diff. Never the token itself: only whether one is saved (and its last 4). */
+const eventSnapshot = (e: {
+  title: string;
+  slug: string;
+  description?: string | null;
+  venue: unknown;
+  sessions: { _id?: unknown; label: string; startsAt: Date; endsAt: Date }[];
+  status?: string | null;
+  metaPixelId?: string | null;
+  metaCapiTokenHint?: string | null;
+  metaTestEventCode?: string | null;
+}) => ({
   title: e.title,
   slug: e.slug,
   description: e.description ?? "",
   metaPixelId: e.metaPixelId ?? null,
+  metaCapiToken: e.metaCapiTokenHint ? `saved (ends …${e.metaCapiTokenHint})` : null,
+  metaTestEventCode: e.metaTestEventCode ?? null,
   venue: e.venue,
   sessions: e.sessions.map((s) => ({ id: s._id ? String(s._id) : undefined, label: s.label, startsAt: s.startsAt, endsAt: s.endsAt })),
   status: e.status,
@@ -65,7 +102,7 @@ export async function createEvent(raw: EventUpsertRaw) {
             slug: input.slug,
             description: input.description,
             venue: input.venue,
-            ...(input.metaPixelId ? { metaPixelId: input.metaPixelId } : {}),
+            ...metaUpdate(input).$set,
             sessions: input.sessions.map((s) => ({ label: s.label, startsAt: s.startsAt, endsAt: s.endsAt })),
             status: "draft", // publish separately, once it has passes
           },
@@ -73,7 +110,8 @@ export async function createEvent(raw: EventUpsertRaw) {
         { session },
       );
       await audited(session, { action: "event.created", entity: { type: "event", id: event!._id }, after: eventSnapshot(event!.toObject()), organizerId: organizer._id });
-      return event!.toObject();
+      const { metaCapiToken: _token, ...created } = event!.toObject();
+      return created;
     });
   } catch (e) {
     if (isDuplicateKey(e)) throw new EventAdminError("Another event already uses that web address. Choose a different one.", 409);
@@ -104,9 +142,10 @@ export async function updateEvent(eventId: string, raw: Omit<EventUpsertRaw, "or
         }
       }
       const set = { title: input.title, slug: input.slug, description: input.description, venue: input.venue, sessions, ...span(sessions) };
+      const meta = metaUpdate(input);
       await Event.updateOne(
         { _id: before._id, deletedAt: null },
-        input.metaPixelId ? { $set: { ...set, metaPixelId: input.metaPixelId } } : { $set: set, $unset: { metaPixelId: 1 } },
+        { $set: { ...set, ...meta.$set }, ...(Object.keys(meta.$unset).length ? { $unset: meta.$unset } : {}) },
         { session, runValidators: true },
       );
       // Day passes carry their night's date in the name: keep it right if a night moved.
@@ -121,7 +160,13 @@ export async function updateEvent(eventId: string, raw: Omit<EventUpsertRaw, "or
         action: "event.updated",
         entity: { type: "event", id: before._id },
         before: eventSnapshot(before),
-        after: eventSnapshot({ ...set, status: before.status, metaPixelId: input.metaPixelId }),
+        after: eventSnapshot({
+          ...set,
+          status: before.status,
+          metaPixelId: input.metaPixelId,
+          metaTestEventCode: input.metaTestEventCode,
+          metaCapiTokenHint: input.metaCapiTokenRemove ? null : (meta.$set.metaCapiTokenHint ?? before.metaCapiTokenHint),
+        }),
         organizerId: before.organizerId,
       });
     });

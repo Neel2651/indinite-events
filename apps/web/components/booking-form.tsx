@@ -14,7 +14,7 @@ import {
   type OrderCharge,
 } from "@indinite/core";
 import { price } from "@/lib/format";
-import { track, trackCustom } from "./meta-pixel";
+import { pixelActive, track, trackCustom } from "./meta-pixel";
 
 export interface BookableTicketType {
   id: string;
@@ -122,7 +122,11 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
       });
       const data = (await res.json().catch(() => ({}))) as { redirectUrl?: string; error?: string };
       if (!res.ok || !data.redirectUrl) throw new Error(data.error ?? "Something went wrong. Please try again.");
-      router.push(data.redirectUrl);
+      if (/^https?:\/\//.test(data.redirectUrl)) {
+        // Leaving for Stripe: give Meta's AddPaymentInfo request a moment to go before the page unloads.
+        if (pixelActive()) await new Promise((r) => setTimeout(r, 300));
+        window.location.assign(data.redirectUrl);
+      } else router.push(data.redirectUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       setSubmitting(false);
@@ -178,7 +182,7 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5">
+    <form onSubmit={onSubmit} method="post" className="space-y-5">
       {/* 1. Passes */}
       <section className="space-y-3">
         <StepHeader step={step} n={1} title="Choose passes" done={count ? `${count} ${count === 1 ? "pass" : "passes"}` : undefined} onEdit={() => setStep(1)} />

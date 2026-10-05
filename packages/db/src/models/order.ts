@@ -55,6 +55,19 @@ const orderSchema = new Schema(
     /** Indinite's commission on this order (= platform fee; for comps, % of the normal price). */
     applicationFeePence: penceField,
     refundedPence: { type: Number, default: 0, min: 0 },
+    /**
+     * Meta Conversions API (SPEC §4.11): browser details saved at checkout for events with a pixel, sent with the
+     * server Purchase, then deleted. Never in audit diffs or logs.
+     */
+    metaTracking: {
+      type: new Schema({ fbp: String, fbc: String, ip: String, userAgent: String }, { _id: false }),
+      default: undefined,
+    },
+    /** When the server Purchase reached Meta, and how many events Meta said it received. */
+    metaCapi: {
+      type: new Schema({ sentAt: Date, eventsReceived: Number, test: Boolean }, { _id: false }),
+      default: undefined,
+    },
     /** Refunds (SPEC §4.6): ticket price only; fees, charges and tax are never refunded. */
     refunds: {
       type: [

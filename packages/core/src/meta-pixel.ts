@@ -52,11 +52,19 @@ export const pixelCheckout = (lines: PixelLine[], totalPence: number) => ({
 
 export const pixelPaymentInfo = (totalPence: number) => ({ value: pixelValue(totalPence), currency: CURRENCY });
 
-/** Purchase: same shape as checkout, plus the order reference as Meta's eventID so a repeat is de-duplicated. */
+/** Purchase event ID shared by the browser pixel and the Conversions API, so Meta keeps one of the two (brief 5 Oct). */
+export const metaPurchaseEventId = (publicId: string) => `purchase_${publicId}`;
+
+/** Purchase: same shape as checkout, plus the shared event ID so a repeat or the server copy is de-duplicated. */
 export const pixelPurchase = (o: { publicId: string; lines: PixelLine[]; totalPence: number }) => ({
   data: { ...pixelCheckout(o.lines, o.totalPence), content_type: "product" },
-  options: { eventID: o.publicId },
+  options: { eventID: metaPurchaseEventId(o.publicId) },
 });
+
+/** Conversions API access token: letters and digits only (no spaces), as Events Manager generates. */
+export const META_CAPI_TOKEN_RE = /^[A-Za-z0-9]{20,500}$/;
+/** Test event code from Events Manager → Test events, e.g. TEST96780. */
+export const META_TEST_EVENT_CODE_RE = /^TEST[A-Z0-9]{1,16}$/;
 
 /** "Get directions" → "get_directions". */
 export const pixelButtonName = (label: string): string =>

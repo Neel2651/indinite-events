@@ -95,8 +95,8 @@ export default function PrivacyPage() {
             <strong>Resend</strong>, which sends our emails.
           </li>
           <li>
-            <strong>Meta (Facebook and Instagram)</strong>, on events whose organiser uses a Meta pixel: which pages you view and the booking steps you take, with amounts (see
-            Cookies below). The organiser, Indinite and Meta are joint controllers for this; Meta uses it under its own privacy policy.
+            <strong>Meta (Facebook and Instagram)</strong>, on events whose organiser uses a Meta pixel: which pages you view and the booking steps you take, with amounts, and
+            for completed bookings a hashed copy of your email and phone with your IP address and browser details (see Cookies below). The organiser, Indinite and Meta are joint controllers for this; Meta uses it under its own privacy policy.
           </li>
           <li>
             <strong>MongoDB Atlas</strong>, which hosts our database in London, and the provider that hosts our web server in the UK.
@@ -150,8 +150,14 @@ export default function PrivacyPage() {
         <p>
           <strong>Meta pixel.</strong> Some organisers advertise their event on Facebook and Instagram. On those events, the event page and the booking confirmation load the
           organiser&apos;s Meta pixel. It sets cookies and tells Meta that you viewed the page, added or removed passes, started checkout, pressed pay and completed a booking,
-          with the passes&apos; ticket types and amounts, and the order reference. We never send your name, email or phone number. Meta may link this to your Facebook or
-          Instagram account to show the organiser how their adverts perform and to show adverts to people likely to be interested. No other pages load it.
+          with the passes&apos; ticket types and amounts, and the order reference. No other pages load it.
+        </p>
+        <p>
+          When you complete a booking on one of those events, our server also tells Meta about it (Meta&apos;s Conversions API), so it&apos;s counted even if your browser
+          blocks the pixel. With it we send the order reference, amount and ticket types, your IP address and browser details, Meta&apos;s cookie identifiers, and a one-way
+          encrypted (hashed) copy of your email address and phone number. Meta uses the hashed copy only to match the booking to a Facebook or Instagram account; it
+          can&apos;t be turned back into your email or number. We never send your name. We delete the IP address and browser details once Meta has received the booking.
+          Meta may use this to show the organiser how their adverts perform and to show adverts to people likely to be interested.
         </p>
         <p>
           To stop this, change your{" "}

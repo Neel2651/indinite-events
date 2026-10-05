@@ -45,6 +45,14 @@ const eventSchema = new Schema(
     status: { type: String, enum: ["draft", "published", "archived"], default: "draft", index: true },
     /** Organiser's Meta pixel / dataset ID, loaded only on this event's page and its confirmation page (SPEC §4.11). */
     metaPixelId: { type: String, match: /^\d{10,20}$/, default: undefined },
+    /**
+     * That dataset's Conversions API access token, encrypted (`@indinite/core/secrets`). Never selected unless asked
+     * for with "+metaCapiToken"; only the worker decrypts it. The hint (last 4 characters) is what the editor shows.
+     */
+    metaCapiToken: { type: String, select: false, default: undefined },
+    metaCapiTokenHint: { type: String, default: undefined },
+    /** Meta test event code (e.g. TEST96780): while set, server events go to Test events only. */
+    metaTestEventCode: { type: String, default: undefined },
     /** Overrides the organiser's commission / platform fee for this event (bps). Admin only. */
     commissionBps: { type: Number, min: 0, max: 10000, default: null },
     /** Tax on tickets + platform fee + charges (bps, 2000 = 20%). Admin only. */

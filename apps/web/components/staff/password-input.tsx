@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, type InputHTMLAttributes } from "react";
+import { useState, type ComponentProps } from "react";
 import { inputClass } from "./ui";
 
 /**
  * Password field with a show / hide button. Use inside a <label> like a normal input. Showing it doesn't change
  * the field's name or autocomplete, so password managers keep working.
  */
-export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+export function PasswordInput({ thing = "password", ...props }: Omit<ComponentProps<"input">, "type"> & { thing?: string }) {
   const [shown, setShown] = useState(false);
   return (
     <span className="relative mt-1 block">
@@ -15,7 +15,7 @@ export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>,
       <button
         type="button"
         onClick={() => setShown((s) => !s)}
-        aria-label={shown ? "Hide password" : "Show password"}
+        aria-label={shown ? `Hide ${thing}` : `Show ${thing}`}
         aria-pressed={shown}
         className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >

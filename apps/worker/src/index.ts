@@ -7,6 +7,7 @@ import {
   processNextJob,
   reconcileStripe,
   sweepExpiredHolds,
+  type MetaPurchaseJob,
   type QueueName,
   type SendAuthEmailJob,
   type SendPaymentLinkJob,
@@ -14,6 +15,7 @@ import {
   type SendTicketsJob,
 } from "@indinite/db";
 import { sendAuthEmail } from "./jobs/auth-emails";
+import { metaPurchase } from "./jobs/meta-purchase";
 import { sendPaymentLink } from "./jobs/payment-link";
 import { sendRefundEmail } from "./jobs/refund-email";
 import { sendTickets } from "./jobs/tickets";
@@ -86,10 +88,11 @@ const loops = [
   ...runQueue<SendAuthEmailJob>(QUEUES.sendAuthEmail, 2, sendAuthEmail),
   ...runQueue<SendPaymentLinkJob>(QUEUES.sendPaymentLink, 2, sendPaymentLink),
   ...runQueue<SendRefundEmailJob>(QUEUES.sendRefundEmail, 2, sendRefundEmail),
+  ...runQueue<MetaPurchaseJob>(QUEUES.metaPurchase, 2, metaPurchase),
   sweepLoop(),
   reconcileLoop(),
 ];
-console.log("Worker running: send-tickets, send-auth-email, send-payment-link, send-refund-email, sweep-holds, reconcile-stripe");
+console.log("Worker running: send-tickets, send-auth-email, send-payment-link, send-refund-email, meta-purchase, sweep-holds, reconcile-stripe");
 
 const shutdown = async () => {
   if (stopping) return;

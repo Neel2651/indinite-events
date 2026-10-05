@@ -1,7 +1,8 @@
 import { Types, type ClientSession } from "mongoose";
 import { available, bookability, can, canTakeCardPayments, cardFeeOf, discountAsBps, formatBpsPercent, generatePublicId, maxDiscountBps, normalisePassCode, passCode, priceOrder, signTicket, type AuthUser, type Discount, type LineItem, type OrderPricing, type PublicCheckoutInput } from "@indinite/core";
+import { getContext } from "@indinite/core/context";
 import { audited } from "../audit";
-import { enqueueSendTickets } from "../jobs";
+import { enqueueMetaPurchase, enqueueSendTickets } from "../jobs";
 import { Event } from "../models/event";
 import { Hold } from "../models/hold";
 import { Order } from "../models/order";
@@ -67,6 +68,17 @@ export interface PendingOrderOptions {
    * and stays within their limit (`maxDiscountBps`: owner unlimited, manager per organiser, others none).
    */
   staffDiscount?: { discount: Discount & { reason?: string }; by: AuthUser };
+  /** Meta's _fbp / _fbc cookies from the buyer's browser (SPEC §4.11); IP and user agent come from the request context. */
+  metaCookies?: { fbp?: string; fbc?: string };
+}
+
+/** What the Conversions API needs from the buyer's browser, only for events with a Meta pixel. */
+function metaTrackingFor(event: { metaPixelId?: string | null }, cookies: PendingOrderOptions["metaCookies"]) {
+  if (!event.metaPixelId) return undefined;
+  const ctx = getContext();
+  const clip = (v: string | undefined, n: number) => (v ? v.slice(0, n) : undefined);
+  const t = { fbp: clip(cookies?.fbp, 200), fbc: clip(cookies?.fbc, 500), ip: clip(ctx?.ip, 64), userAgent: clip(ctx?.userAgent, 500) };
+  return Object.values(t).some(Boolean) ? t : undefined;
 }
 
 /**
@@ -156,6 +168,7 @@ export async function createPendingOrder(input: PublicCheckoutInput, opts: Pendi
                   : {}),
               createdBy: opts.createdBy,
               expiresAt,
+              metaTracking: opts.staff ? undefined : metaTrackingFor(event, opts.metaCookies),
             },
           ],
           { session },
@@ -183,10 +196,12 @@ export async function createPendingOrder(input: PublicCheckoutInput, opts: Pendi
           { session },
         );
 
+        // Browser details for Meta stay out of the audit diff (the audit entry records IP and user agent itself).
+        const { metaTracking: _meta, ...logged } = order!.toObject();
         await audited(session, {
           action: opts.source === "payment_link" ? "order.payment_link_created" : "order.created",
           entity: { type: "order", id: order!._id },
-          after: order!.toObject(),
+          after: logged,
           organizerId: organizer._id,
         });
         return order!.toObject();
@@ -200,8 +215,8 @@ export async function createPendingOrder(input: PublicCheckoutInput, opts: Pendi
 }
 
 /** SPEC §4.1: public checkout, seats held for 30 minutes. */
-export function createCheckoutOrder(input: PublicCheckoutInput, now = new Date(), opts: { requireCardPayments?: boolean } = {}) {
-  return createPendingOrder(input, { source: "online", holdMs: CHECKOUT_HOLD_MS, requireCardPayments: opts.requireCardPayments }, now);
+export function createCheckoutOrder(input: PublicCheckoutInput, now = new Date(), opts: { requireCardPayments?: boolean; metaCookies?: PendingOrderOptions["metaCookies"] } = {}) {
+  return createPendingOrder(input, { source: "online", holdMs: CHECKOUT_HOLD_MS, requireCardPayments: opts.requireCardPayments, metaCookies: opts.metaCookies }, now);
 }
 
 /** Order fields for a pricing result (stored so receipts never change). */
@@ -329,6 +344,11 @@ export async function fulfilOrder(orderId: string | Types.ObjectId, payment: Pay
       metadata: { paymentsMode: payment.mode, ticketsIssued: tickets.length },
     });
     await enqueueSendTickets({ orderId: String(order._id), reason: "paid" }, { session });
+    // Meta Conversions API Purchase (SPEC §4.11): website bookings for events with a pixel and an access token.
+    if (order.source !== "offline" && tickets.length > 0) {
+      const event = await Event.findById(order.eventId, { metaPixelId: 1, metaCapiTokenHint: 1 }, { session }).lean();
+      if (event?.metaPixelId && event.metaCapiTokenHint) await enqueueMetaPurchase({ orderId: String(order._id) }, { session });
+    }
 
     return { order, ticketsIssued: tickets.length };
   });

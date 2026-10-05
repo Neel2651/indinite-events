@@ -102,6 +102,8 @@ export async function EventEditor({ id, created, context }: { id: string; create
                 slug: event.slug,
                 description: event.description ?? "",
                 metaPixelId: event.metaPixelId ?? "",
+                metaCapiTokenHint: event.metaCapiTokenHint ?? "",
+                metaTestEventCode: event.metaTestEventCode ?? "",
                 venueName: event.venue.name,
                 venueAddress: event.venue.address,
                 postcode: event.venue.postcode,

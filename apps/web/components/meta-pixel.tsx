@@ -64,13 +64,17 @@ function remember(key: string) {
 /** Standard event to the pixel on this page; does nothing when the page has none. */
 export function track(name: string, data?: Record<string, unknown>, options?: { eventID?: string }) {
   const fbq = (window as PixelWindow).fbq;
-  if (activePixel && fbq) fbq("trackSingle", activePixel, name, data ?? {}, options ?? {});
+  // An empty name shows in Events Manager as "__missing_event": never send one.
+  if (activePixel && fbq && name.trim()) fbq("trackSingle", activePixel, name, data ?? {}, options ?? {});
 }
 
 export function trackCustom(name: string, data?: Record<string, unknown>) {
   const fbq = (window as PixelWindow).fbq;
-  if (activePixel && fbq) fbq("trackSingleCustom", activePixel, name, data ?? {});
+  if (activePixel && fbq && name.trim()) fbq("trackSingleCustom", activePixel, name, data ?? {});
 }
+
+/** Whether this page has a pixel (so callers know whether waiting for Meta is worth it). */
+export const pixelActive = () => activePixel !== null;
 
 export function MetaPixel({ pixelId, events = [] }: { pixelId: string; events?: PixelEvent[] }) {
   const eventsKey = JSON.stringify(events);

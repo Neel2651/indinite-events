@@ -11,7 +11,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "gen:qr-keys": "tsx scripts/gen-qr-keys.ts"
+    "gen:qr-keys": "tsx scripts/gen-qr-keys.ts",
+    "gen:settings-key": "tsx scripts/gen-settings-key.ts"
   },
   "dependencies": {
     "@noble/curves": "^1.6.0",

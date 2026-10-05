@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createEventAction, updateEventAction } from "@/app/admin/events/actions";
 import { FieldError, FormError, inputClass } from "./ui";
+import { PasswordInput } from "./password-input";
 import { useFormAction } from "@/lib/use-form-action";
 
 export interface NightRow {
@@ -20,6 +21,9 @@ export interface EventFormValues {
   slug: string;
   description: string;
   metaPixelId: string;
+  /** Last 4 characters of the saved Conversions API token (the token itself never reaches the browser). */
+  metaCapiTokenHint: string;
+  metaTestEventCode: string;
   venueName: string;
   venueAddress: string;
   postcode: string;
@@ -72,9 +76,16 @@ export function EventForm({
   const [nights, setNights] = useState<NightRow[]>(initial?.nights ?? [{ label: "Night 1", start: "", end: "" }]);
 
   const update = (i: number, patch: Partial<NightRow>) => setNights((ns) => ns.map((n, j) => (j === i ? { ...n, ...patch } : n)));
+  // The token is write-only: once saved, clear what was typed (the hint shows it's there).
+  const tokenRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (state?.ok && tokenRef.current) tokenRef.current.value = "";
+  }, [state]);
 
   return (
-    <form onSubmit={action} className="space-y-6">
+    // method="post": if someone presses Save before the page has loaded its scripts, the browser's own submit must
+    // never put the fields (including the Meta access token) in the address bar or server logs.
+    <form onSubmit={action} method="post" className="space-y-6">
       <input type="hidden" name="returnTo" value={returnTo} />
       {organizerId && <input type="hidden" name="organizerId" value={organizerId} />}
       <div className="grid gap-4 sm:grid-cols-2">
@@ -137,15 +148,55 @@ export function EventForm({
           Description
           <textarea name="description" rows={5} maxLength={20000} defaultValue={initial?.description} className={inputClass} placeholder="What's on, dress code, food, parking…" />
         </label>
-        <label className="block text-sm sm:col-span-2">
-          Meta Pixel ID (optional)
-          <input name="metaPixelId" inputMode="numeric" maxLength={20} defaultValue={initial?.metaPixelId} className={inputClass} placeholder="e.g. 1862558248490935" aria-describedby="metaPixelId-help" />
+      </div>
+
+      <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-2">
+        <legend className="px-1 font-display font-semibold">
+          Meta (Facebook / Instagram)
+          {initial?.metaTestEventCode && <span className="ml-2 rounded-full bg-warning/20 px-2.5 py-0.5 align-middle text-xs font-semibold text-foreground">Meta test mode</span>}
+        </legend>
+        <p className="text-xs text-muted-foreground sm:col-span-2">
+          Optional, from the organiser&apos;s Meta Events Manager. Only this event&apos;s page and its booking confirmation load the pixel. With an access token, paid bookings
+          are also sent from our server, so they count even when the buyer&apos;s browser blocks Meta.
+        </p>
+        <label className="block text-sm">
+          Pixel / dataset ID
+          <input name="metaPixelId" inputMode="numeric" maxLength={20} defaultValue={initial?.metaPixelId} className={inputClass} placeholder="e.g. 1862558248490935" />
           <FieldError state={state} name="metaPixelId" />
-          <span id="metaPixelId-help" className="mt-1 block text-xs text-muted-foreground">
-            The pixel or dataset ID from Meta Events Manager. Only this event&apos;s page and its booking confirmation load it.
+        </label>
+        <label className="block text-sm">
+          Test event code
+          <input name="metaTestEventCode" maxLength={20} defaultValue={initial?.metaTestEventCode} className={`${inputClass} uppercase`} placeholder="e.g. TEST96780" aria-describedby="metaTestEventCode-help" />
+          <FieldError state={state} name="metaTestEventCode" />
+          <span id="metaTestEventCode-help" className="mt-1 block text-xs text-muted-foreground">
+            While set, server bookings go to Meta&apos;s Test events only. Clear it to go live.
           </span>
         </label>
-      </div>
+        <label className="block text-sm sm:col-span-2">
+          Conversions API access token
+          <PasswordInput
+            ref={tokenRef}
+            thing="token"
+            name="metaCapiToken"
+            autoComplete="off"
+            maxLength={500}
+            placeholder={initial?.metaCapiTokenHint ? `Saved (ends …${initial.metaCapiTokenHint}). Paste a new one to replace it` : "Paste the token from Events Manager → Settings → Conversions API"}
+            aria-describedby="metaCapiToken-help"
+          />
+          <FieldError state={state} name="metaCapiToken" />
+          <span id="metaCapiToken-help" className="mt-1 block text-xs text-muted-foreground">
+            {initial?.metaCapiTokenHint
+              ? "A token is saved. It's stored encrypted and never shown again; leave this empty to keep it."
+              : "Stored encrypted and never shown again after saving."}
+          </span>
+        </label>
+        {initial?.metaCapiTokenHint && (
+          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" name="metaCapiTokenRemove" className="accent-[var(--brand-orange)]" />
+            Remove the saved token (stop sending bookings from our server)
+          </label>
+        )}
+      </fieldset>
 
       <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-2">
         <legend className="px-1 font-display font-semibold">Venue</legend>

@@ -12,6 +12,7 @@ import path from "node:path";
 import mongoose from "mongoose";
 import Stripe from "stripe";
 import { isStaging, resolvePaymentsMode, signTicket, verifyTicketToken } from "@indinite/core";
+import { decryptSetting, settingsKey } from "@indinite/core/secrets";
 import { mediaDir } from "../src/media";
 
 const env = process.env;
@@ -216,6 +217,56 @@ if (!media) (production ? fail : warn)("MEDIA_DIR", "missing (where uploaded eve
     if (production && dir.startsWith(projectRoot + path.sep)) warn("MEDIA_DIR", "is inside the project folder: keep it outside so deploys never touch uploads");
   } catch (e) {
     fail("MEDIA_DIR", `${dir} isn't writable: ${e instanceof Error ? e.message : "error"}`);
+  }
+}
+
+// ── Meta (per event: pixel, Conversions API token, test event code) ────────────────────────────────────────
+section("Meta (Conversions API)");
+{
+  let key: Buffer | null = null;
+  try {
+    key = settingsKey();
+    ok("SETTINGS_ENCRYPTION_KEY", "set (32 bytes)");
+  } catch (e) {
+    key = null;
+    (val("SETTINGS_ENCRYPTION_KEY") ? fail : warn)("SETTINGS_ENCRYPTION_KEY", `${e instanceof Error ? e.message : "invalid"} Needed before an event's Meta access token can be saved.`);
+  }
+  if (offline || !/^mongodb(\+srv)?:\/\//.test(mongoUri)) ok("Event tokens", "not checked (--offline or no database)");
+  else {
+    try {
+      await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 8000 });
+      const events = await mongoose.connection
+        .db!.collection("events")
+        .find({ deletedAt: null, $or: [{ metaCapiToken: { $exists: true } }, { metaTestEventCode: { $exists: true } }] }, { projection: { slug: 1, metaPixelId: 1, metaCapiToken: 1, metaTestEventCode: 1 } })
+        .toArray();
+      if (!events.length) ok("Event tokens", "no event sends bookings to Meta from the server yet");
+      const version = val("META_GRAPH_API_VERSION") || "v24.0";
+      for (const e of events) {
+        const name = `/e/${e.slug}`;
+        if (e.metaTestEventCode) (live ? warn : ok)(name, `Meta test mode (${e.metaTestEventCode}): server bookings go to Test events only${live ? ". Clear it in the event editor to go live" : ""}`);
+        if (!e.metaCapiToken) continue;
+        if (!key) {
+          fail(name, "has a Meta token but SETTINGS_ENCRYPTION_KEY isn't usable");
+          continue;
+        }
+        let token: string;
+        try {
+          token = decryptSetting(String(e.metaCapiToken), key);
+        } catch {
+          fail(name, "Meta token can't be read with this server's SETTINGS_ENCRYPTION_KEY: enter the token again in the event editor");
+          continue;
+        }
+        // Read-only check that the token can see the dataset (the token goes in a header, never printed).
+        const res = await fetch(`https://graph.facebook.com/${version}/${e.metaPixelId}?fields=id`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) }).catch(() => null);
+        if (!res) warn(name, "couldn't reach Meta to check the token");
+        else if (res.ok) ok(name, `Meta token works for dataset ${e.metaPixelId}`);
+        else fail(name, `Meta refused the token for dataset ${e.metaPixelId} (HTTP ${res.status}): generate a new one in Events Manager`);
+      }
+    } catch (e) {
+      warn("Event tokens", `couldn't check: ${e instanceof Error ? e.message.replace(/mongodb(\+srv)?:\/\/[^\s]+/g, "[address]") : "error"}`);
+    } finally {
+      await mongoose.disconnect().catch(() => {});
+    }
   }
 }
 

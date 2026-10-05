@@ -24,3 +24,4 @@ export * from "./services/stripe-refunds";
 export * from "./services/reconcile";
 export * from "./services/audit-query";
 export * from "./services/exports";
+export * from "./services/meta";

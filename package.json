@@ -16,7 +16,9 @@
     "setup:production": "pnpm --filter @indinite/db sync-indexes && pnpm --filter @indinite/auth sync-indexes && pnpm --filter @indinite/auth create-super-admin",
     "check:env": "pnpm --filter @indinite/db check-env",
     "owners": "pnpm --filter @indinite/auth owners",
-    "migrate:registration": "pnpm --filter @indinite/auth migrate:registration"
+    "migrate:registration": "pnpm --filter @indinite/auth migrate:registration",
+    "funnel": "pnpm --filter @indinite/db funnel",
+    "meta:backfill-purchases": "pnpm --filter @indinite/db meta-backfill-purchases"
   },
   "devDependencies": {
     "@eslint/js": "^9",

@@ -58,6 +58,7 @@ export default async function OrgEventsPage({ params, searchParams }: { params: 
                     </span>
                   </span>
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${e.status === "published" ? "bg-success/15 text-success" : "bg-muted"}`}>{STATUS[e.status ?? "draft"]}</span>
+                  {e.metaTestEventCode && <span className="ml-1 rounded-full bg-warning/20 px-3 py-1 text-xs font-semibold">Meta test mode</span>}
                 </Link>
               </li>
             ))}

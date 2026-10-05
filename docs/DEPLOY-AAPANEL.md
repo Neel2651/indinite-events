@@ -155,6 +155,24 @@ bash scripts/deploy.sh
 
 Run `pnpm check:env` afterwards: "Order prefixes: unique" should show ✓.
 
+## Meta: server Purchase (Conversions API, 5 Oct 2026)
+
+Each event has its own Meta pixel ID, access token and test event code (event editor → **Meta (Facebook /
+Instagram)**). The token is stored encrypted, so each server needs a key first:
+
+1. Add a key to the server's `.env.local` (one per server; don't reuse the staging key on live):
+   `pnpm --filter @indinite/core gen:settings-key` → copy the `SETTINGS_ENCRYPTION_KEY=…` line.
+2. Deploy as usual (`git pull && pnpm install`, then `bash scripts/deploy.sh`). No migration is needed.
+3. In the event's editor: pixel ID, the access token (Events Manager → Settings → Conversions API → Generate) and the
+   test event code (e.g. `TEST96780`). Save. The event shows **Meta test mode**.
+4. Make one real low-value booking. In Events Manager → Test events, the browser and server Purchase show the same
+   event ID (`purchase_<order ref>`), marked **Deduplicated**. `pm2 logs | grep meta-purchase` shows the send.
+5. Clear the test event code in the editor and save (no restart). Then send earlier paid bookings (last 7 days):
+   `pnpm meta:backfill-purchases` (asks before sending).
+
+`pnpm check:env` checks the key, that every saved token can be read and is accepted by Meta, and lists events still
+in test mode. `pnpm funnel <event-slug>` shows how far buyers get (orders created, Stripe page, paid, expired).
+
 ## Organiser owners
 Organiser owners create and manage their own events (organiser panel → Events). Permissions come from each person's
 role, so existing owners need no database change. To check every organiser has an owner:

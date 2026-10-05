@@ -15,7 +15,9 @@
     "seed": "tsx --env-file-if-exists=../../.env.local scripts/seed.ts",
     "requeue-failed-jobs": "tsx --env-file-if-exists=../../.env.local scripts/requeue-failed-jobs.ts",
     "backfill-pass-codes": "tsx --env-file-if-exists=../../.env.local scripts/backfill-pass-codes.ts",
-    "check-env": "tsx --env-file-if-exists=../../.env.local scripts/check-env.ts"
+    "check-env": "tsx --env-file-if-exists=../../.env.local scripts/check-env.ts",
+    "funnel": "tsx --env-file-if-exists=../../.env.local scripts/funnel.ts",
+    "meta-backfill-purchases": "tsx --env-file-if-exists=../../.env.local scripts/meta-backfill-purchases.ts"
   },
   "dependencies": {
     "@indinite/core": "workspace:*",

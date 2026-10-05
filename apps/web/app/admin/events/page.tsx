@@ -69,6 +69,7 @@ export default async function AdminEventsPage({ searchParams }: { searchParams: 
                   <td className="px-4 py-3">{formatDateRange(e.startsAt, e.endsAt)}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}>{st.label}</span>
+                    {e.metaTestEventCode && <span className="ml-1 rounded-full bg-warning/20 px-2.5 py-0.5 text-xs font-semibold">Meta test mode</span>}
                   </td>
                   <td className="px-4 py-3">
                     {t?.sold ?? 0} / {t?.quota ?? 0}

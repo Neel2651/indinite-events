@@ -2,7 +2,8 @@ import { normalisePublicId, resolvePaymentsMode } from "@indinite/core";
 import { systemActor } from "@indinite/core/context";
 import { linkSecret, signOrderLink, verifyOrderLink } from "@indinite/core/links";
 import { appUrl } from "@indinite/auth";
-import { CheckoutError, connectDb, fulfilOrder, HoldExpiredError, Order, startCardCheckout, StripeNotConfiguredError } from "@indinite/db";
+import { CheckoutError, connectDb, fulfilOrder, HoldExpiredError, Order, recordMetaTracking, startCardCheckout, StripeNotConfiguredError } from "@indinite/db";
+import { cookies, headers } from "next/headers";
 import { withRequestContext } from "@/lib/request-context";
 
 export const runtime = "nodejs";
@@ -21,6 +22,12 @@ export async function POST(req: Request) {
   if (order.status === "paid") return Response.json({ redirectUrl: viewUrl() });
   if (order.status !== "pending") return error("This booking has expired. Ask the organiser for a new link.", 410);
 
+  // The customer's browser details for Meta's server Purchase (SPEC §4.11); the link itself was made by staff.
+  const [jar, h] = await Promise.all([cookies(), headers()]);
+  await withRequestContext({ type: "customer" }, () =>
+    recordMetaTracking(String(order._id), { fbp: jar.get("_fbp")?.value, fbc: jar.get("_fbc")?.value }, { ip: h.get("x-forwarded-for")?.split(",")[0]?.trim(), userAgent: h.get("user-agent") ?? undefined }),
+  ).catch((e) => console.error("[pay] couldn't save Meta tracking", e instanceof Error ? e.message : e));
+
   if (resolvePaymentsMode(process.env) === "stripe") {
     try {
       const back = `${appUrl()}/pay/${encodeURIComponent(publicId)}?t=${encodeURIComponent(body.t)}`;
@@ -31,7 +38,10 @@ export async function POST(req: Request) {
         }));
       return Response.json({ redirectUrl: url });
     } catch (e) {
-      if (e instanceof CheckoutError) return error(e.message, e.status);
+      if (e instanceof CheckoutError) {
+        console.warn(`[pay] refused ${e.status} ${publicId}: ${e.message}`);
+        return error(e.message, e.status);
+      }
       if (e instanceof StripeNotConfiguredError) return error("Card payment isn't available right now. Please contact the organiser.", 503);
       console.error("[pay] stripe checkout failed", e instanceof Error ? e.message : e);
       return error("Something went wrong and you haven't been charged. Please try again.", 500);
