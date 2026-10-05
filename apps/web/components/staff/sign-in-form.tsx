@@ -47,7 +47,7 @@ export function SignInForm({ next }: { next: string | null }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} method="post" className="space-y-4">
       <label className="block text-sm">
         Email
         <input name="email" type="email" required autoComplete="username" className={inputClass} />

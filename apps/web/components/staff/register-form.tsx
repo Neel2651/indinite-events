@@ -42,7 +42,7 @@ export function RegisterForm() {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} method="post" className="space-y-4">
       <label className="block text-sm">
         Organisation name
         <input name="organisationName" required minLength={2} maxLength={120} autoComplete="organization" value={organisation} onChange={(e) => setOrganisation(e.target.value)} className={inputClass} placeholder="e.g. Shree Garba Events" />

@@ -41,7 +41,7 @@ export function ForgotPasswordForm() {
     );
   }
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} method="post" className="space-y-4">
       <label className="block text-sm">
         Email
         <input name="email" type="email" required autoComplete="email" className={inputClass} />
@@ -76,7 +76,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} method="post" className="space-y-4">
       <label className="block text-sm">
         New password
         <PasswordInput name="password" required minLength={10} autoComplete="new-password" />

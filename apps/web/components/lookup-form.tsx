@@ -32,7 +32,7 @@ export function LookupForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} method="post" className="space-y-4">
       <label className="block text-sm">
         Email address
         <input name="email" type="email" required autoComplete="email" className={inputClass} />
