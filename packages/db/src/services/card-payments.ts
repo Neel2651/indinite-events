@@ -157,7 +157,7 @@ export async function handleStripeEvent(event: Stripe.Event, appUrl?: string): P
   try {
     previous = await WebhookEvent.findOneAndUpdate(
       { stripeEventId: event.id },
-      { $setOnInsert: { stripeEventId: event.id, type: event.type, receivedAt: new Date() } },
+      { $setOnInsert: { stripeEventId: event.id, type: event.type, receivedAt: new Date(), ...(event.account ? { account: event.account } : {}) } },
       { upsert: true, new: false },
     ).lean();
   } catch (e) {

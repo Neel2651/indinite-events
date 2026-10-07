@@ -96,6 +96,11 @@ Zero-downtime reload for the web app; the worker restarts after finishing in-fli
 - [ ] `pm2 status` shows both processes online; reboot the server once and check they come back
 
 ## Troubleshooting
+
+- **`[reconcile] … Stripe webhook event(s) failed and haven't been processed`**: run `pnpm webhooks:failed`. It shows
+  each failed event's error and what Stripe says it was (our order, another app on the same Stripe account, another
+  server such as staging). Fix the cause, then `pnpm webhooks:failed -- --retry <evt_id>`; if it isn't Indinite's,
+  `pnpm webhooks:failed -- --ignore <evt_id>` stops the warning.
 - **Sign-in says `Invalid origin` (INVALID_ORIGIN)**: you're on `http://`. Turn on aaPanel → site → SSL →
   **Force HTTPS** (or keep the `if ($scheme = http)` redirect from `deploy/nginx-aapanel.conf`), and make sure
   `APP_URL` / `BETTER_AUTH_URL` in `.env.local` are exactly `https://events.neelshah.co` (no trailing slash, no www).

@@ -61,6 +61,7 @@ gates open Sun 11 Oct 2026. Full spec: `docs/SPEC.md`. Milestone prompts: `docs/
 - `pnpm migrate:registration` — live DB update for self-registration (flags, unique order prefixes); run before deploying it
 - `pnpm funnel <event-slug>` — read-only booking funnel; `pnpm meta:backfill-purchases` — send unsent paid bookings
   (last 7 days) to Meta's Conversions API (asks first)
+- `pnpm webhooks:failed` — Stripe webhook events that failed (error + what Stripe says they were); `-- --retry <evt>` / `-- --ignore <evt>`
 - `pnpm --filter @indinite/core gen:settings-key` — `SETTINGS_ENCRYPTION_KEY` (encrypts per-event Meta tokens)
 - `pnpm owners` — each organiser's owners (they manage their own events); `-- --make-owner <email> <slug>`
 - `pnpm check:env` — checks this server's settings (formats, database, Stripe, Resend, QR key pair); never prints secrets. `-- --offline` skips network calls

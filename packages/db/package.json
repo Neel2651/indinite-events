@@ -17,7 +17,8 @@
     "backfill-pass-codes": "tsx --env-file-if-exists=../../.env.local scripts/backfill-pass-codes.ts",
     "check-env": "tsx --env-file-if-exists=../../.env.local scripts/check-env.ts",
     "funnel": "tsx --env-file-if-exists=../../.env.local scripts/funnel.ts",
-    "meta-backfill-purchases": "tsx --env-file-if-exists=../../.env.local scripts/meta-backfill-purchases.ts"
+    "meta-backfill-purchases": "tsx --env-file-if-exists=../../.env.local scripts/meta-backfill-purchases.ts",
+    "webhooks-failed": "tsx --env-file-if-exists=../../.env.local scripts/webhooks-failed.ts"
   },
   "dependencies": {
     "@indinite/core": "workspace:*",

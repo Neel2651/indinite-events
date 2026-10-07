@@ -18,7 +18,8 @@
     "owners": "pnpm --filter @indinite/auth owners",
     "migrate:registration": "pnpm --filter @indinite/auth migrate:registration",
     "funnel": "pnpm --filter @indinite/db funnel",
-    "meta:backfill-purchases": "pnpm --filter @indinite/db meta-backfill-purchases"
+    "meta:backfill-purchases": "pnpm --filter @indinite/db meta-backfill-purchases",
+    "webhooks:failed": "pnpm --filter @indinite/db webhooks-failed"
   },
   "devDependencies": {
     "@eslint/js": "^9",

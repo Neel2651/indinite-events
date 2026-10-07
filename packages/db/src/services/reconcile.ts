@@ -58,7 +58,13 @@ export async function reconcileStripe(now = new Date(), opts: { lookbackDays?: n
     }
   }
 
-  result.failedWebhooks = await WebhookEvent.countDocuments({ processedAt: null, error: { $ne: null }, receivedAt: { $lt: new Date(now.getTime() - 10 * 60_000) } });
-  if (result.failedWebhooks) console.error(`[reconcile] ${result.failedWebhooks} Stripe webhook event(s) failed and haven't been processed. Check webhookEvents.error.`);
+  const failedFilter = { processedAt: null, error: { $ne: null }, receivedAt: { $lt: new Date(now.getTime() - 10 * 60_000) } };
+  result.failedWebhooks = await WebhookEvent.countDocuments(failedFilter);
+  if (result.failedWebhooks) {
+    // Name them, so the log says what failed and why (errors are our own messages: no customer details).
+    const failed = await WebhookEvent.find(failedFilter, { stripeEventId: 1, type: 1, account: 1, error: 1 }).sort({ receivedAt: 1 }).limit(3).lean();
+    const list = failed.map((w) => `${w.type} ${w.stripeEventId}${w.account ? ` (account ${w.account})` : ""}: ${w.error}`).join("; ");
+    console.error(`[reconcile] ${result.failedWebhooks} Stripe webhook event(s) failed and haven't been processed: ${list}. Details: pnpm webhooks:failed`);
+  }
   return result;
 }
