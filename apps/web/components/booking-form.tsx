@@ -264,7 +264,7 @@ export function BookingForm({ eventId, sessions, ticketTypes, pricing, paymentsM
               )}
               {coupon && !breakdown?.couponProblem && (
                 <p className="mt-1 text-xs text-success">
-                  {coupon.code} applied{" "}
+                  {coupon.code} applied{coupon.rule.ticketTypeIds?.length ? `: ${coupon.rule.appliesToLabel ?? "some passes"} only` : ""}{" "}
                   <button type="button" onClick={() => setCoupon(null)} className="underline">
                     Remove
                   </button>

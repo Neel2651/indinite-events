@@ -254,6 +254,13 @@ Example: £12 ticket, 6% platform fee, £0.30 venue fee, 20% tax = 12.00 + 0.72 
 - **After booking:** the confirmation and passes pages remind customers to check spam or junk for the passes
   email.
 
+- **Coupons limited to certain passes (8 Oct 2026).** A coupon for a specific event can list pass types
+  ("Applies to"): e.g. one night's day pass, or the season pass. Only those passes are discounted; the rest of the
+  basket stays full price. Percent, fixed amount, the % cap and the minimum spend are all measured on the chosen
+  passes. If none of them is in the basket the code is refused ("This code is only for Season pass."). No list: the
+  whole basket, as before. The order stores the discounted pass types (`discount.ticketTypeIds`), and refunds spread
+  the discount over those passes only. Pass types added later aren't included automatically.
+
 ### 4.8 Merchant onboarding and card fees (agreed 28 Sep 2026)
 - Indinite's Stripe platform account is held by a UK-registered entity. Organisers are **Express** connected
   accounts (GB, GBP).

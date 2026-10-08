@@ -38,6 +38,8 @@ const orderSchema = new Schema(
       amountPence: Number,
       reason: String,
       appliedBy: String,
+      /** Pass-limited coupon: the pass types it discounted (refunds spread the discount over these only). */
+      ticketTypeIds: { type: [String], default: undefined },
     },
     /** Pricing snapshot (SPEC §4.7): tickets − discount + platform fee + charges + tax = total. */
     ticketsPence: { type: Number, min: 0, default: 0 },

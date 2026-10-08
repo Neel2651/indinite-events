@@ -17,7 +17,18 @@ export interface LineItem {
 export type Discount = ({ kind: "percent"; value: number } | { kind: "fixed"; value: Pence }) & {
   maxAmountPence?: Pence | null;
   minSubtotalPence?: Pence | null;
+  /**
+   * Coupons limited to certain passes (8 Oct 2026): only these pass types are discounted, and the minimum spend and
+   * caps are measured on them. Null or empty: the whole basket.
+   */
+  ticketTypeIds?: string[] | null;
+  /** The chosen passes in words, for messages: "Season pass", "Day pass · Sat 10 Oct and 2 other passes". */
+  appliesToLabel?: string | null;
 };
+
+/** Whether a discount covers this pass type. */
+export const discountCovers = (d: Pick<Discount, "ticketTypeIds">, ticketTypeId: string) =>
+  !d.ticketTypeIds?.length || d.ticketTypeIds.includes(ticketTypeId);
 
 /** How much a discount takes off a ticket subtotal, or why it doesn't apply. */
 export function discountAmount(subtotalPence: Pence, d: Discount): { amountPence: Pence } | { ineligible: string } {
@@ -123,9 +134,15 @@ export function priceOrder(input: PricingInput): OrderPricing {
   let discountPence = 0;
   let discountIneligible: string | undefined;
   if (discount) {
-    const d = discountAmount(subtotalPence, discount);
-    if ("ineligible" in d) discountIneligible = d.ineligible;
-    else discountPence = d.amountPence;
+    // A pass-limited code is worked out on the chosen passes only; the rest stay full price.
+    const eligiblePence = items.filter((i) => discountCovers(discount, i.ticketTypeId)).reduce((s, i) => s + i.unitPricePence * i.qty, 0);
+    if (discount.ticketTypeIds?.length && eligiblePence === 0) {
+      discountIneligible = `This code is only for ${discount.appliesToLabel || "other passes"}.`;
+    } else {
+      const d = discountAmount(eligiblePence, discount);
+      if ("ineligible" in d) discountIneligible = discount.ticketTypeIds?.length ? d.ineligible.replace("on tickets", `on ${discount.appliesToLabel || "these passes"}`) : d.ineligible;
+      else discountPence = d.amountPence;
+    }
   }
   const ticketsPence = subtotalPence - discountPence;
   const platformFeePence = applyBps(ticketsPence, commissionBps);

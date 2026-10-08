@@ -19,6 +19,7 @@ import { runWithContext, systemActor } from "@indinite/core/context";
 import {
   audited,
   connectDb,
+  createCoupon,
   createDayPass,
   createTicketType,
   disconnectDb,
@@ -474,5 +475,34 @@ if (update) {
     }),
   );
 }
+
+// Pass-limited coupons (8 Oct 2026) on the demo event: NIGHT2 (Night 2's passes) and SEASON10 (adult season pass).
+// Added once, through the audited coupon service; existing codes are left alone.
+await runWithContext({ actor: systemActor, requestId: "seed:pass-coupons" }, async () => {
+  const org = await Organizer.findOne({ slug: "demo-garba" }, { _id: 1 }).lean();
+  const event = org && (await Event.findOne({ organizerId: org._id, slug: "navratri-2026-london", deletedAt: null }, { sessions: 1 }).lean());
+  if (!org || !event) return;
+  const types = await TicketType.find({ eventId: event._id }, { name: 1, validSessionIds: 1 }).lean();
+  const night2 = types.filter((t) => t.validSessionIds.length === 1 && String(t.validSessionIds[0]) === String(event.sessions[1]?._id));
+  const season = types.filter((t) => t.name === "Season pass — adult");
+  const wanted = [
+    { code: "NIGHT2", value: 2000, passes: night2 },
+    { code: "SEASON10", value: 1000, passes: season },
+  ];
+  for (const w of wanted) {
+    if (!w.passes.length || (await Discount.exists({ organizerId: org._id, code: w.code }))) continue;
+    await createCoupon(String(org._id), "seed", {
+      code: w.code,
+      eventId: String(event._id),
+      kind: "percent",
+      value: w.value,
+      maxUses: null,
+      validFrom: null,
+      validTo: null,
+      ticketTypeIds: w.passes.map((t) => String(t._id)),
+    });
+    console.log(`demo-garba: added coupon ${w.code} (${w.value / 100}% off ${w.passes.map((t) => t.name).join(", ")} only)`);
+  }
+});
 
 await disconnectDb();

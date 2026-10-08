@@ -162,7 +162,7 @@ export async function createPendingOrder(input: PublicCheckoutInput, opts: Pendi
               items,
               ...orderPricingFields(price, settings),
               ...(coupon
-                ? { couponCode: coupon.code, couponId: coupon.id, discount: { kind: coupon.rule.kind, value: coupon.rule.value, amountPence: price.discountPence, reason: `Code ${coupon.code}` } }
+                ? { couponCode: coupon.code, couponId: coupon.id, discount: { kind: coupon.rule.kind, value: coupon.rule.value, amountPence: price.discountPence, reason: `Code ${coupon.code}`, ...(coupon.rule.ticketTypeIds?.length ? { ticketTypeIds: coupon.rule.ticketTypeIds } : {}) } }
                 : staffDiscount
                   ? { discount: { kind: staffDiscount.kind, value: staffDiscount.value, amountPence: price.discountPence, reason: staffDiscount.reason ?? "Staff discount", appliedBy: opts.staffDiscount!.by.id } }
                   : {}),

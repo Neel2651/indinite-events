@@ -2,6 +2,7 @@ import type { ClientSession, Types } from "mongoose";
 import { DEFAULT_COMMISSION_BPS, type Discount as DiscountRule, type OrderCharge } from "@indinite/core";
 import { audited } from "../audit";
 import { Discount } from "../models/discount";
+import { TicketType } from "../models/ticket-type";
 
 /** Pricing settings for an event: event override → organiser rate → 6% default. */
 export function pricingFor(
@@ -19,6 +20,14 @@ export class CouponError extends Error {
   readonly status = 400;
 }
 
+/** "Season pass", "Day pass · Sat 10 Oct and Season pass", "Day pass · Sat 10 Oct and 2 other passes". */
+export function passesLabel(names: string[]): string {
+  if (names.length === 0) return "other passes";
+  if (names.length === 1) return names[0]!;
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names[0]} and ${names.length - 1} other passes`;
+}
+
 /** A coupon that can be used on this event right now (doesn't redeem it). */
 export async function findCoupon(organizerId: Types.ObjectId | string, eventId: Types.ObjectId | string, code: string, now = new Date()) {
   const normalised = code.trim().toUpperCase();
@@ -28,10 +37,23 @@ export async function findCoupon(organizerId: Types.ObjectId | string, eventId: 
   if (coupon.validFrom && coupon.validFrom > now) throw new CouponError("That code isn't active yet.");
   if (coupon.validTo && coupon.validTo <= now) throw new CouponError("That code has expired.");
   if (coupon.maxUses && (coupon.used ?? 0) >= coupon.maxUses) throw new CouponError("That code has been fully used.");
+  // Pass-limited code (8 Oct 2026): only these pass types are discounted.
+  const ticketTypeIds = (coupon.ticketTypeIds ?? []).map(String);
+  let appliesToLabel: string | null = null;
+  if (ticketTypeIds.length) {
+    const types = await TicketType.find({ _id: { $in: coupon.ticketTypeIds }, eventId }, { name: 1, sortOrder: 1 }).sort({ sortOrder: 1, name: 1 }).lean();
+    appliesToLabel = passesLabel(types.map((t) => t.name));
+  }
   return {
     id: coupon._id,
     code: coupon.code!,
-    rule: { kind: coupon.kind, value: coupon.value, maxAmountPence: coupon.maxDiscountPence ?? null, minSubtotalPence: coupon.minSubtotalPence ?? null } as DiscountRule,
+    rule: {
+      kind: coupon.kind,
+      value: coupon.value,
+      maxAmountPence: coupon.maxDiscountPence ?? null,
+      minSubtotalPence: coupon.minSubtotalPence ?? null,
+      ...(ticketTypeIds.length ? { ticketTypeIds, appliesToLabel } : {}),
+    } as DiscountRule,
   };
 }
 

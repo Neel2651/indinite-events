@@ -5,6 +5,7 @@ import { CommissionLedger } from "../models/commission-ledger";
 import { Discount } from "../models/discount";
 import { Event } from "../models/event";
 import { Organizer } from "../models/organizer";
+import { TicketType } from "../models/ticket-type";
 import { withTransaction } from "../transaction";
 
 /**
@@ -78,6 +79,8 @@ export const couponInputSchema = z.object({
   minSubtotalPence: z.number().int().min(1).nullable().default(null),
   validFrom: z.coerce.date().nullable(),
   validTo: z.coerce.date().nullable(),
+  /** Only these passes are discounted (8 Oct 2026), e.g. a night's passes or the season pass. Empty: all passes. */
+  ticketTypeIds: z.array(z.string().regex(/^[a-f0-9]{24}$/)).max(100).optional().default([]),
 });
 
 export async function createCoupon(organizerId: string, createdBy: string, input: z.input<typeof couponInputSchema>) {
@@ -86,9 +89,16 @@ export async function createCoupon(organizerId: string, createdBy: string, input
   if (data.kind === "fixed" && data.maxDiscountPence) throw new SettingsError("A maximum discount only applies to % codes.");
   if (data.validFrom && data.validTo && data.validTo <= data.validFrom) throw new SettingsError("The end date must be after the start date.");
   if (data.eventId && !(await Event.exists({ _id: data.eventId, organizerId }))) throw new SettingsError("Event not found.", 404);
+  data.ticketTypeIds = [...new Set(data.ticketTypeIds)];
+  if (data.ticketTypeIds.length) {
+    if (!data.eventId) throw new SettingsError("Choose the event to limit the code to certain passes.");
+    const found = await TicketType.countDocuments({ _id: { $in: data.ticketTypeIds }, eventId: data.eventId });
+    if (found !== data.ticketTypeIds.length) throw new SettingsError("Choose passes from this event only.");
+  }
   if (await Discount.exists({ organizerId, code: data.code })) throw new SettingsError(`${data.code} already exists.`, 409);
   return withTransaction(async (session) => {
-    const [coupon] = await Discount.create([{ ...data, organizerId, createdBy }], { session });
+    const { ticketTypeIds, ...rest } = data;
+    const [coupon] = await Discount.create([{ ...rest, ...(ticketTypeIds.length ? { ticketTypeIds } : {}), organizerId, createdBy }], { session });
     await audited(session, { action: "coupon.created", entity: { type: "discount", id: coupon!._id }, after: coupon!.toObject(), organizerId });
     return coupon!.toObject();
   });

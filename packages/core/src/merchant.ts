@@ -124,10 +124,22 @@ export function applicationFeeFor(o: { totalPence: Pence; platformFeePence: Penc
  * `units` are the order's passes in issue order with their normal unit price. The shares always add up
  * to exactly (subtotal − discount), so refunding every pass never exceeds what was paid for tickets.
  */
-export function ticketRefundShares(units: { ticketId: string; unitPricePence: Pence }[], discountPence: Pence, complimentary = false): Map<string, Pence> {
+export function ticketRefundShares(
+  units: { ticketId: string; unitPricePence: Pence; ticketTypeId?: string }[],
+  discountPence: Pence,
+  complimentary = false,
+  /** Pass-limited coupon (8 Oct 2026): the discount came off these pass types only; the rest refund in full. */
+  discountedTicketTypeIds?: string[] | null,
+): Map<string, Pence> {
   const shares = new Map<string, Pence>();
   if (complimentary) {
     for (const u of units) shares.set(u.ticketId, 0);
+    return shares;
+  }
+  if (discountedTicketTypeIds?.length) {
+    const covered = units.filter((u) => u.ticketTypeId && discountedTicketTypeIds.includes(u.ticketTypeId));
+    for (const u of units) shares.set(u.ticketId, u.unitPricePence);
+    for (const [id, share] of ticketRefundShares(covered, discountPence)) shares.set(id, share);
     return shares;
   }
   const subtotal = units.reduce((s, u) => s + u.unitPricePence, 0);

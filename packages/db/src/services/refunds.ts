@@ -50,9 +50,10 @@ async function loadForRefund(organizerId: string, publicId: string) {
   const unitPrice = new Map(order.items.map((i) => [String(i.ticketTypeId), i.unitPricePence]));
   const complimentary = order.offline?.method === "complimentary";
   const shares = ticketRefundShares(
-    tickets.map((t) => ({ ticketId: String(t._id), unitPricePence: unitPrice.get(String(t.ticketTypeId)) ?? 0 })),
+    tickets.map((t) => ({ ticketId: String(t._id), unitPricePence: unitPrice.get(String(t.ticketTypeId)) ?? 0, ticketTypeId: String(t.ticketTypeId) })),
     order.discount?.amountPence ?? 0,
     complimentary,
+    order.discount?.ticketTypeIds,
   );
   const method: RefundQuote["method"] =
     order.source === "offline" ? (complimentary ? "none" : "outside_indinite") : (await directChargeReachable(order)) ? "stripe" : "outside_indinite";

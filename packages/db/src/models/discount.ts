@@ -13,6 +13,8 @@ const discountSchema = new Schema(
     maxDiscountPence: { type: Number, min: 1 },
     /** Minimum ticket subtotal (pence) for the code to apply. */
     minSubtotalPence: { type: Number, min: 1 },
+    /** Only these pass types are discounted (8 Oct 2026); empty: every pass. Needs `eventId`. */
+    ticketTypeIds: { type: [{ type: Schema.Types.ObjectId, ref: "TicketType" }], default: undefined },
     maxUses: { type: Number, min: 1 },
     used: { type: Number, default: 0 },
     validFrom: Date,

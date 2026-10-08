@@ -43,13 +43,14 @@ export async function createCouponAction(slug: string, _: State, form: FormData)
           minSubtotalPence: pounds("minSpend"),
           validFrom: day("validFrom", false),
           validTo: day("validTo", true),
+          ticketTypeIds: form.getAll("ticketTypeIds").map(String),
         }),
       organizer.id,
     );
   } catch (e) {
     if (e instanceof SettingsError) {
       // Point at the field the message is about.
-      const field = /already exists/.test(e.message) ? "code" : /maximum discount/i.test(e.message) ? "maxDiscount" : null;
+      const field = /already exists/.test(e.message) ? "code" : /maximum discount/i.test(e.message) ? "maxDiscount" : /passes/.test(e.message) ? "passes" : null;
       return field ? fieldFailure(field, e.message) : { error: e.message };
     }
     if (e instanceof ZodError) return zodFailure(e, { value: "amount", maxDiscountPence: "maxDiscount", minSubtotalPence: "minSpend" });
